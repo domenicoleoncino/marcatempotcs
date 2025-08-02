@@ -8,8 +8,17 @@
     ],
     "rewrites" : [
       {
+<<<<<<< HEAD
         "surce" :"/index.html"
       }
     ]
   }
 }
+=======
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}
+>>>>>>> 9a72ded (Update workflow and firebase config)
