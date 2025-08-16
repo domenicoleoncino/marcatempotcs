@@ -27,4 +27,5 @@ jobs:
         with:
           repoToken: '${{ secrets.GITHUB_TOKEN }}'
           firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_MARCATEMPO_TCS }}'
+          channelId: live   # <--- AGGIUNGI ESATTAMENTE QUESTA RIGA QUI
           projectId: marcatempo-tcs
