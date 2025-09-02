@@ -1,5 +1,4 @@
 import React from 'react';
-import React from 'react';
 import { db, auth } from '../firebase';
 import { 
     doc, getDoc, setDoc, collection, addDoc, getDocs, query, where, 
@@ -196,7 +195,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
     const [isLoading, setIsLoading] = React.useState(false);
     const [error, setError] = React.useState('');
     
-    // Funzioni per gestire gli input del form, ora sono qui dentro
     const handleInputChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
     const handleCheckboxChange = (e) => {
         const { name, checked } = e.target;
@@ -288,16 +286,136 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
         }
     };
     
-    const renderForm = () => { /* ... Il contenuto non è cambiato ... */ };
+    const renderForm = () => {
+        // ... (Il contenuto di questa funzione è lungo ma corretto, lo includo per sicurezza)
+        switch (type) {
+            case 'newEmployee':
+            case 'editEmployee':
+                return (
+                    <>
+                        <h3 className="text-lg leading-6 font-medium text-gray-900">{type === 'newEmployee' ? 'Nuovo Dipendente' : `Modifica ${item.name}`}</h3>
+                        <input name="name" value={formData.name || ''} onChange={handleInputChange} placeholder="Nome" className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md" required />
+                        <input name="surname" value={formData.surname || ''} onChange={handleInputChange} placeholder="Cognome" className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md" required />
+                        <input name="phone" value={formData.phone || ''} onChange={handleInputChange} placeholder="Telefono" className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md" required />
+                        {type === 'newEmployee' && <>
+                            <input type="email" name="email" value={formData.email || ''} onChange={handleInputChange} placeholder="Email" className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md" required />
+                            <input type="password" name="password" value={formData.password || ''} onChange={handleInputChange} placeholder="Password (min. 6 caratteri)" className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md" required />
+                        </>}
+                    </>
+                );
+            case 'deleteEmployee':
+                return (
+                    <>
+                        <h3 className="text-lg leading-6 font-medium text-gray-900">Conferma Eliminazione</h3>
+                        <p className="mt-2 text-sm text-gray-500">Sei sicuro di voler eliminare il dipendente {item.name} {item.surname}? L'azione è irreversibile.</p>
+                        <div className="mt-2 p-2 bg-yellow-100 text-yellow-800 rounded-md text-sm">
+                            <strong>Attenzione:</strong> Dovrai eliminare manualmente l'utente ({item.email}) dalla sezione <strong>Authentication</strong> della console di Firebase.
+                        </div>
+                    </>
+                );
+            case 'newArea':
+            case 'editArea':
+                 return (
+                    <>
+                        <h3 className="text-lg leading-6 font-medium text-gray-900">{type === 'newArea' ? 'Nuova Area di Lavoro' : `Modifica ${item.name}`}</h3>
+                        <input name="name" value={formData.name || ''} onChange={handleInputChange} placeholder="Nome Area" className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md" required />
+                        <input name="latitude" value={formData.latitude || ''} onChange={handleInputChange} placeholder="Latitudine" className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md" required />
+                        <input name="longitude" value={formData.longitude || ''} onChange={handleInputChange} placeholder="Longitudine" className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md" required />
+                        <input name="radius" value={formData.radius || ''} onChange={handleInputChange} placeholder="Raggio in metri" className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md" required />
+                    </>
+                );
+            case 'deleteArea':
+                 return (
+                    <>
+                        <h3 className="text-lg leading-6 font-medium text-gray-900">Conferma Eliminazione</h3>
+                        <p className="mt-2 text-sm text-gray-500">Sei sicuro di voler eliminare l'area {item.name}? Verrà rimossa da tutti i dipendenti a cui è assegnata. L'azione è irreversibile.</p>
+                    </>
+                );
+            case 'assignArea':
+                return (
+                    <>
+                        <h3 className="text-lg leading-6 font-medium text-gray-900">Assegna Aree a {item.name} {item.surname}</h3>
+                        <div className="mt-4 space-y-2">
+                            {workAreas.map(area => (
+                                <div key={area.id} className="flex items-center">
+                                    <input
+                                        id={`area-${area.id}`} name={area.id} type="checkbox"
+                                        onChange={handleCheckboxChange} defaultChecked={item.workAreaIds?.includes(area.id)}
+                                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                                    />
+                                    <label htmlFor={`area-${area.id}`} className="ml-3 block text-sm font-medium text-gray-700">{area.name}</label>
+                                </div>
+                            ))}
+                        </div>
+                    </>
+                );
+            case 'newAdmin':
+                 return (
+                    <>
+                        <h3 className="text-lg leading-6 font-medium text-gray-900">Nuovo Amministratore</h3>
+                        <input type="email" name="email" value={formData.email || ''} onChange={handleInputChange} placeholder="Email" className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md" required />
+                        <input type="password" name="password" value={formData.password || ''} onChange={handleInputChange} placeholder="Password (min. 6 caratteri)" className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md" required />
+                    </>
+                );
+            case 'deleteAdmin':
+                return (
+                    <>
+                        <h3 className="text-lg leading-6 font-medium text-gray-900">Conferma Eliminazione</h3>
+                        <p className="mt-2 text-sm text-gray-500">Sei sicuro di voler eliminare l'amministratore {item.email}? L'azione è irreversibile.</p>
+                         <div className="mt-2 p-2 bg-yellow-100 text-yellow-800 rounded-md text-sm">
+                            <strong>Attenzione:</strong> Dovrai eliminare manualmente l'utente ({item.email}) dalla sezione <strong>Authentication</strong> della console di Firebase.
+                        </div>
+                    </>
+                );
+            case 'manualClockIn':
+                return (
+                    <>
+                        <h3 className="text-lg leading-6 font-medium text-gray-900">Timbratura Manuale Entrata per {item.name}</h3>
+                        <div className="mt-4">
+                            <label className="block text-sm font-medium text-gray-700">Data e Ora di Entrata</label>
+                            <input type="datetime-local" name="timestamp" value={formData.timestamp || ''} onChange={handleInputChange} className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md" required />
+                        </div>
+                        <div className="mt-4">
+                            <label className="block text-sm font-medium text-gray-700">Area di Lavoro</label>
+                            <select name="workAreaId" value={formData.workAreaId || ''} onChange={handleInputChange} className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md" required>
+                                <option value="" disabled>Seleziona un'area</option>
+                                {workAreas.filter(wa => item.workAreaIds?.includes(wa.id)).map(area => (
+                                    <option key={area.id} value={area.id}>{area.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </>
+                );
+            case 'manualClockOut':
+                return (
+                    <>
+                        <h3 className="text-lg leading-6 font-medium text-gray-900">Timbratura Manuale Uscita per {item.name}</h3>
+                        <div className="mt-4">
+                            <label className="block text-sm font-medium text-gray-700">Data e Ora di Uscita</label>
+                            <input type="datetime-local" name="timestamp" value={formData.timestamp || ''} onChange={handleInputChange} className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md" required />
+                        </div>
+                    </>
+                );
+            default:
+                return null;
+        }
+    };
+    
     const isDeleteAction = type.startsWith('delete');
     return (
         <div className="fixed z-10 inset-0 overflow-y-auto">
-            {/* Il JSX del modal non cambia */}
+            <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+                <div className="fixed inset-0 transition-opacity" aria-hidden="true"><div className="absolute inset-0 bg-gray-500 opacity-75"></div></div>
+                <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">​</span>
+                <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+                    <form onSubmit={handleSubmit}><div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">{renderForm()}{error && <p className="text-red-500 text-sm mt-2">{error}</p>}</div><div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse"><button type="submit" disabled={isLoading} className={`w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 text-base font-medium text-white focus:outline-none sm:ml-3 sm:w-auto sm:text-sm ${isDeleteAction ? 'bg-red-600 hover:bg-red-700 disabled:bg-red-300' : 'bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300'}`}>{isLoading ? 'In corso...' : (isDeleteAction ? 'Elimina' : 'Salva')}</button><button type="button" onClick={() => setShowModal(false)} className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:mt-0 sm:w-auto sm:text-sm">Annulla</button></div></form>
+                </div>
+            </div>
         </div>
     );
 };
 
-// Questo è il componente principale che esportiamo
+
 const AdminDashboard = ({ user, handleLogout }) => {
     const [view, setView] = React.useState('employees');
     const [employees, setEmployees] = React.useState([]);
@@ -333,11 +451,90 @@ const AdminDashboard = ({ user, handleLogout }) => {
     };
     
     const generateReport = async (reportType) => {
-        // ... (la logica non cambia)
+        if (selectedReportAreas.length === 0) {
+            alert("Devi selezionare almeno un'area di lavoro per generare il report.");
+            return;
+        }
+        let startDate;
+        const now = new Date();
+        let title = '';
+        switch(reportType) {
+            case 'weekly':
+                const firstDayOfWeek = new Date(now.setDate(now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1)));
+                firstDayOfWeek.setHours(0, 0, 0, 0);
+                startDate = firstDayOfWeek;
+                title = 'Report Settimanale';
+                break;
+            case 'monthly':
+                const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+                startDate = firstDayOfMonth;
+                title = 'Report Mensile';
+                break;
+            default:
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                startDate = today;
+                title = 'Report Giornaliero';
+                break;
+        }
+        setReportTitle(title);
+        const q = query(
+            collection(db, "time_entries"), 
+            where("clockInTime", ">=", startDate),
+            where("workAreaId", "in", selectedReportAreas)
+        );
+        const querySnapshot = await getDocs(q);
+        const entries = querySnapshot.docs.map(doc => ({id: doc.id, ...doc.data()}));
+        setReportEntryIds(entries.map(entry => entry.id));
+        const reportData = [];
+        for (const entry of entries) {
+            const employeeDoc = await getDoc(doc(db, "employees", entry.employeeId));
+            const areaDoc = await getDoc(doc(db, "work_areas", entry.workAreaId));
+            if (employeeDoc.exists() && areaDoc.exists()) {
+                reportData.push({
+                    id: entry.id,
+                    employeeName: `${employeeDoc.data().name} ${employeeDoc.data().surname}`,
+                    areaName: areaDoc.data().name,
+                    clockInDate: entry.clockInTime.toDate().toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit'}),
+                    duration: entry.clockOutTime ? (entry.clockOutTime.toDate() - entry.clockInTime.toDate()) / 3600000 : null
+                });
+            }
+        }
+        setReports(reportData);
+        setView('reports');
     };
 
     const handleDeleteReportData = async () => {
-        // ... (la logica non cambia)
+        if (reportEntryIds.length === 0) {
+            alert("Nessun dato da cancellare.");
+            return;
+        }
+        const confirmation1 = window.prompt("Sei assolutamente sicuro? Questa azione è IRREVERSIBILE e cancellerà per sempre le timbrature di questo report. Scrivi 'CANCELLA' per confermare.");
+        if (confirmation1 !== 'CANCELLA') {
+            alert("Cancellazione annullata.");
+            return;
+        }
+        const confirmation2 = window.prompt("Seconda conferma: Scrivi 'CANCELLA DATI' per procedere con l'eliminazione definitiva.");
+         if (confirmation2 !== 'CANCELLA DATI') {
+            alert("Cancellazione annullata.");
+            return;
+        }
+        try {
+            const batch = writeBatch(db);
+            reportEntryIds.forEach(id => {
+                const docRef = doc(db, "time_entries", id);
+                batch.delete(docRef);
+            });
+            await batch.commit();
+            alert(`Cancellazione completata con successo! Sono state rimosse ${reportEntryIds.length} timbrature.`);
+            setReports([]);
+            setReportEntryIds([]);
+            setReportTitle('');
+            setView('employees');
+        } catch (error) {
+            console.error("Errore durante la cancellazione dei dati:", error);
+            alert("Si è verificato un errore durante la cancellazione dei dati.");
+        }
     };
 
     const handleAreaSelection = (areaId) => {
@@ -393,9 +590,10 @@ const AdminDashboard = ({ user, handleLogout }) => {
                 {view === 'admins' && <AdminManagementView admins={admins} openModal={openModal} user={user} />}
                 {view === 'reports' && <ReportView reports={reports} title={reportTitle} handleDeleteReportData={handleDeleteReportData} />}
             </main>
-            {showModal && <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} workAreas={workAreas} adminsCount={admins.length} allEmployees={employees} />}
+            {showModal && <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} workAreas={workAreas} adminsCount={admins.length} allEmployees={employees} auth={auth} />}
         </div>
     );
 };
 
 export default AdminDashboard;
+
