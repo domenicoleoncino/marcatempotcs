@@ -3,13 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
-    "@testing-library/dom": "^10.4.1",
-    "@testing-library/jest-dom": "^6.6.4",
-    "@testing-library/react": "^16.3.0",
+    "@capacitor/android": "^5.2.3",
+    "@capacitor/cli": "^5.2.3",
+    "@capacitor/core": "^5.2.3",
+    "@capacitor/ios": "^5.2.3",
+    "@testing-library/jest-dom": "^5.17.0",
+    "@testing-library/react": "^13.4.0",
     "@testing-library/user-event": "^13.5.0",
-    "firebase": "^12.0.0",
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1",
+    "firebase": "^10.1.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
     "react-scripts": "5.0.1",
     "web-vitals": "^2.1.4"
   },
@@ -23,7 +26,8 @@
     "extends": [
       "react-app",
       "react-app/jest"
-    ]
+    ],
+    "root": true
   },
   "browserslist": {
     "production": [
@@ -38,3 +42,4 @@
     ]
   }
 }
+

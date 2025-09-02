@@ -1,5 +1,7 @@
 {
   "projects": {
-    "default": "marcatempo-tcs"
-  }
+    "default": "marcatempo-web-tcs"
+  },
+  "targets": {},
+  "etags": {}
 }
