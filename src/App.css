@@ -1,33 +1,28 @@
-/* Stile base per il corpo della pagina */
-body, html, #root {
+/* Reset di base e stile del corpo */
+body {
   margin: 0;
-  padding: 0;
-  height: 100%;
-  width: 100%;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #f9fafb; /* Sfondo grigio chiaro per tutta la pagina */
+  background-color: #f9fafb; /* Grigio chiaro per lo sfondo */
 }
 
 /* Contenitore principale dell'applicazione React */
 #root {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center; /* Centra sempre il contenuto */
+  align-items: center;   /* Centra orizzontalmente */
+  justify-content: center; /* Centra verticalmente */
+  min-height: 100vh;     /* Altezza minima pari a tutta la finestra */
+  padding: 1rem;
+  box-sizing: border-box;
 }
 
-/* Usato per le schermate di caricamento o errore */
-.loading-container {
-    text-align: center;
-}
-
-/* Stile generico per il logo */
+/* Stile per il logo per dargli una dimensione massima */
 .logo {
-  max-width: 150px;
+  max-width: 180px;
   height: auto;
-  margin-bottom: 1rem; /* Ridotto un po' lo spazio sotto */
 }
+
