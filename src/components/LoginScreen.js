@@ -10,11 +10,7 @@ const LoginScreen = () => {
     const [error, setError] = React.useState('');
     const [successMessage, setSuccessMessage] = React.useState('');
     const [isLoading, setIsLoading] = React.useState(false);
-    
-    // Stato per gestire le diverse viste (login, reset, registrazione)
     const [view, setView] = React.useState('login'); // 'login', 'reset', 'register'
-
-    // Stato per i dati del form di registrazione
     const [registerData, setRegisterData] = React.useState({
         name: '',
         surname: '',
@@ -77,7 +73,7 @@ const LoginScreen = () => {
             setIsLoading(false);
         }
     };
-    
+
     const handleRegister = async (e) => {
         e.preventDefault();
         if (registerData.password.length < 6) {
@@ -90,12 +86,10 @@ const LoginScreen = () => {
         try {
             const userCredential = await createUserWithEmailAndPassword(auth, registerData.email, registerData.password);
             const user = userCredential.user;
-
             await setDoc(doc(db, "users", user.uid), {
                 email: registerData.email,
                 role: 'employee'
             });
-
             await addDoc(collection(db, "employees"), {
                 userId: user.uid,
                 name: registerData.name,
@@ -105,10 +99,8 @@ const LoginScreen = () => {
                 workAreaIds: [],
                 workAreaNames: []
             });
-            
             setSuccessMessage("Registrazione completata! Ora puoi effettuare il login.");
             setView('login');
-
         } catch (err) {
             console.error("Registration Error:", err);
             if (err.code === 'auth/email-already-in-use') {
@@ -125,11 +117,10 @@ const LoginScreen = () => {
         setRegisterData({ ...registerData, [e.target.name]: e.target.value });
     };
 
-
     if (view === 'reset') {
         return (
-            <div className="max-w-lg w-full bg-white p-8 rounded-xl shadow-lg space-y-6">
-                <div className="flex justify-center mb-4"><CompanyLogo /></div>
+            <div className="max-w-md w-full bg-white p-8 rounded-xl shadow-lg space-y-6">
+                <CompanyLogo />
                 <h2 className="text-center text-3xl font-extrabold text-gray-900">Recupera Password</h2>
                 <p className="text-center text-sm text-gray-600">Inserisci la tua email per ricevere un link di recupero.</p>
                 <form onSubmit={handlePasswordReset} className="space-y-6">
@@ -151,8 +142,8 @@ const LoginScreen = () => {
 
     if (view === 'register') {
         return (
-             <div className="max-w-lg w-full bg-white p-8 rounded-xl shadow-lg space-y-6">
-                <div className="flex justify-center mb-4"><CompanyLogo /></div>
+             <div className="max-w-md w-full bg-white p-8 rounded-xl shadow-lg space-y-6">
+                <CompanyLogo />
                 <h2 className="text-center text-3xl font-extrabold text-gray-900">Registra un nuovo account</h2>
                 <form onSubmit={handleRegister} className="space-y-4">
                      <input name="name" onChange={handleRegisterInputChange} placeholder="Nome" required className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" />
@@ -178,8 +169,8 @@ const LoginScreen = () => {
     }
 
     return (
-        <div className="max-w-lg w-full bg-white p-8 rounded-xl shadow-lg space-y-6">
-            <div className="flex justify-center mb-4"><CompanyLogo /></div>
+        <div className="max-w-md w-full bg-white p-8 rounded-xl shadow-lg space-y-6">
+            <CompanyLogo />
             <h2 className="text-center text-3xl font-extrabold text-gray-900">Accedi al tuo account</h2>
             <form onSubmit={handleLogin} className="space-y-6">
                 <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" required className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" />
