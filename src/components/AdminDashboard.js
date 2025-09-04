@@ -9,7 +9,7 @@ import { createUserWithEmailAndPassword } from 'firebase/auth';
 // Importa i componenti che ci servono
 import CompanyLogo from './CompanyLogo';
 
-// NOTA: I componenti interni (le varie "View" e il "Modal") restano qui.
+// NOTA: I componenti interni (le varie "View" e il "Modal") sono qui dentro.
 
 const EmployeeManagementView = ({ employees, openModal }) => (
     <div>
@@ -195,6 +195,16 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
     const [isLoading, setIsLoading] = React.useState(false);
     const [error, setError] = React.useState('');
     
+    React.useEffect(() => {
+        if (type === 'manualClockIn' || type === 'manualClockOut') {
+            const now = new Date();
+            now.setSeconds(0);
+            now.setMilliseconds(0);
+            const localDateTime = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+            setFormData({ ...item, timestamp: localDateTime, workAreaId: item?.workAreaIds?.[0] || '' });
+        }
+    }, [type, item]);
+
     const handleInputChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
     const handleCheckboxChange = (e) => {
         const { name, checked } = e.target;
@@ -205,16 +215,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
             setFormData({...formData, workAreaIds: currentAreas.filter(id => id !== name)});
         }
     };
-
-    React.useEffect(() => {
-        if (type === 'manualClockIn' || type === 'manualClockOut') {
-            const now = new Date();
-            now.setSeconds(0);
-            now.setMilliseconds(0);
-            const localDateTime = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
-            setFormData({ ...item, timestamp: localDateTime, workAreaId: item?.workAreaIds?.[0] || '' });
-        }
-    }, [type, item]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -415,7 +415,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
     );
 };
 
-
+// Questo è il componente principale che esportiamo
 const AdminDashboard = ({ user, handleLogout }) => {
     const [view, setView] = React.useState('employees');
     const [employees, setEmployees] = React.useState([]);
@@ -596,4 +596,3 @@ const AdminDashboard = ({ user, handleLogout }) => {
 };
 
 export default AdminDashboard;
-

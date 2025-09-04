@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Marcatempo TCS</string>
+    <string name="title_activity_main">Marcatempo TCS</string>
+    <string name="package_name">com.tcs.marcatempo</string>
+    <string name="custom_url_scheme">com.tcs.marcatempo</string>
+</resources>
