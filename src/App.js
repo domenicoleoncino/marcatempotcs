@@ -2,11 +2,9 @@ import React from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
+import './App.css'; // <-- Riga FONDAMENTALE per importare gli stili
 
-// Importa gli stili globali
-import './App.css';
-
-// Importa i componenti
+// Importa i componenti che abbiamo estratto
 import LoginScreen from './components/LoginScreen';
 import AdminDashboard from './components/AdminDashboard';
 import EmployeeDashboard from './components/EmployeeDashboard';
@@ -65,31 +63,37 @@ export default function App() {
         await signOut(auth);
     };
 
-    if (isLoading) {
+    const renderContent = () => {
+        if (isLoading) {
+            return <p className="text-xl font-semibold">Caricamento in corso...</p>;
+        }
+    
+        if (!user) {
+            return <LoginScreen />;
+        }
+    
+        if (userRole === 'admin') {
+            return <AdminDashboard user={user} handleLogout={handleLogout} />;
+        }
+    
+        if (userRole === 'employee') {
+            return <EmployeeDashboard user={user} handleLogout={handleLogout} />;
+        }
+        
         return (
-            <div className="layout-main-centered">
-                <p className="text-xl font-semibold">Caricamento in corso...</p>
-            </div>
+            <>
+                <p className="text-xl font-semibold">Ruolo utente non definito.</p>
+                <button onClick={handleLogout} className="mt-4 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600">Logout</button>
+            </>
         );
     }
 
-    // Renderizza il contenuto dentro un contenitore di layout
+    // Qui usiamo le nuove classi per centrare tutto il contenuto
     return (
         <div className="layout-container">
-            {!user ? (
-                <main className="layout-main-centered">
-                    <LoginScreen />
-                </main>
-            ) : userRole === 'admin' ? (
-                <AdminDashboard user={user} handleLogout={handleLogout} />
-            ) : userRole === 'employee' ? (
-                <EmployeeDashboard user={user} handleLogout={handleLogout} />
-            ) : (
-                <main className="layout-main-centered">
-                    <p className="text-xl font-semibold">Ruolo utente non definito.</p>
-                    <button onClick={handleLogout} className="mt-4 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600">Logout</button>
-                </main>
-            )}
+            <main className="layout-main-centered">
+                {renderContent()}
+            </main>
         </div>
     );
 }
