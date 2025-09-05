@@ -1,7 +1,7 @@
 import React from 'react';
 import { db, auth } from '../firebase';
 import { 
-    doc, getDoc, setDoc, collection, addDoc, getDocs, query, where, 
+    doc , setDoc, collection, addDoc, getDocs, query, where, 
     updateDoc, deleteDoc, writeBatch
 } from 'firebase/firestore';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
