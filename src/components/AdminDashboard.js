@@ -470,7 +470,7 @@ const AdminDashboard = ({ user, handleLogout }) => {
                 startDate = firstDayOfMonth;
                 title = 'Report Mensile';
                 break;
-            default:
+            default: // 'daily'
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
                 startDate = today;
@@ -488,13 +488,15 @@ const AdminDashboard = ({ user, handleLogout }) => {
         setReportEntryIds(entries.map(entry => entry.id));
         const reportData = [];
         for (const entry of entries) {
-            const employeeDoc = await getDoc(doc(db, "employees", entry.employeeId));
-            const areaDoc = await getDoc(doc(db, "work_areas", entry.workAreaId));
-            if (employeeDoc.exists() && areaDoc.exists()) {
+            // Ottimizzazione: Cerca i dati in locale prima di interrogare il DB
+            const employeeData = employees.find(e => e.id === entry.employeeId);
+            const areaData = workAreas.find(a => a.id === entry.workAreaId);
+            
+            if (employeeData && areaData) {
                 reportData.push({
                     id: entry.id,
-                    employeeName: `${employeeDoc.data().name} ${employeeDoc.data().surname}`,
-                    areaName: areaDoc.data().name,
+                    employeeName: `${employeeData.name} ${employeeData.surname}`,
+                    areaName: areaData.name,
                     clockInDate: entry.clockInTime.toDate().toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit'}),
                     duration: entry.clockOutTime ? (entry.clockOutTime.toDate() - entry.clockInTime.toDate()) / 3600000 : null
                 });
@@ -509,6 +511,7 @@ const AdminDashboard = ({ user, handleLogout }) => {
             alert("Nessun dato da cancellare.");
             return;
         }
+        // NOTA: window.prompt è sconsigliato. Meglio usare un modal di conferma.
         const confirmation1 = window.prompt("Sei assolutamente sicuro? Questa azione è IRREVERSIBILE e cancellerà per sempre le timbrature di questo report. Scrivi 'CANCELLA' per confermare.");
         if (confirmation1 !== 'CANCELLA') {
             alert("Cancellazione annullata.");
@@ -575,12 +578,51 @@ const AdminDashboard = ({ user, handleLogout }) => {
                 </div>
             </header>
             <nav className="bg-white border-b border-gray-200">
-                {/* Il JSX della navigazione non cambia */}
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div className="flex justify-between h-16">
+                        <div className="flex">
+                            <div className="flex space-x-8">
+                                <button onClick={() => setView('employees')} className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${view === 'employees' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Dipendenti</button>
+                                <button onClick={() => setView('areas')} className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${view === 'areas' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Aree</button>
+                                <button onClick={() => setView('admins')} className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${view === 'admins' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Admin</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </nav>
 
+            {/* SEZIONE CORRETTA E AGGIUNTA */}
             {view !== 'reports' && (
                 <div className="bg-gray-50 border-b border-gray-200 p-4">
-                    {/* Il JSX del filtro aree non cambia */}
+                    <div className="max-w-7xl mx-auto">
+                        <h3 className="text-lg font-medium text-gray-900 mb-2">Genera Report</h3>
+                        <div className="flex items-center flex-wrap gap-4 mb-4">
+                            <div className="flex space-x-2">
+                                <button onClick={() => generateReport('daily')} className="px-3 py-1 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm">Giornaliero</button>
+                                <button onClick={() => generateReport('weekly')} className="px-3 py-1 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm">Settimanale</button>
+                                <button onClick={() => generateReport('monthly')} className="px-3 py-1 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm">Mensile</button>
+                            </div>
+                        </div>
+                        <h4 className="text-md font-medium text-gray-800 mb-2">Filtra per Aree</h4>
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                            {workAreas.map(area => (
+                                <div key={area.id} className="flex items-center">
+                                    <input
+                                        type="checkbox"
+                                        id={`filter-area-${area.id}`}
+                                        checked={selectedReportAreas.includes(area.id)}
+                                        onChange={() => handleAreaSelection(area.id)}
+                                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                                    />
+                                    <label htmlFor={`filter-area-${area.id}`} className="ml-2 text-sm text-gray-700">{area.name}</label>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="mt-2 flex space-x-2">
+                             <button onClick={() => handleSelectAllAreas(true)} className="text-xs text-indigo-600 hover:underline">Seleziona Tutti</button>
+                             <button onClick={() => handleSelectAllAreas(false)} className="text-xs text-indigo-600 hover:underline">Deseleziona Tutti</button>
+                        </div>
+                    </div>
                 </div>
             )}
 
@@ -590,7 +632,7 @@ const AdminDashboard = ({ user, handleLogout }) => {
                 {view === 'admins' && <AdminManagementView admins={admins} openModal={openModal} user={user} />}
                 {view === 'reports' && <ReportView reports={reports} title={reportTitle} handleDeleteReportData={handleDeleteReportData} />}
             </main>
-            {showModal && <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} workAreas={workAreas} adminsCount={admins.length} allEmployees={employees} auth={auth} />}
+            {showModal && <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} workAreas={workAreas} adminsCount={admins.length} allEmployees={employees} />}
         </div>
     );
 };
