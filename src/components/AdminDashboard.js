@@ -236,7 +236,8 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
                     break;
                 case 'deleteEmployee':
                     await deleteDoc(doc(db, "employees", item.id));
-                    await deleteDoc(doc(db, "users", item.userId));
+                    // NOTA: La cancellazione dell'utente da Auth dovrebbe essere gestita da una Cloud Function per sicurezza.
+                    // await deleteDoc(doc(db, "users", item.userId)); // Questo cancella il profilo utente, non l'autenticazione.
                     break;
                 case 'newArea':
                     await addDoc(collection(db, "work_areas"), { name: formData.name, latitude: parseFloat(formData.latitude), longitude: parseFloat(formData.longitude), radius: parseInt(formData.radius, 10) });
@@ -245,15 +246,15 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
                     await updateDoc(doc(db, "work_areas", item.id), { name: formData.name, latitude: parseFloat(formData.latitude), longitude: parseFloat(formData.longitude), radius: parseInt(formData.radius, 10) });
                     break;
                 case 'deleteArea':
-                    const batch = writeBatch(db);
+                    const batchDeleteArea = writeBatch(db);
                     const employeesToUpdate = allEmployees.filter(emp => emp.workAreaIds?.includes(item.id));
                     employeesToUpdate.forEach(emp => {
                         const empRef = doc(db, "employees", emp.id);
                         const updatedAreaIds = emp.workAreaIds.filter(id => id !== item.id);
                         const updatedAreaNames = emp.workAreaNames.filter(name => name !== item.name);
-                        batch.update(empRef, { workAreaIds: updatedAreaIds, workAreaNames: updatedAreaNames });
+                        batchDeleteArea.update(empRef, { workAreaIds: updatedAreaIds, workAreaNames: updatedAreaNames });
                     });
-                    await batch.commit();
+                    await batchDeleteArea.commit();
                     await deleteDoc(doc(db, "work_areas", item.id));
                     break;
                 case 'assignArea':
@@ -267,7 +268,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
                     break;
                 case 'deleteAdmin':
                     if (item.id === auth.currentUser.uid) throw new Error("Non puoi eliminare te stesso.");
-                    await deleteDoc(doc(db, "users", item.id));
+                    await deleteDoc(doc(db, "users", item.id)); // Anche qui, serve una Cloud Function per l'Auth.
                     break;
                 case 'manualClockIn':
                     await addDoc(collection(db, "time_entries"), { employeeId: item.id, workAreaId: formData.workAreaId, clockInTime: new Date(formData.timestamp), clockOutTime: null, status: 'clocked-in' });
@@ -287,7 +288,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
     };
     
     const renderForm = () => {
-        // ... (Il contenuto di questa funzione è lungo ma corretto, lo includo per sicurezza)
         switch (type) {
             case 'newEmployee':
             case 'editEmployee':
@@ -450,7 +450,7 @@ const AdminDashboard = ({ user, handleLogout }) => {
         setShowModal(true);
     };
     
-    const generateReport = async (reportType) => {
+    const generatereport = async (reportType) => { // <-- ERRORE DI BATTITURA QUI
         if (selectedReportAreas.length === 0) {
             alert("Devi selezionare almeno un'area di lavoro per generare il report.");
             return;
@@ -488,7 +488,6 @@ const AdminDashboard = ({ user, handleLogout }) => {
         setReportEntryIds(entries.map(entry => entry.id));
         const reportData = [];
         for (const entry of entries) {
-            // Ottimizzazione: Cerca i dati in locale prima di interrogare il DB
             const employeeData = employees.find(e => e.id === entry.employeeId);
             const areaData = workAreas.find(a => a.id === entry.workAreaId);
             
@@ -511,7 +510,6 @@ const AdminDashboard = ({ user, handleLogout }) => {
             alert("Nessun dato da cancellare.");
             return;
         }
-        // NOTA: window.prompt è sconsigliato. Meglio usare un modal di conferma.
         const confirmation1 = window.prompt("Sei assolutamente sicuro? Questa azione è IRREVERSIBILE e cancellerà per sempre le timbrature di questo report. Scrivi 'CANCELLA' per confermare.");
         if (confirmation1 !== 'CANCELLA') {
             alert("Cancellazione annullata.");
@@ -591,16 +589,15 @@ const AdminDashboard = ({ user, handleLogout }) => {
                 </div>
             </nav>
 
-            {/* SEZIONE CORRETTA E AGGIUNTA */}
             {view !== 'reports' && (
                 <div className="bg-gray-50 border-b border-gray-200 p-4">
                     <div className="max-w-7xl mx-auto">
                         <h3 className="text-lg font-medium text-gray-900 mb-2">Genera Report</h3>
                         <div className="flex items-center flex-wrap gap-4 mb-4">
                             <div className="flex space-x-2">
-                                <button onClick={() => generateReport('daily')} className="px-3 py-1 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm">Giornaliero</button>
-                                <button onClick={() => generateReport('weekly')} className="px-3 py-1 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm">Settimanale</button>
-                                <button onClick={() => generateReport('monthly')} className="px-3 py-1 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm">Mensile</button>
+                                <button onClick={() => generatereport('daily')} className="px-3 py-1 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm">Giornaliero</button>
+                                <button onClick={() => generatereport('weekly')} className="px-3 py-1 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm">Settimanale</button>
+                                <button onClick={() => generatereport('monthly')} className="px-3 py-1 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm">Mensile</button>
                             </div>
                         </div>
                         <h4 className="text-md font-medium text-gray-800 mb-2">Filtra per Aree</h4>
