@@ -2,7 +2,7 @@ import React from 'react';
 import { db, auth } from '../firebase';
 import { 
     doc, getDoc, setDoc, collection, addDoc, getDocs, query, where, 
-    updateDoc, onSnapshot, deleteDoc, writeBatch
+    updateDoc, deleteDoc, writeBatch
 } from 'firebase/firestore';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 
@@ -118,7 +118,7 @@ const AdminManagementView = ({ admins, openModal, user }) => (
                         <tr key={admin.id}>
                             <td className="px-6 py-4 whitespace-nowrap">{admin.email}</td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                {user && admin.id !== user.uid ? ( // Aggiunto controllo 'user &&' per sicurezza
+                                {user && admin.id !== user.uid ? ( 
                                     <button onClick={() => openModal('deleteAdmin', admin)} className="text-red-600 hover:text-red-900">Elimina</button>
                                 ) : (
                                     <span className="text-gray-400">Attuale</span>
@@ -193,7 +193,6 @@ const ReportView = ({ reports, title, handleDeleteReportData }) => {
 };
 
 // Componente Modale
-// **** MODIFICA ****: Aggiunto "onDataUpdate" come prop per richiamare l'aggiornamento
 const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmployees, onDataUpdate }) => {
     const [formData, setFormData] = React.useState(item || {});
     const [isLoading, setIsLoading] = React.useState(false);
@@ -280,12 +279,10 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
                     break;
                 default: break;
             }
-            // **** MODIFICA ****: Chiamiamo la funzione di aggiornamento dopo ogni operazione
             await onDataUpdate();
             setShowModal(false);
         } catch (err) {
             setError(err.message);
-            // Anche in caso di errore, proviamo ad aggiornare i dati e chiudere il modale
             await onDataUpdate();
             setShowModal(false);
             console.error(err);
@@ -295,7 +292,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
     };
     
     const renderForm = () => {
-        // Il contenuto di questa funzione non cambia
         switch (type) {
             case 'newEmployee':
             case 'editEmployee':
@@ -660,5 +656,3 @@ const AdminDashboard = ({ user, handleLogout }) => {
         </div>
     );
 };
-
-export default AdminDashboard;
