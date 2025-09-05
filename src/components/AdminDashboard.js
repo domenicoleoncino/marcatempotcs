@@ -9,8 +9,7 @@ import { createUserWithEmailAndPassword } from 'firebase/auth';
 // Importa i componenti che ci servono
 import CompanyLogo from './CompanyLogo';
 
-// NOTA: I componenti interni (le varie "View" e il "Modal") restano qui.
-
+// Componente per la Gestione Dipendenti
 const EmployeeManagementView = ({ employees, openModal }) => (
     <div>
         <div className="flex justify-between items-center mb-6">
@@ -58,6 +57,7 @@ const EmployeeManagementView = ({ employees, openModal }) => (
     </div>
 );
 
+// Componente per la Gestione Aree
 const AreaManagementView = ({ workAreas, openModal }) => (
     <div>
         <div className="flex justify-between items-center mb-6">
@@ -96,6 +96,7 @@ const AreaManagementView = ({ workAreas, openModal }) => (
     </div>
 );
 
+// Componente per la Gestione Admin
 const AdminManagementView = ({ admins, openModal, user }) => (
     <div>
         <div className="flex justify-between items-center mb-6">
@@ -117,7 +118,7 @@ const AdminManagementView = ({ admins, openModal, user }) => (
                         <tr key={admin.id}>
                             <td className="px-6 py-4 whitespace-nowrap">{admin.email}</td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                {admin.id !== user.uid ? (
+                                {user && admin.id !== user.uid ? ( // Aggiunto controllo 'user &&' per sicurezza
                                     <button onClick={() => openModal('deleteAdmin', admin)} className="text-red-600 hover:text-red-900">Elimina</button>
                                 ) : (
                                     <span className="text-gray-400">Attuale</span>
@@ -131,6 +132,7 @@ const AdminManagementView = ({ admins, openModal, user }) => (
     </div>
 );
 
+// Componente per i Report
 const ReportView = ({ reports, title, handleDeleteReportData }) => {
     const handleExportExcel = () => {
         if (typeof window.XLSX === 'undefined') {
@@ -190,6 +192,7 @@ const ReportView = ({ reports, title, handleDeleteReportData }) => {
     );
 };
 
+// Componente Modale
 const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmployees }) => {
     const [formData, setFormData] = React.useState(item || {});
     const [isLoading, setIsLoading] = React.useState(false);
@@ -236,8 +239,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
                     break;
                 case 'deleteEmployee':
                     await deleteDoc(doc(db, "employees", item.id));
-                    // NOTA: La cancellazione dell'utente da Auth dovrebbe essere gestita da una Cloud Function per sicurezza.
-                    // await deleteDoc(doc(db, "users", item.userId)); // Questo cancella il profilo utente, non l'autenticazione.
                     break;
                 case 'newArea':
                     await addDoc(collection(db, "work_areas"), { name: formData.name, latitude: parseFloat(formData.latitude), longitude: parseFloat(formData.longitude), radius: parseInt(formData.radius, 10) });
@@ -268,7 +269,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
                     break;
                 case 'deleteAdmin':
                     if (item.id === auth.currentUser.uid) throw new Error("Non puoi eliminare te stesso.");
-                    await deleteDoc(doc(db, "users", item.id)); // Anche qui, serve una Cloud Function per l'Auth.
+                    await deleteDoc(doc(db, "users", item.id)); 
                     break;
                 case 'manualClockIn':
                     await addDoc(collection(db, "time_entries"), { employeeId: item.id, workAreaId: formData.workAreaId, clockInTime: new Date(formData.timestamp), clockOutTime: null, status: 'clocked-in' });
@@ -415,7 +416,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
     );
 };
 
-// Questo è il componente principale che esportiamo
+// Componente Principale
 const AdminDashboard = ({ user, handleLogout }) => {
     const [view, setView] = React.useState('employees');
     const [employees, setEmployees] = React.useState([]);
@@ -571,7 +572,7 @@ const AdminDashboard = ({ user, handleLogout }) => {
             <header className="bg-white shadow-md p-4 flex justify-between items-center">
                 <CompanyLogo />
                 <div className="flex items-center space-x-4">
-                    <span className="text-gray-600">Admin: {user.email}</span>
+                    <span className="text-gray-600">Admin: {user?.email}</span> 
                     <button onClick={handleLogout} className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600">Logout</button>
                 </div>
             </header>
@@ -626,7 +627,8 @@ const AdminDashboard = ({ user, handleLogout }) => {
             <main className="p-8 max-w-7xl mx-auto w-full">
                 {view === 'employees' && <EmployeeManagementView employees={employeesWithStatus} openModal={openModal} />}
                 {view === 'areas' && <AreaManagementView workAreas={workAreasWithCounts} openModal={openModal} />}
-                {view === 'admins' && <AdminManagementView admins={admins} openModal={openModal} user={user} />}
+                {/* FIX: Aggiunto controllo 'user &&' per evitare crash se 'user' non è ancora caricato */}
+                {view === 'admins' && user && <AdminManagementView admins={admins} openModal={openModal} user={user} />}
                 {view === 'reports' && <ReportView reports={reports} title={reportTitle} handleDeleteReportData={handleDeleteReportData} />}
             </main>
             {showModal && <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} workAreas={workAreas} adminsCount={admins.length} allEmployees={employees} />}
@@ -635,8 +637,3 @@ const AdminDashboard = ({ user, handleLogout }) => {
 };
 
 export default AdminDashboard;
-ho eliminato la funzione di eliminazione del utente, ho corretto  il nome  ora il pulsante non mi funziona non genera il report mi da questo errore file
-These are the files that the user uploaded:
-{"contentFetchId":"uploaded:image_0424f1.png-5bb432c5-d6fe-49d8-9b06-c5d9b42c9694","fileMimeType":"image/png","fileName":"image_0424f1.png","fileNameIsCodeAccessible":true}
-{"contentFetchId":"uploaded:image_035306.png-e7cf7c9b-6494-432d-94c6-655f44da2b49","fileMimeType":"image/png","fileName":"image_035306.png","fileNameIsCodeAccessible":true}
-{"contentFetchId":"uploaded:image_039600.png-3cf7d79b-00a4-4a47-a8b4-20b122709230","fileMimeType":"image/png","fileName":"image_039600.png","fileNameIsCodeAccessible":true}
