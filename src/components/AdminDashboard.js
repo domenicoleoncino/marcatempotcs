@@ -450,7 +450,7 @@ const AdminDashboard = ({ user, handleLogout }) => {
         setShowModal(true);
     };
     
-    const generatereport = async (reportType) => { // <-- ERRORE DI BATTITURA QUI
+    const generateReport = async (reportType) => {
         if (selectedReportAreas.length === 0) {
             alert("Devi selezionare almeno un'area di lavoro per generare il report.");
             return;
@@ -595,9 +595,9 @@ const AdminDashboard = ({ user, handleLogout }) => {
                         <h3 className="text-lg font-medium text-gray-900 mb-2">Genera Report</h3>
                         <div className="flex items-center flex-wrap gap-4 mb-4">
                             <div className="flex space-x-2">
-                                <button onClick={() => generatereport('daily')} className="px-3 py-1 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm">Giornaliero</button>
-                                <button onClick={() => generatereport('weekly')} className="px-3 py-1 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm">Settimanale</button>
-                                <button onClick={() => generatereport('monthly')} className="px-3 py-1 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm">Mensile</button>
+                                <button onClick={() => generateReport('daily')} className="px-3 py-1 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm">Giornaliero</button>
+                                <button onClick={() => generateReport('weekly')} className="px-3 py-1 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm">Settimanale</button>
+                                <button onClick={() => generateReport('monthly')} className="px-3 py-1 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm">Mensile</button>
                             </div>
                         </div>
                         <h4 className="text-md font-medium text-gray-800 mb-2">Filtra per Aree</h4>
@@ -635,3 +635,8 @@ const AdminDashboard = ({ user, handleLogout }) => {
 };
 
 export default AdminDashboard;
+ho eliminato la funzione di eliminazione del utente, ho corretto  il nome  ora il pulsante non mi funziona non genera il report mi da questo errore file
+These are the files that the user uploaded:
+{"contentFetchId":"uploaded:image_0424f1.png-5bb432c5-d6fe-49d8-9b06-c5d9b42c9694","fileMimeType":"image/png","fileName":"image_0424f1.png","fileNameIsCodeAccessible":true}
+{"contentFetchId":"uploaded:image_035306.png-e7cf7c9b-6494-432d-94c6-655f44da2b49","fileMimeType":"image/png","fileName":"image_035306.png","fileNameIsCodeAccessible":true}
+{"contentFetchId":"uploaded:image_039600.png-3cf7d79b-00a4-4a47-a8b4-20b122709230","fileMimeType":"image/png","fileName":"image_039600.png","fileNameIsCodeAccessible":true}
