@@ -12,9 +12,9 @@ import CompanyLogo from './CompanyLogo';
 // Componente per la Gestione Dipendenti
 const EmployeeManagementView = ({ employees, openModal }) => (
     <div>
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
             <h1 className="text-3xl font-bold text-gray-800">Gestione Dipendenti</h1>
-            <button onClick={() => openModal('newEmployee')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Aggiungi Dipendente</button>
+            <button onClick={() => openModal('newEmployee')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto">Aggiungi Dipendente</button>
         </div>
         <div className="bg-white shadow-md rounded-lg overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
@@ -31,7 +31,7 @@ const EmployeeManagementView = ({ employees, openModal }) => (
                         <tr key={emp.id}>
                             <td className="px-6 py-4 whitespace-nowrap">
                                 <div className="text-sm font-medium text-gray-900">{emp.name} {emp.surname}</div>
-                                <div className="text-sm text-gray-500">{emp.email}</div>
+                                <div className="text-sm text-gray-500 break-all">{emp.email}</div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
                                 {emp.activeEntry ? 
@@ -40,14 +40,17 @@ const EmployeeManagementView = ({ employees, openModal }) => (
                                 }
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{emp.workAreaNames?.join(', ') || 'Nessuna'}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                            {/* FIX RESPONSIVE: I pulsanti ora si impilano su schermi piccoli */}
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
                                 {emp.activeEntry ? 
-                                    <button onClick={() => openModal('manualClockOut', emp)} className="px-2 py-1 text-sm bg-yellow-500 text-white rounded-md hover:bg-yellow-600">Timbra Uscita</button> :
-                                    <button onClick={() => openModal('manualClockIn', emp)} className="px-2 py-1 text-sm bg-blue-500 text-white rounded-md hover:bg-blue-600">Timbra Entrata</button>
+                                    <button onClick={() => openModal('manualClockOut', emp)} className="px-2 py-1 text-sm bg-yellow-500 text-white rounded-md hover:bg-yellow-600 w-full text-center sm:w-auto">Timbra Uscita</button> :
+                                    <button onClick={() => openModal('manualClockIn', emp)} className="px-2 py-1 text-sm bg-blue-500 text-white rounded-md hover:bg-blue-600 w-full text-center sm:w-auto">Timbra Entrata</button>
                                 }
                                 <button onClick={() => openModal('assignArea', emp)} className="text-indigo-600 hover:text-indigo-900">Aree</button>
                                 <button onClick={() => openModal('editEmployee', emp)} className="text-green-600 hover:text-green-900">Modifica</button>
                                 <button onClick={() => openModal('deleteEmployee', emp)} className="text-red-600 hover:text-red-900">Elimina</button>
+                                </div>
                             </td>
                         </tr>
                     ))}
@@ -60,16 +63,16 @@ const EmployeeManagementView = ({ employees, openModal }) => (
 // Componente per la Gestione Aree
 const AreaManagementView = ({ workAreas, openModal }) => (
     <div>
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
             <h1 className="text-3xl font-bold text-gray-800">Gestione Aree di Lavoro</h1>
-            <button onClick={() => openModal('newArea')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Aggiungi Area</button>
+            <button onClick={() => openModal('newArea')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto">Aggiungi Area</button>
         </div>
         <div className="bg-white shadow-md rounded-lg overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
                  <thead className="bg-gray-50">
                     <tr>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome Area</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Presenze Attuali</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Presenze</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Latitudine</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Longitudine</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Raggio (m)</th>
@@ -84,9 +87,12 @@ const AreaManagementView = ({ workAreas, openModal }) => (
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{area.latitude}</td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{area.longitude}</td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{area.radius}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-4">
+                             {/* FIX RESPONSIVE: Pulsanti allineati */}
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                               <div className="flex items-center gap-4">
                                 <button onClick={() => openModal('editArea', area)} className="text-green-600 hover:text-green-900">Modifica</button>
                                 <button onClick={() => openModal('deleteArea', area)} className="text-red-600 hover:text-red-900">Elimina</button>
+                               </div>
                             </td>
                         </tr>
                     ))}
@@ -99,13 +105,13 @@ const AreaManagementView = ({ workAreas, openModal }) => (
 // Componente per la Gestione Admin
 const AdminManagementView = ({ admins, openModal, user }) => (
     <div>
-        <div className="flex justify-between items-center mb-6">
-            <h1 className="text-3xl font-bold text-gray-800">Gestione Amministratori ({admins.length}/10)</h1>
+        <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
+            <h1 className="text-3xl font-bold text-gray-800">Gestione Admin ({admins.length}/10)</h1>
             {admins.length < 10 && (
-                <button onClick={() => openModal('newAdmin')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Aggiungi Admin</button>
+                <button onClick={() => openModal('newAdmin')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto">Aggiungi Admin</button>
             )}
         </div>
-        <div className="bg-white shadow-md rounded-lg overflow-hidden">
+        <div className="bg-white shadow-md rounded-lg overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
                  <thead className="bg-gray-50">
                     <tr>
@@ -116,7 +122,7 @@ const AdminManagementView = ({ admins, openModal, user }) => (
                 <tbody className="bg-white divide-y divide-gray-200">
                     {admins.map(admin => (
                         <tr key={admin.id}>
-                            <td className="px-6 py-4 whitespace-nowrap">{admin.email}</td>
+                            <td className="px-6 py-4 whitespace-nowrap break-all">{admin.email}</td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                 {user && admin.id !== user.uid ? ( 
                                     <button onClick={() => openModal('deleteAdmin', admin)} className="text-red-600 hover:text-red-900">Elimina</button>
@@ -153,14 +159,14 @@ const ReportView = ({ reports, title, handleDeleteReportData }) => {
     };
     return (
         <div>
-            <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 flex-wrap gap-4">
                 <h1 className="text-3xl font-bold text-gray-800">{title || 'Report'}</h1>
                 <div className="flex items-center space-x-2">
                     <button onClick={handleExportExcel} disabled={reports.length === 0} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400">Esporta in Excel</button>
                     <button onClick={handleDeleteReportData} disabled={reports.length === 0} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-800 disabled:bg-gray-400">Cancella Dati Report</button>
                 </div>
             </div>
-            <div className="bg-white shadow-md rounded-lg overflow-hidden">
+            <div className="bg-white shadow-md rounded-lg overflow-x-auto">
                 {reports.length === 0 ? (
                     <p className="p-6 text-gray-500">Nessun dato di timbratura per il periodo selezionato.</p>
                 ) : (
@@ -590,22 +596,22 @@ const AdminDashboard = ({ user, handleLogout }) => {
 
     return (
         <div className="min-h-screen bg-gray-100">
-            <header className="bg-white shadow-md p-4 flex justify-between items-center">
+             {/* FIX RESPONSIVE: Header modificato per schermi piccoli */}
+            <header className="bg-white shadow-md p-4 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                 <CompanyLogo />
-                <div className="flex items-center space-x-4">
-                    <span className="text-gray-600">Admin: {user?.email}</span> 
-                    <button onClick={handleLogout} className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600">Logout</button>
+                <div className="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-4 w-full sm:w-auto">
+                    <span className="text-gray-600 text-sm text-center break-all">Admin: {user?.email}</span> 
+                    <button onClick={handleLogout} className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 w-full sm:w-auto">Logout</button>
                 </div>
             </header>
+             {/* FIX RESPONSIVE: Navigazione modificata per schermi piccoli */}
             <nav className="bg-white border-b border-gray-200">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex justify-between h-16">
-                        <div className="flex">
-                            <div className="flex space-x-8">
-                                <button onClick={() => setView('employees')} className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${view === 'employees' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Dipendenti</button>
-                                <button onClick={() => setView('areas')} className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${view === 'areas' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Aree</button>
-                                <button onClick={() => setView('admins')} className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${view === 'admins' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Admin</button>
-                            </div>
+                    <div className="flex flex-col sm:flex-row justify-center sm:justify-start h-auto sm:h-16 py-2 sm:py-0">
+                        <div className="flex flex-col sm:flex-row sm:space-x-8">
+                            <button onClick={() => setView('employees')} className={`text-center py-2 sm:py-0 sm:inline-flex items-center px-1 sm:pt-1 sm:border-b-2 text-sm font-medium ${view === 'employees' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Dipendenti</button>
+                            <button onClick={() => setView('areas')} className={`text-center py-2 sm:py-0 sm:inline-flex items-center px-1 sm:pt-1 sm:border-b-2 text-sm font-medium ${view === 'areas' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Aree</button>
+                            <button onClick={() => setView('admins')} className={`text-center py-2 sm:py-0 sm:inline-flex items-center px-1 sm:pt-1 sm:border-b-2 text-sm font-medium ${view === 'admins' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Admin</button>
                         </div>
                     </div>
                 </div>
@@ -644,17 +650,16 @@ const AdminDashboard = ({ user, handleLogout }) => {
                     </div>
                 </div>
             )}
-
-            <main className="p-8 max-w-7xl mx-auto w-full">
+             {/* FIX RESPONSIVE: Padding ridotto su schermi piccoli */}
+            <main className="p-4 sm:p-8 max-w-7xl mx-auto w-full">
                 {view === 'employees' && <EmployeeManagementView employees={employeesWithStatus} openModal={openModal} />}
                 {view === 'areas' && <AreaManagementView workAreas={workAreasWithCounts} openModal={openModal} />}
                 {view === 'admins' && user && <AdminManagementView admins={admins} openModal={openModal} user={user} />}
                 {view === 'reports' && <ReportView reports={reports} title={reportTitle} handleDeleteReportData={handleDeleteReportData} />}
             </main>
-            {/* **** MODIFICA ****: Passiamo la funzione onDataUpdate al modale */}
             {showModal && <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} workAreas={workAreas} adminsCount={admins.length} allEmployees={employees} onDataUpdate={fetchData} />}
         </div>
     );
 };
-export default AdminDashboard;
 
+export default AdminDashboard;
