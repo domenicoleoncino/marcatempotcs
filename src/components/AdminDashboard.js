@@ -193,7 +193,8 @@ const ReportView = ({ reports, title, handleDeleteReportData }) => {
 };
 
 // Componente Modale
-const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmployees }) => {
+// **** MODIFICA ****: Aggiunto "onDataUpdate" come prop per richiamare l'aggiornamento
+const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmployees, onDataUpdate }) => {
     const [formData, setFormData] = React.useState(item || {});
     const [isLoading, setIsLoading] = React.useState(false);
     const [error, setError] = React.useState('');
@@ -279,9 +280,14 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
                     break;
                 default: break;
             }
+            // **** MODIFICA ****: Chiamiamo la funzione di aggiornamento dopo ogni operazione
+            await onDataUpdate();
             setShowModal(false);
         } catch (err) {
             setError(err.message);
+            // Anche in caso di errore, proviamo ad aggiornare i dati e chiudere il modale
+            await onDataUpdate();
+            setShowModal(false);
             console.error(err);
         } finally {
             setIsLoading(false);
@@ -289,6 +295,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
     };
     
     const renderForm = () => {
+        // Il contenuto di questa funzione non cambia
         switch (type) {
             case 'newEmployee':
             case 'editEmployee':
@@ -430,20 +437,39 @@ const AdminDashboard = ({ user, handleLogout }) => {
     const [selectedItem, setSelectedItem] = React.useState(null);
     const [reportEntryIds, setReportEntryIds] = React.useState([]);
     const [selectedReportAreas, setSelectedReportAreas] = React.useState([]);
+    const [isLoading, setIsLoading] = React.useState(true); // Aggiunto stato di caricamento
 
-    React.useEffect(() => {
-        const unsubEmployees = onSnapshot(collection(db, "employees"), (snapshot) => setEmployees(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
-        const unsubAreas = onSnapshot(collection(db, "work_areas"), (snapshot) => {
-            const areas = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    // **** MODIFICA ****: Creata una funzione per caricare tutti i dati manualmente
+    const fetchData = React.useCallback(async () => {
+        setIsLoading(true);
+        try {
+            // Carica dipendenti, aree, admin e timbrature attive
+            const employeesSnapshot = await getDocs(collection(db, "employees"));
+            setEmployees(employeesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+
+            const areasSnapshot = await getDocs(collection(db, "work_areas"));
+            const areas = areasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             setWorkAreas(areas);
             setSelectedReportAreas(areas.map(a => a.id));
-        });
-        const qAdmins = query(collection(db, "users"), where("role", "==", "admin"));
-        const unsubAdmins = onSnapshot(qAdmins, (snapshot) => setAdmins(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
-        const qEntries = query(collection(db, "time_entries"), where("status", "==", "clocked-in"));
-        const unsubEntries = onSnapshot(qEntries, (snapshot) => setActiveEntries(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
-        return () => { unsubEmployees(); unsubAreas(); unsubAdmins(); unsubEntries(); };
-    }, []);
+
+            const qAdmins = query(collection(db, "users"), where("role", "==", "admin"));
+            const adminsSnapshot = await getDocs(qAdmins);
+            setAdmins(adminsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+
+            const qEntries = query(collection(db, "time_entries"), where("status", "==", "clocked-in"));
+            const entriesSnapshot = await getDocs(qEntries);
+            setActiveEntries(entriesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        } catch (error) {
+            console.error("Errore nel caricamento dei dati: ", error);
+        } finally {
+            setIsLoading(false);
+        }
+    }, []); // useCallback per evitare ricreazioni non necessarie
+
+    // **** MODIFICA ****: useEffect ora chiama solo fetchData al caricamento iniziale
+    React.useEffect(() => {
+        fetchData();
+    }, [fetchData]);
 
     const openModal = (type, item = null) => {
         setModalType(type);
@@ -511,13 +537,8 @@ const AdminDashboard = ({ user, handleLogout }) => {
             alert("Nessun dato da cancellare.");
             return;
         }
-        const confirmation1 = window.prompt("Sei assolutamente sicuro? Questa azione è IRREVERSIBILE e cancellerà per sempre le timbrature di questo report. Scrivi 'CANCELLA' per confermare.");
-        if (confirmation1 !== 'CANCELLA') {
-            alert("Cancellazione annullata.");
-            return;
-        }
-        const confirmation2 = window.prompt("Seconda conferma: Scrivi 'CANCELLA DATI' per procedere con l'eliminazione definitiva.");
-         if (confirmation2 !== 'CANCELLA DATI') {
+        const confirmation = window.confirm("Sei assolutamente sicuro? Questa azione è IRREVERSIBILE e cancellerà per sempre le timbrature di questo report.");
+        if (!confirmation) {
             alert("Cancellazione annullata.");
             return;
         }
@@ -529,9 +550,8 @@ const AdminDashboard = ({ user, handleLogout }) => {
             });
             await batch.commit();
             alert(`Cancellazione completata con successo! Sono state rimosse ${reportEntryIds.length} timbrature.`);
-            setReports([]);
-            setReportEntryIds([]);
-            setReportTitle('');
+            // Ricarica i dati per vedere i cambiamenti
+            await fetchData();
             setView('employees');
         } catch (error) {
             console.error("Errore durante la cancellazione dei dati:", error);
@@ -566,6 +586,11 @@ const AdminDashboard = ({ user, handleLogout }) => {
         const activeCount = activeEntries.filter(entry => entry.workAreaId === area.id).length;
         return { ...area, activeEmployeeCount: activeCount };
     });
+
+    // Mostra un caricamento mentre i dati vengono caricati
+    if (isLoading) {
+        return <div className="min-h-screen flex items-center justify-center">Caricamento in corso...</div>;
+    }
 
     return (
         <div className="min-h-screen bg-gray-100">
@@ -627,11 +652,11 @@ const AdminDashboard = ({ user, handleLogout }) => {
             <main className="p-8 max-w-7xl mx-auto w-full">
                 {view === 'employees' && <EmployeeManagementView employees={employeesWithStatus} openModal={openModal} />}
                 {view === 'areas' && <AreaManagementView workAreas={workAreasWithCounts} openModal={openModal} />}
-                {/* FIX: Aggiunto controllo 'user &&' per evitare crash se 'user' non è ancora caricato */}
                 {view === 'admins' && user && <AdminManagementView admins={admins} openModal={openModal} user={user} />}
                 {view === 'reports' && <ReportView reports={reports} title={reportTitle} handleDeleteReportData={handleDeleteReportData} />}
             </main>
-            {showModal && <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} workAreas={workAreas} adminsCount={admins.length} allEmployees={employees} />}
+            {/* **** MODIFICA ****: Passiamo la funzione onDataUpdate al modale */}
+            {showModal && <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} workAreas={workAreas} adminsCount={admins.length} allEmployees={employees} onDataUpdate={fetchData} />}
         </div>
     );
 };
