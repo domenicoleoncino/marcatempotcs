@@ -50,7 +50,6 @@ const EmployeeManagementView = ({ employees, openModal }) => (
                                 <button onClick={() => openModal('assignArea', emp)} className="text-indigo-600 hover:text-indigo-900">Aree</button>
                                 <button onClick={() => openModal('editEmployee', emp)} className="text-green-600 hover:text-green-900">Modifica</button>
                                 <button onClick={() => openModal('deleteEmployee', emp)} className="text-red-600 hover:text-red-900">Elimina</button>
-                                {/* *** NUOVO PULSANTE *** */}
                                 {emp.deviceId && (
                                     <button onClick={() => openModal('resetDevice', emp)} className="text-yellow-600 hover:text-yellow-900">Resetta Dispositivo</button>
                                 )}
@@ -238,7 +237,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
         setError('');
         try {
             switch (type) {
-                // ... (casi esistenti)
                 case 'newEmployee':
                     const userCred = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
                     await setDoc(doc(db, "users", userCred.user.uid), { email: formData.email, role: 'employee' });
@@ -287,13 +285,10 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
                 case 'manualClockOut':
                     await updateDoc(doc(db, "time_entries", item.activeEntry.id), { clockOutTime: new Date(formData.timestamp), status: 'clocked-out' });
                     break;
-
-                // *** NUOVO CASO PER IL RESET ***
                 case 'resetDevice':
                     const employeeRef = doc(db, "employees", item.id);
                     await updateDoc(employeeRef, { deviceId: null });
                     break;
-
                 default: break;
             }
             await onDataUpdate();
@@ -310,7 +305,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
     
     const renderForm = () => {
         switch (type) {
-            // ... (casi esistenti)
             case 'newEmployee':
             case 'editEmployee':
                 return (
@@ -418,8 +412,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
                         </div>
                     </>
                 );
-
-            // *** NUOVO MODALE DI CONFERMA ***
             case 'resetDevice':
                 return (
                     <>
@@ -432,14 +424,11 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
                         </p>
                     </>
                 );
-
             default:
                 return null;
         }
     };
     
-    // Modificato per gestire il colore del pulsante di reset
-    const isDeleteAction = type.startsWith('delete') || type === 'resetDevice';
     const primaryButtonClass = () => {
         if (type.startsWith('delete')) return 'bg-red-600 hover:bg-red-700 disabled:bg-red-300';
         if (type === 'resetDevice') return 'bg-yellow-500 hover:bg-yellow-600 disabled:bg-yellow-300';
@@ -450,7 +439,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
         if (type === 'resetDevice') return 'Resetta';
         return 'Salva';
     }
-
 
     return (
         <div className="fixed z-10 inset-0 overflow-y-auto">
