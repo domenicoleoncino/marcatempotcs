@@ -1,17 +1,38 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="it">
   <head>
     <meta charset="utf-8" />
+    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#000000" />
+    <meta name="theme-color" content="#ffffff" />
     <meta
       name="description"
-      content="Web site created using create-react-app"
+      content="App Marcatempo by TCS"
     />
-    <title>React App</title>
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/icon-192x192.png" />
+    
+    <!-- LINK AL MANIFEST -->
+    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+
+    <title>Marcatempo TCS</title>
   </head>
   <body>
-    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <noscript>Devi abilitare JavaScript per eseguire questa app.</noscript>
     <div id="root"></div>
+    
+    <!-- SCRIPT PER IL SERVICE WORKER -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('%PUBLIC_URL%/service-worker.js')
+            .then(registration => {
+              console.log('Service Worker registrato con successo: ', registration);
+            })
+            .catch(registrationError => {
+              console.log('Registrazione del Service Worker fallita: ', registrationError);
+            });
+        });
+      }
+    </script>
   </body>
 </html>
