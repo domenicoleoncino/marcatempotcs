@@ -9,41 +9,55 @@ import { createUserWithEmailAndPassword } from 'firebase/auth';
 // Importa i componenti che ci servono
 import CompanyLogo from './CompanyLogo';
 
-// *** NUOVO COMPONENTE: DashboardView ***
+// Componente DashboardView
 const DashboardView = ({ employees, activeEntries, workAreas }) => {
     
-    // Calcola le ore totali accumulate fino ad ora dai dipendenti attivi
+    // Calcola le ore totali accumulate fino ad ora dai dipendenti attivi, SOTTRAENDO le pause
     const calculateCurrentHours = () => {
         let totalHours = 0;
         const now = new Date();
         activeEntries.forEach(entry => {
             const clockInTime = entry.clockInTime.toDate();
-            const duration = (now - clockInTime) / 3600000; // Durata in ore
-            totalHours += duration;
+            let pauseDurationMs = 0;
+
+            // Calcola la durata delle pause completate e di quella in corso
+            if (entry.pauses && entry.pauses.length > 0) {
+                entry.pauses.forEach(p => {
+                    const start = p.start.toDate();
+                    const end = p.end ? p.end.toDate() : now; // Se la pausa è in corso, calcola fino ad ora
+                    pauseDurationMs += (end - start);
+                });
+            }
+
+            const durationMs = (now - clockInTime) - pauseDurationMs;
+            totalHours += durationMs / 3600000; // Converti in ore
         });
-        return totalHours.toFixed(2);
+        return totalHours > 0 ? totalHours.toFixed(2) : '0.00';
     };
 
     const activeEmployeesDetails = activeEntries.map(entry => {
         const employee = employees.find(emp => emp.id === entry.employeeId);
         const area = workAreas.find(ar => ar.id === entry.workAreaId);
+        const isOnBreak = entry.pauses?.some(p => !p.end) || false;
+
         return {
             id: entry.id,
             employeeName: employee ? `${employee.name} ${employee.surname}` : 'Sconosciuto',
             areaName: area ? area.name : 'Sconosciuta',
-            clockInTimeFormatted: entry.clockInTime.toDate().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+            clockInTimeFormatted: entry.clockInTime.toDate().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
+            status: isOnBreak ? 'In Pausa' : 'Al Lavoro'
         };
-    }).sort((a, b) => a.employeeName.localeCompare(b.employeeName)); // Ordina per nome
+    }).sort((a, b) => a.employeeName.localeCompare(b.employeeName));
 
     return (
         <div>
             <h1 className="text-3xl font-bold text-gray-800 mb-6">Dashboard Riepilogativa</h1>
             
-            {/* Riquadri con le statistiche */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
                 <div className="bg-white p-6 rounded-lg shadow-md flex items-center">
-                    <div className="bg-green-100 p-3 rounded-full mr-4">
-                        <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                    {/* *** MODIFICA: Ridimensionata l'icona *** */}
+                    <div className="bg-green-100 p-3 rounded-full mr-4 flex-shrink-0">
+                        <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
                     </div>
                     <div>
                         <p className="text-sm text-gray-500">Dipendenti Attivi</p>
@@ -51,17 +65,17 @@ const DashboardView = ({ employees, activeEntries, workAreas }) => {
                     </div>
                 </div>
                 <div className="bg-white p-6 rounded-lg shadow-md flex items-center">
-                    <div className="bg-blue-100 p-3 rounded-full mr-4">
-                        <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    {/* *** MODIFICA: Ridimensionata l'icona *** */}
+                    <div className="bg-blue-100 p-3 rounded-full mr-4 flex-shrink-0">
+                        <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                     </div>
                     <div>
-                        <p className="text-sm text-gray-500">Ore Lavorate Oggi (attuali)</p>
+                        <p className="text-sm text-gray-500">Ore Lavorate Oggi (nette)</p>
                         <p className="text-2xl font-bold text-gray-800">{calculateCurrentHours()}</p>
                     </div>
                 </div>
             </div>
 
-            {/* Tabella dei dipendenti attivi */}
             <h2 className="text-2xl font-bold text-gray-800 mb-4">Chi è al Lavoro Ora</h2>
             <div className="bg-white shadow-md rounded-lg overflow-x-auto">
                 {activeEmployeesDetails.length > 0 ? (
@@ -71,6 +85,7 @@ const DashboardView = ({ employees, activeEntries, workAreas }) => {
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dipendente</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Area di Lavoro</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ora di Entrata</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stato</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
@@ -79,6 +94,11 @@ const DashboardView = ({ employees, activeEntries, workAreas }) => {
                                     <td className="px-6 py-4 whitespace-nowrap">{entry.employeeName}</td>
                                     <td className="px-6 py-4 whitespace-nowrap">{entry.areaName}</td>
                                     <td className="px-6 py-4 whitespace-nowrap">{entry.clockInTimeFormatted}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${entry.status === 'In Pausa' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
+                                            {entry.status}
+                                        </span>
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>
