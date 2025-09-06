@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { db, auth } from '../firebase';
-import { doc, getDoc, collection, query, where, orderBy, getDocs, addDoc, updateDoc } from 'firebase/firestore';
+import { db } from '../firebase';
+import { collection, query, where, orderBy, getDocs, addDoc, updateDoc, doc } from 'firebase/firestore';
 import CompanyLogo from './CompanyLogo';
 
 // Funzione per calcolare la distanza tra due punti geografici (Haversine formula)
@@ -43,16 +43,16 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
                 const data = { id: employeeSnapshot.docs[0].id, ...employeeSnapshot.docs[0].data() };
                 setEmployeeData(data);
 
-                // Fetch work areas
+                let fetchedAreas = [];
                 if (data.workAreaIds && data.workAreaIds.length > 0) {
-                    const qAreas = query(collection(db, "work_areas"), where("id", "in", data.workAreaIds));
-                    const areasSnapshot = await getDocs(qAreas);
-                    setWorkAreas(areasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                    const areasQuery = query(collection(db, "work_areas"), where("__name__", "in", data.workAreaIds));
+                    const areasSnapshot = await getDocs(areasQuery);
+                    fetchedAreas = areasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    setWorkAreas(fetchedAreas);
                 } else {
                     setWorkAreas([]);
                 }
-
-                // Fetch active time entry
+                
                 const qActiveEntry = query(
                     collection(db, "time_entries"),
                     where("employeeId", "==", data.id),
@@ -65,36 +65,35 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
                     setActiveEntry(null);
                 }
 
-                // FIX: Caricamento della cronologia timbrature completate
                 const qPastEntries = query(
                     collection(db, "time_entries"),
                     where("employeeId", "==", data.id),
                     where("status", "==", "clocked-out"),
-                    orderBy("clockInTime", "desc") // Ordina dalla più recente alla meno recente
+                    orderBy("clockInTime", "desc")
                 );
                 const pastEntriesSnapshot = await getDocs(qPastEntries);
+                
                 const pastEntries = pastEntriesSnapshot.docs.map(doc => {
                     const entryData = doc.data();
-                    const area = workAreas.find(wa => wa.id === entryData.workAreaId);
+                    const area = fetchedAreas.find(wa => wa.id === entryData.workAreaId);
                     const clockInTime = entryData.clockInTime?.toDate();
                     const clockOutTime = entryData.clockOutTime?.toDate();
                     let duration = null;
 
                     if (clockInTime && clockOutTime) {
-                        duration = (clockOutTime.getTime() - clockInTime.getTime()) / (1000 * 60 * 60); // Durata in ore
+                        duration = (clockOutTime.getTime() - clockInTime.getTime()) / (1000 * 60 * 60);
                     }
                     
                     return {
                         id: doc.id,
-                        areaName: area ? area.name : 'Area Sconosciuta',
-                        clockIn: clockInTime ? clockInTime.toLocaleTimeString('it-IT') : 'N/A',
-                        clockOut: clockOutTime ? clockOutTime.toLocaleTimeString('it-IT') : 'N/A',
+                        areaName: area ? area.name : 'N/D',
+                        clockIn: clockInTime ? clockInTime.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : 'N/A',
+                        clockOut: clockOutTime ? clockOutTime.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : 'N/A',
                         date: clockInTime ? clockInTime.toLocaleDateString('it-IT') : 'N/A',
                         duration: duration ? duration.toFixed(2) : 'N/A'
                     };
                 });
                 setEmployeeTimestamps(pastEntries);
-
 
             } else {
                 setEmployeeData(null);
@@ -104,15 +103,12 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
         } finally {
             setIsLoading(false);
         }
-    }, [user, workAreas]); // Aggiunto workAreas come dipendenza per aggiornare i nomi delle aree
+    }, [user]);
 
     useEffect(() => {
         fetchEmployeeData();
-        const intervalId = setInterval(fetchEmployeeData, 30000); // Aggiorna ogni 30 secondi
-        return () => clearInterval(intervalId); // Pulisci l'intervallo
     }, [fetchEmployeeData]);
 
-    // Funzione per ottenere la posizione corrente
     const getCurrentLocation = () => {
         if (!navigator.geolocation) {
             setLocationError("La geolocalizzazione non è supportata dal tuo browser.");
@@ -151,7 +147,7 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
 
     useEffect(() => {
         getCurrentLocation();
-        const geoIntervalId = setInterval(getCurrentLocation, 60000); // Aggiorna posizione ogni minuto
+        const geoIntervalId = setInterval(getCurrentLocation, 60000);
         return () => clearInterval(geoIntervalId);
     }, []);
 
@@ -181,7 +177,7 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
                     clockOutTime: null,
                     status: 'clocked-in'
                 });
-                fetchEmployeeData(); // Re-fetch all data to update UI
+                fetchEmployeeData();
                 setLocationError('');
             } catch (error) {
                 console.error("Errore durante la timbratura di entrata:", error);
@@ -199,7 +195,7 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
                     clockOutTime: new Date(),
                     status: 'clocked-out'
                 });
-                fetchEmployeeData(); // Re-fetch all data to update UI
+                fetchEmployeeData();
                 setLocationError('');
             } catch (error) {
                 console.error("Errore durante la timbratura di uscita:", error);
