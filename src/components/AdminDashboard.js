@@ -9,6 +9,89 @@ import { createUserWithEmailAndPassword } from 'firebase/auth';
 // Importa i componenti che ci servono
 import CompanyLogo from './CompanyLogo';
 
+// *** NUOVO COMPONENTE: DashboardView ***
+const DashboardView = ({ employees, activeEntries, workAreas }) => {
+    
+    // Calcola le ore totali accumulate fino ad ora dai dipendenti attivi
+    const calculateCurrentHours = () => {
+        let totalHours = 0;
+        const now = new Date();
+        activeEntries.forEach(entry => {
+            const clockInTime = entry.clockInTime.toDate();
+            const duration = (now - clockInTime) / 3600000; // Durata in ore
+            totalHours += duration;
+        });
+        return totalHours.toFixed(2);
+    };
+
+    const activeEmployeesDetails = activeEntries.map(entry => {
+        const employee = employees.find(emp => emp.id === entry.employeeId);
+        const area = workAreas.find(ar => ar.id === entry.workAreaId);
+        return {
+            id: entry.id,
+            employeeName: employee ? `${employee.name} ${employee.surname}` : 'Sconosciuto',
+            areaName: area ? area.name : 'Sconosciuta',
+            clockInTimeFormatted: entry.clockInTime.toDate().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+        };
+    }).sort((a, b) => a.employeeName.localeCompare(b.employeeName)); // Ordina per nome
+
+    return (
+        <div>
+            <h1 className="text-3xl font-bold text-gray-800 mb-6">Dashboard Riepilogativa</h1>
+            
+            {/* Riquadri con le statistiche */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div className="bg-white p-6 rounded-lg shadow-md flex items-center">
+                    <div className="bg-green-100 p-3 rounded-full mr-4">
+                        <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                    </div>
+                    <div>
+                        <p className="text-sm text-gray-500">Dipendenti Attivi</p>
+                        <p className="text-2xl font-bold text-gray-800">{activeEntries.length} / {employees.length}</p>
+                    </div>
+                </div>
+                <div className="bg-white p-6 rounded-lg shadow-md flex items-center">
+                    <div className="bg-blue-100 p-3 rounded-full mr-4">
+                        <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </div>
+                    <div>
+                        <p className="text-sm text-gray-500">Ore Lavorate Oggi (attuali)</p>
+                        <p className="text-2xl font-bold text-gray-800">{calculateCurrentHours()}</p>
+                    </div>
+                </div>
+            </div>
+
+            {/* Tabella dei dipendenti attivi */}
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">Chi è al Lavoro Ora</h2>
+            <div className="bg-white shadow-md rounded-lg overflow-x-auto">
+                {activeEmployeesDetails.length > 0 ? (
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                            <tr>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dipendente</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Area di Lavoro</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ora di Entrata</th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                            {activeEmployeesDetails.map(entry => (
+                                <tr key={entry.id}>
+                                    <td className="px-6 py-4 whitespace-nowrap">{entry.employeeName}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap">{entry.areaName}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap">{entry.clockInTimeFormatted}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                ) : (
+                    <p className="p-6 text-gray-500">Nessun dipendente è attualmente al lavoro.</p>
+                )}
+            </div>
+        </div>
+    );
+};
+
+
 // Componente per la Gestione Dipendenti
 const EmployeeManagementView = ({ employees, openModal }) => (
     <div>
@@ -147,7 +230,6 @@ const ReportView = ({ reports, title, handleDeleteReportData }) => {
             alert("La libreria di esportazione non è ancora stata caricata. Riprova tra un momento.");
             return;
         }
-        // *** MODIFICA: Aggiunti campi Ora Entrata e Ora Uscita all'export ***
         const dataToExport = reports.map(entry => ({
             'Dipendente': entry.employeeName,
             'Area di Lavoro': entry.areaName,
@@ -159,7 +241,6 @@ const ReportView = ({ reports, title, handleDeleteReportData }) => {
         const ws = window.XLSX.utils.json_to_sheet(dataToExport);
         const wb = window.XLSX.utils.book_new();
         window.XLSX.utils.book_append_sheet(wb, ws, "Report Ore");
-        // *** MODIFICA: Aggiornate larghezze colonne per i nuovi campi ***
         ws['!cols'] = [{ wch: 30 }, { wch: 30 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }];
         window.XLSX.writeFile(wb, `${title.replace(/ /g, '_')}.xlsx`);
     };
@@ -179,7 +260,6 @@ const ReportView = ({ reports, title, handleDeleteReportData }) => {
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                             <tr>
-                                {/* *** MODIFICA: Aggiunte colonne Entrata e Uscita *** */}
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dipendente</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Area di Lavoro</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
@@ -191,7 +271,6 @@ const ReportView = ({ reports, title, handleDeleteReportData }) => {
                         <tbody className="bg-white divide-y divide-gray-200">
                             {reports.map((entry) => (
                                 <tr key={entry.id}>
-                                    {/* *** MODIFICA: Aggiunti campi per ora entrata e uscita *** */}
                                     <td className="px-6 py-4 whitespace-nowrap">{entry.employeeName}</td>
                                     <td className="px-6 py-4 whitespace-nowrap">{entry.areaName}</td>
                                     <td className="px-6 py-4 whitespace-nowrap">{entry.clockInDate}</td>
@@ -476,7 +555,8 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
 
 // Componente Principale
 const AdminDashboard = ({ user, handleLogout }) => {
-    const [view, setView] = React.useState('employees');
+    // *** MODIFICA: La vista di default ora è la 'dashboard' ***
+    const [view, setView] = React.useState('dashboard');
     const [employees, setEmployees] = React.useState([]);
     const [workAreas, setWorkAreas] = React.useState([]);
     const [admins, setAdmins] = React.useState([]);
@@ -567,7 +647,6 @@ const AdminDashboard = ({ user, handleLogout }) => {
             const areaData = workAreas.find(a => a.id === entry.workAreaId);
             
             if (employeeData && areaData) {
-                // *** MODIFICA: Aggiunta formattazione ora entrata e uscita ***
                 const clockInTime = entry.clockInTime.toDate();
                 const clockOutTime = entry.clockOutTime ? entry.clockOutTime.toDate() : null;
 
@@ -656,7 +735,9 @@ const AdminDashboard = ({ user, handleLogout }) => {
             <nav className="bg-white border-b border-gray-200">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex flex-col sm:flex-row justify-center sm:justify-start h-auto sm:h-16 py-2 sm:py-0">
+                        {/* *** MODIFICA: Aggiunto pulsante Dashboard e aggiornati stili *** */}
                         <div className="flex flex-col sm:flex-row sm:space-x-8">
+                            <button onClick={() => setView('dashboard')} className={`text-center py-2 sm:py-0 sm:inline-flex items-center px-1 sm:pt-1 sm:border-b-2 text-sm font-medium ${view === 'dashboard' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Dashboard</button>
                             <button onClick={() => setView('employees')} className={`text-center py-2 sm:py-0 sm:inline-flex items-center px-1 sm:pt-1 sm:border-b-2 text-sm font-medium ${view === 'employees' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Dipendenti</button>
                             <button onClick={() => setView('areas')} className={`text-center py-2 sm:py-0 sm:inline-flex items-center px-1 sm:pt-1 sm:border-b-2 text-sm font-medium ${view === 'areas' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Aree</button>
                             <button onClick={() => setView('admins')} className={`text-center py-2 sm:py-0 sm:inline-flex items-center px-1 sm:pt-1 sm:border-b-2 text-sm font-medium ${view === 'admins' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Admin</button>
@@ -699,6 +780,8 @@ const AdminDashboard = ({ user, handleLogout }) => {
                 </div>
             )}
             <main className="p-4 sm:p-8 max-w-7xl mx-auto w-full">
+                {/* *** MODIFICA: Render condizionale per la nuova Dashboard *** */}
+                {view === 'dashboard' && <DashboardView employees={employees} activeEntries={activeEntries} workAreas={workAreas} />}
                 {view === 'employees' && <EmployeeManagementView employees={employeesWithStatus} openModal={openModal} />}
                 {view === 'areas' && <AreaManagementView workAreas={workAreasWithCounts} openModal={openModal} />}
                 {view === 'admins' && user && <AdminManagementView admins={admins} openModal={openModal} user={user} />}
