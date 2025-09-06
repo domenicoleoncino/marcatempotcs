@@ -12,7 +12,6 @@ import CompanyLogo from './CompanyLogo';
 // Componente DashboardView
 const DashboardView = ({ employees, activeEntries, workAreas }) => {
     
-    // Calcola le ore totali accumulate fino ad ora dai dipendenti attivi, SOTTRAENDO le pause
     const calculateCurrentHours = () => {
         let totalHours = 0;
         const now = new Date();
@@ -20,17 +19,16 @@ const DashboardView = ({ employees, activeEntries, workAreas }) => {
             const clockInTime = entry.clockInTime.toDate();
             let pauseDurationMs = 0;
 
-            // Calcola la durata delle pause completate e di quella in corso
             if (entry.pauses && entry.pauses.length > 0) {
                 entry.pauses.forEach(p => {
                     const start = p.start.toDate();
-                    const end = p.end ? p.end.toDate() : now; // Se la pausa è in corso, calcola fino ad ora
+                    const end = p.end ? p.end.toDate() : now;
                     pauseDurationMs += (end - start);
                 });
             }
 
             const durationMs = (now - clockInTime) - pauseDurationMs;
-            totalHours += durationMs / 3600000; // Converti in ore
+            totalHours += durationMs / 3600000;
         });
         return totalHours > 0 ? totalHours.toFixed(2) : '0.00';
     };
@@ -56,7 +54,7 @@ const DashboardView = ({ employees, activeEntries, workAreas }) => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
                 <div className="bg-white p-6 rounded-lg shadow-md flex items-center">
                     <div className="bg-green-100 p-3 rounded-full mr-4 flex-shrink-0">
-                        <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                        <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
                     </div>
                     <div>
                         <p className="text-sm text-gray-500">Dipendenti Attivi</p>
@@ -65,7 +63,7 @@ const DashboardView = ({ employees, activeEntries, workAreas }) => {
                 </div>
                 <div className="bg-white p-6 rounded-lg shadow-md flex items-center">
                     <div className="bg-blue-100 p-3 rounded-full mr-4 flex-shrink-0">
-                        <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                     </div>
                     <div>
                         <p className="text-sm text-gray-500">Ore Lavorate Oggi (nette)</p>
@@ -209,7 +207,7 @@ const AreaManagementView = ({ workAreas, openModal }) => (
 );
 
 // Componente per la Gestione Admin
-// *** MODIFICA: Aggiunto "superAdminEmail" come prop ***
+// *** MODIFICA ***: Aggiunto "superAdminEmail" come prop per identificare il super admin
 const AdminManagementView = ({ admins, openModal, user, superAdminEmail }) => (
     <div>
         <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
@@ -231,19 +229,17 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail }) => (
                         <tr key={admin.id}>
                             <td className="px-6 py-4 whitespace-nowrap break-all flex items-center">
                                 {admin.email}
-                                {/* *** MODIFICA: Mostra badge "Super Admin" *** */}
+                                {/* *** MODIFICA ***: Mostra un badge se l'email corrisponde a quella del super admin */}
                                 {admin.email === superAdminEmail && (
                                     <span className="ml-3 px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">Super Admin</span>
                                 )}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                {/* *** MODIFICA: Logica per nascondere il pulsante Elimina *** */}
-                                {user && admin.email !== superAdminEmail && admin.id !== user.uid ? ( 
+                                {/* *** MODIFICA ***: Il pulsante "Elimina" è nascosto per il super admin */}
+                                {admin.email !== superAdminEmail ? ( 
                                     <button onClick={() => openModal('deleteAdmin', admin)} className="text-red-600 hover:text-red-900">Elimina</button>
                                 ) : (
-                                    <span className="text-gray-400">
-                                        {admin.id === user.uid ? 'Attuale' : 'N/A'}
-                                    </span>
+                                    <span className="text-gray-400">N/A</span>
                                 )}
                             </td>
                         </tr>
@@ -324,6 +320,7 @@ const ReportView = ({ reports, title, handleDeleteReportData }) => {
 };
 
 // Componente Modale
+// *** MODIFICA ***: Aggiunto "superAdminEmail" come prop per la logica di sicurezza
 const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmployees, onDataUpdate, superAdminEmail }) => {
     const [formData, setFormData] = React.useState(item || {});
     const [isLoading, setIsLoading] = React.useState(false);
@@ -346,7 +343,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
             now.setSeconds(0);
             now.setMilliseconds(0);
             const localDateTime = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
-            setFormData({ ...item, timestamp: localDateTime, workAreaId: item?.workAreaIds?.[0] || '', note: item?.note || '' });
+            setFormData({ ...item, timestamp: localDateTime, workAreaId: item?.workAreaIds?.[0] || '', note: item?.activeEntry?.note || '' });
         }
     }, [type, item]);
 
@@ -356,7 +353,8 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
             setError("La password deve essere di almeno 6 caratteri.");
             return;
         }
-        // *** MODIFICA: Blocco eliminazione Super Admin ***
+        
+        // *** MODIFICA ***: Blocco di sicurezza per impedire l'eliminazione del super admin
         if (type === 'deleteAdmin' && item.email === superAdminEmail) {
             setError("L'amministratore principale non può essere eliminato.");
             return;
@@ -628,8 +626,8 @@ const AdminDashboard = ({ user, handleLogout }) => {
     const [reportEntryIds, setReportEntryIds] = React.useState([]);
     const [selectedReportAreas, setSelectedReportAreas] = React.useState([]);
     const [isLoading, setIsLoading] = React.useState(true); 
-    // *** NUOVA COSTANTE: Email del Super Amministratore ***
-    const superAdminEmail = "documentazione@tcsitalia.com";
+    // *** MODIFICA ***: Definita l'email del Super Amministratore
+    const superAdminEmail = "domenico.leoncino@tcsitalia.com";
 
     const fetchData = React.useCallback(async () => {
         setIsLoading(true);
@@ -857,13 +855,15 @@ const AdminDashboard = ({ user, handleLogout }) => {
                 {view === 'dashboard' && <DashboardView employees={employees} activeEntries={activeEntries} workAreas={workAreas} />}
                 {view === 'employees' && <EmployeeManagementView employees={employeesWithStatus} openModal={openModal} />}
                 {view === 'areas' && <AreaManagementView workAreas={workAreasWithCounts} openModal={openModal} />}
-                {/* *** MODIFICA: Passato 'superAdminEmail' al componente *** */}
+                {/* *** MODIFICA ***: Passata l'email del super admin per la logica di visualizzazione */}
                 {view === 'admins' && user && <AdminManagementView admins={admins} openModal={openModal} user={user} superAdminEmail={superAdminEmail} />}
                 {view === 'reports' && <ReportView reports={reports} title={reportTitle} handleDeleteReportData={handleDeleteReportData} />}
             </main>
+            {/* *** MODIFICA ***: Passata l'email del super admin per la logica di sicurezza nel modale */}
             {showModal && <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} workAreas={workAreas} adminsCount={admins.length} allEmployees={employees} onDataUpdate={fetchData} superAdminEmail={superAdminEmail} />}
         </div>
     );
 };
 
 export default AdminDashboard;
+
