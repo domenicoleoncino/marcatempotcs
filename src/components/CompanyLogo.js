@@ -13,10 +13,10 @@ const CompanyLogo = () => (
             className="h-16 w-auto" 
             onError={(e) => { e.target.onerror = null; e.target.src='https://placehold.co/200x60/cccccc/ffffff?text=Logo'; }}
         />
-        <h2 className="text-2xl font-bold text-gray-800 mt-2">TCS ITALIA S.r.l.</h2>
-        <p className="text-sm text-gray-500">Technology Corporation Service</p>
     </div>
 );
 
 export default CompanyLogo;
+
+
 
