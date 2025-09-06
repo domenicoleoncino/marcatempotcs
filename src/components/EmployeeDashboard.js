@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { db } from '../firebase';
 import { collection, query, where, orderBy, getDocs, addDoc, updateDoc, doc } from 'firebase/firestore';
 import CompanyLogo from './CompanyLogo';
@@ -352,3 +352,5 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
         </div>
     );
 };
+
+export default EmployeeDashboard;
