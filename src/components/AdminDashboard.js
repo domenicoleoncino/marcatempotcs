@@ -147,16 +147,20 @@ const ReportView = ({ reports, title, handleDeleteReportData }) => {
             alert("La libreria di esportazione non è ancora stata caricata. Riprova tra un momento.");
             return;
         }
+        // *** MODIFICA: Aggiunti campi Ora Entrata e Ora Uscita all'export ***
         const dataToExport = reports.map(entry => ({
             'Dipendente': entry.employeeName,
             'Area di Lavoro': entry.areaName,
             'Data': entry.clockInDate,
+            'Ora Entrata': entry.clockInTimeFormatted,
+            'Ora Uscita': entry.clockOutTimeFormatted,
             'Ore Lavorate': (entry.duration !== null) ? parseFloat(entry.duration.toFixed(2)) : "In corso"
         }));
         const ws = window.XLSX.utils.json_to_sheet(dataToExport);
         const wb = window.XLSX.utils.book_new();
         window.XLSX.utils.book_append_sheet(wb, ws, "Report Ore");
-        ws['!cols'] = [{ wch: 30 }, { wch: 30 }, { wch: 15 }, { wch: 15 }];
+        // *** MODIFICA: Aggiornate larghezze colonne per i nuovi campi ***
+        ws['!cols'] = [{ wch: 30 }, { wch: 30 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }];
         window.XLSX.writeFile(wb, `${title.replace(/ /g, '_')}.xlsx`);
     };
     return (
@@ -175,18 +179,24 @@ const ReportView = ({ reports, title, handleDeleteReportData }) => {
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                             <tr>
+                                {/* *** MODIFICA: Aggiunte colonne Entrata e Uscita *** */}
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dipendente</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Area di Lavoro</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entrata</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Uscita</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ore Lavorate</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                             {reports.map((entry) => (
                                 <tr key={entry.id}>
+                                    {/* *** MODIFICA: Aggiunti campi per ora entrata e uscita *** */}
                                     <td className="px-6 py-4 whitespace-nowrap">{entry.employeeName}</td>
                                     <td className="px-6 py-4 whitespace-nowrap">{entry.areaName}</td>
                                     <td className="px-6 py-4 whitespace-nowrap">{entry.clockInDate}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap">{entry.clockInTimeFormatted}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap">{entry.clockOutTimeFormatted}</td>
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         {entry.duration !== null ? entry.duration.toFixed(2) : <span className="text-blue-500 font-semibold">In corso...</span>}
                                     </td>
@@ -557,12 +567,18 @@ const AdminDashboard = ({ user, handleLogout }) => {
             const areaData = workAreas.find(a => a.id === entry.workAreaId);
             
             if (employeeData && areaData) {
+                // *** MODIFICA: Aggiunta formattazione ora entrata e uscita ***
+                const clockInTime = entry.clockInTime.toDate();
+                const clockOutTime = entry.clockOutTime ? entry.clockOutTime.toDate() : null;
+
                 reportData.push({
                     id: entry.id,
                     employeeName: `${employeeData.name} ${employeeData.surname}`,
                     areaName: areaData.name,
-                    clockInDate: entry.clockInTime.toDate().toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit'}),
-                    duration: entry.clockOutTime ? (entry.clockOutTime.toDate() - entry.clockInTime.toDate()) / 3600000 : null
+                    clockInDate: clockInTime.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit'}),
+                    clockInTimeFormatted: clockInTime.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
+                    clockOutTimeFormatted: clockOutTime ? clockOutTime.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : 'In corso',
+                    duration: clockOutTime ? (clockOutTime - clockInTime) / 3600000 : null
                 });
             }
         }
