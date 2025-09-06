@@ -1,258 +1,321 @@
-import React from 'react';
-import { db } from '../firebase';
-import { 
-    doc, getDoc, collection, addDoc, getDocs, query, where, 
-    updateDoc, onSnapshot, orderBy 
-} from 'firebase/firestore';
-
-// Importa i componenti che ci servono
+import React, { useState, useEffect, useCallback } from 'react';
+import { db, auth } from '../firebase';
+import { doc, getDoc, collection, query, where, orderBy, getDocs, addDoc, updateDoc } from 'firebase/firestore';
 import CompanyLogo from './CompanyLogo';
-import Clock from './Clock';
 
-// Importa la funzione di utilità
-const getDistance = (coords1, coords2) => {
-    const toRad = (x) => (x * Math.PI) / 180;
-    const R = 6371; // Raggio della Terra in km
-    const dLat = toRad(coords2.latitude - coords1.latitude);
-    const dLon = toRad(coords2.longitude - coords1.longitude);
-    const lat1 = toRad(coords1.latitude);
-    const lat2 = toRad(coords2.latitude);
-    const a =
-        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-        Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2);
+// Funzione per calcolare la distanza tra due punti geografici (Haversine formula)
+const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371e3; // metres
+    const φ1 = lat1 * Math.PI / 180; // φ, λ in radians
+    const φ2 = lat2 * Math.PI / 180;
+    const Δφ = (lat2 - lat1) * Math.PI / 180;
+    const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c * 1000; // in metri
+
+    const d = R * c; // in metres
+    return d;
 };
 
-
 const EmployeeDashboard = ({ user, handleLogout }) => {
-    const [employeeData, setEmployeeData] = React.useState(null);
-    const [workAreas, setWorkAreas] = React.useState([]);
-    const [currentPosition, setCurrentPosition] = React.useState(null);
-    const [locationError, setLocationError] = React.useState('');
-    const [status, setStatus] = React.useState({ clockedIn: false, area: null, entryId: null });
-    const [canClockIn, setCanClockIn] = React.useState(false);
-    const [clockingInProgress, setClockingInProgress] = React.useState(false);
-    const [history, setHistory] = React.useState([]);
-    const [isLoadingHistory, setIsLoadingHistory] = React.useState(true);
+    const [employeeData, setEmployeeData] = useState(null);
+    const [employeeTimestamps, setEmployeeTimestamps] = useState([]);
+    const [activeEntry, setActiveEntry] = useState(null);
+    const [workAreas, setWorkAreas] = useState([]);
+    const [currentLocation, setCurrentLocation] = useState(null);
+    const [locationError, setLocationError] = useState('');
+    const [isLoading, setIsLoading] = useState(true);
 
-    React.useEffect(() => {
-        if (!user) return;
-        const q = query(collection(db, "employees"), where("userId", "==", user.uid));
-        const unsubscribe = onSnapshot(q, async (querySnapshot) => {
-            if (!querySnapshot.empty) {
-                const empDoc = querySnapshot.docs[0];
-                const empData = { id: empDoc.id, ...empDoc.data() };
-                setEmployeeData(empData);
-                if (empData.workAreaIds && empData.workAreaIds.length > 0) {
-                    const areasQuery = query(collection(db, "work_areas"), where("__name__", "in", empData.workAreaIds));
-                    const areasSnapshot = await getDocs(areasQuery);
+    const fetchEmployeeData = useCallback(async () => {
+        if (!user) {
+            setIsLoading(false);
+            return;
+        }
+
+        try {
+            const qEmployee = query(collection(db, "employees"), where("userId", "==", user.uid));
+            const employeeSnapshot = await getDocs(qEmployee);
+
+            if (!employeeSnapshot.empty) {
+                const data = { id: employeeSnapshot.docs[0].id, ...employeeSnapshot.docs[0].data() };
+                setEmployeeData(data);
+
+                // Fetch work areas
+                if (data.workAreaIds && data.workAreaIds.length > 0) {
+                    const qAreas = query(collection(db, "work_areas"), where("id", "in", data.workAreaIds));
+                    const areasSnapshot = await getDocs(qAreas);
                     setWorkAreas(areasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
                 } else {
                     setWorkAreas([]);
                 }
-            }
-        });
-        return () => unsubscribe();
-    }, [user]);
 
-    React.useEffect(() => {
-        const watchId = navigator.geolocation.watchPosition(
-            (pos) => {
-                setCurrentPosition(pos.coords);
+                // Fetch active time entry
+                const qActiveEntry = query(
+                    collection(db, "time_entries"),
+                    where("employeeId", "==", data.id),
+                    where("status", "==", "clocked-in")
+                );
+                const activeEntrySnapshot = await getDocs(qActiveEntry);
+                if (!activeEntrySnapshot.empty) {
+                    setActiveEntry({ id: activeEntrySnapshot.docs[0].id, ...activeEntrySnapshot.docs[0].data() });
+                } else {
+                    setActiveEntry(null);
+                }
+
+                // FIX: Caricamento della cronologia timbrature completate
+                const qPastEntries = query(
+                    collection(db, "time_entries"),
+                    where("employeeId", "==", data.id),
+                    where("status", "==", "clocked-out"),
+                    orderBy("clockInTime", "desc") // Ordina dalla più recente alla meno recente
+                );
+                const pastEntriesSnapshot = await getDocs(qPastEntries);
+                const pastEntries = pastEntriesSnapshot.docs.map(doc => {
+                    const entryData = doc.data();
+                    const area = workAreas.find(wa => wa.id === entryData.workAreaId);
+                    const clockInTime = entryData.clockInTime?.toDate();
+                    const clockOutTime = entryData.clockOutTime?.toDate();
+                    let duration = null;
+
+                    if (clockInTime && clockOutTime) {
+                        duration = (clockOutTime.getTime() - clockInTime.getTime()) / (1000 * 60 * 60); // Durata in ore
+                    }
+                    
+                    return {
+                        id: doc.id,
+                        areaName: area ? area.name : 'Area Sconosciuta',
+                        clockIn: clockInTime ? clockInTime.toLocaleTimeString('it-IT') : 'N/A',
+                        clockOut: clockOutTime ? clockOutTime.toLocaleTimeString('it-IT') : 'N/A',
+                        date: clockInTime ? clockInTime.toLocaleDateString('it-IT') : 'N/A',
+                        duration: duration ? duration.toFixed(2) : 'N/A'
+                    };
+                });
+                setEmployeeTimestamps(pastEntries);
+
+
+            } else {
+                setEmployeeData(null);
+            }
+        } catch (error) {
+            console.error("Errore nel recupero dati dipendente:", error);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [user, workAreas]); // Aggiunto workAreas come dipendenza per aggiornare i nomi delle aree
+
+    useEffect(() => {
+        fetchEmployeeData();
+        const intervalId = setInterval(fetchEmployeeData, 30000); // Aggiorna ogni 30 secondi
+        return () => clearInterval(intervalId); // Pulisci l'intervallo
+    }, [fetchEmployeeData]);
+
+    // Funzione per ottenere la posizione corrente
+    const getCurrentLocation = () => {
+        if (!navigator.geolocation) {
+            setLocationError("La geolocalizzazione non è supportata dal tuo browser.");
+            return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                setCurrentLocation({
+                    latitude: position.coords.latitude,
+                    longitude: position.coords.longitude,
+                });
                 setLocationError('');
             },
-            (err) => {
-                setLocationError('Impossibile ottenere la posizione. Assicurati di aver concesso i permessi.');
-                console.error(err);
+            (error) => {
+                switch(error.code) {
+                    case error.PERMISSION_DENIED:
+                        setLocationError("Permesso di geolocalizzazione negato. Abilitalo nelle impostazioni del browser.");
+                        break;
+                    case error.POSITION_UNAVAILABLE:
+                        setLocationError("Informazioni sulla posizione non disponibili.");
+                        break;
+                    case error.TIMEOUT:
+                        setLocationError("La richiesta di geolocalizzazione è scaduta.");
+                        break;
+                    default:
+                        setLocationError("Errore sconosciuto di geolocalizzazione.");
+                        break;
+                }
+                setCurrentLocation(null);
+                console.error("Errore di geolocalizzazione:", error);
             },
             { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
         );
-        return () => navigator.geolocation.clearWatch(watchId);
+    };
+
+    useEffect(() => {
+        getCurrentLocation();
+        const geoIntervalId = setInterval(getCurrentLocation, 60000); // Aggiorna posizione ogni minuto
+        return () => clearInterval(geoIntervalId);
     }, []);
 
-    React.useEffect(() => {
-        if (!employeeData) return;
-        const q = query(collection(db, "time_entries"), 
-            where("employeeId", "==", employeeData.id),
-            where("status", "==", "clocked-in")
-        );
-        const unsubscribe = onSnapshot(q, async (snapshot) => {
-            if (!snapshot.empty) {
-                const entryDoc = snapshot.docs[0];
-                const entryData = entryDoc.data();
-                const areaDoc = await getDoc(doc(db, "work_areas", entryData.workAreaId));
-                setStatus({ clockedIn: true, area: areaDoc.data()?.name || 'Sconosciuta', entryId: entryDoc.id });
-            } else {
-                setStatus({ clockedIn: false, area: null, entryId: null });
-            }
-        });
-        return () => unsubscribe();
-    }, [employeeData]);
-    
-    React.useEffect(() => {
-        if (!employeeData) return;
-        setIsLoadingHistory(true);
-        const q = query(
-            collection(db, "time_entries"), 
-            where("employeeId", "==", employeeData.id),
-            where("status", "==", "clocked-out"),
-            orderBy("clockInTime", "desc")
-        );
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            setHistory(snapshot.docs.map(doc => ({id: doc.id, ...doc.data()})));
-            setIsLoadingHistory(false);
-        }, (error) => {
-            console.error("Errore nel caricamento della cronologia: ", error);
-            setIsLoadingHistory(false);
-        });
-        return () => unsubscribe();
-    }, [employeeData]);
-
-    React.useEffect(() => {
-        if (currentPosition && workAreas.length > 0) {
-            const isInsideAnyArea = workAreas.some(area => {
-                const distance = getDistance(currentPosition, area);
-                return distance <= area.radius;
-            });
-            setCanClockIn(isInsideAnyArea);
-        } else {
-            setCanClockIn(false);
+    const handleClockIn = async (areaId) => {
+        if (!currentLocation) {
+            setLocationError("Impossibile rilevare la posizione. Riprova o abilita la geolocalizzazione.");
+            return;
         }
-    }, [currentPosition, workAreas]);
 
-    const handleClockIn = async () => {
-        if (!canClockIn || !currentPosition) return;
-        setClockingInProgress(true);
-        let areaToClockIn = null;
-        for (const area of workAreas) {
-            if (getDistance(currentPosition, area) <= area.radius) {
-                areaToClockIn = area;
-                break;
-            }
+        const selectedArea = workAreas.find(area => area.id === areaId);
+        if (!selectedArea) {
+            setLocationError("Area di lavoro non trovata.");
+            return;
         }
-        if (areaToClockIn && employeeData) {
+
+        const distance = calculateDistance(
+            currentLocation.latitude, currentLocation.longitude,
+            selectedArea.latitude, selectedArea.longitude
+        );
+
+        if (distance <= selectedArea.radius) {
             try {
                 await addDoc(collection(db, "time_entries"), {
                     employeeId: employeeData.id,
-                    workAreaId: areaToClockIn.id,
+                    workAreaId: areaId,
                     clockInTime: new Date(),
                     clockOutTime: null,
                     status: 'clocked-in'
                 });
-            } catch (err) { console.error("Error clocking in: ", err); }
+                fetchEmployeeData(); // Re-fetch all data to update UI
+                setLocationError('');
+            } catch (error) {
+                console.error("Errore durante la timbratura di entrata:", error);
+                setLocationError("Errore durante la timbratura di entrata.");
+            }
+        } else {
+            setLocationError(`Non sei in un'area di lavoro autorizzata per la timbratura. Distanza: ${distance.toFixed(2)}m (Max: ${selectedArea.radius}m)`);
         }
-        setClockingInProgress(false);
     };
 
     const handleClockOut = async () => {
-        if (!status.entryId) return;
-        setClockingInProgress(true);
-        try {
-            await updateDoc(doc(db, "time_entries", status.entryId), {
-                clockOutTime: new Date(),
-                status: 'clocked-out'
-            });
-        } catch (err) { console.error("Error clocking out: ", err); }
-        setClockingInProgress(false);
+        if (activeEntry && employeeData) {
+            try {
+                await updateDoc(doc(db, "time_entries", activeEntry.id), {
+                    clockOutTime: new Date(),
+                    status: 'clocked-out'
+                });
+                fetchEmployeeData(); // Re-fetch all data to update UI
+                setLocationError('');
+            } catch (error) {
+                console.error("Errore durante la timbratura di uscita:", error);
+                setLocationError("Errore durante la timbratura di uscita.");
+            }
+        }
     };
 
+    if (isLoading) {
+        return <div className="min-h-screen flex items-center justify-center bg-gray-100"><p>Caricamento dati dipendente...</p></div>;
+    }
+
+    if (!employeeData) {
+        return <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 p-4">
+            <CompanyLogo />
+            <p className="mt-8 text-xl text-red-600 text-center">Errore: Dati dipendente non trovati o non autorizzato.</p>
+            <button onClick={handleLogout} className="mt-4 px-6 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600">Logout</button>
+        </div>;
+    }
+
+    const currentDateTime = new Date();
+    const formattedDate = currentDateTime.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    const formattedTime = currentDateTime.toLocaleTimeString('it-IT');
+
     return (
-        // ATTENZIONE: abbiamo rimosso il div esterno con "min-h-screen"
-        <>
-            <header className="bg-white shadow-md p-4 flex justify-between items-center w-full max-w-4xl mb-4">
+        <div className="min-h-screen bg-gray-100 flex flex-col items-center p-4">
+            <header className="bg-white shadow-md rounded-lg p-4 mb-6 w-full max-w-md flex flex-col items-center">
                 <CompanyLogo />
-                <div className="flex items-center space-x-4">
-                    <span className="text-gray-600 hidden sm:block">Dipendente: {user.email}</span>
-                    <button onClick={handleLogout} className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600">Logout</button>
+                <div className="text-center mt-4">
+                    <p className="text-gray-600 text-sm break-all">Dipendente: {employeeData.email} <button onClick={handleLogout} className="text-blue-500 hover:underline ml-2 text-sm">Logout</button></p>
+                    <p className="text-gray-800 text-lg font-semibold mt-2">{formattedTime}</p>
+                    <p className="text-gray-500 text-sm">{formattedDate}</p>
                 </div>
             </header>
-            <main className="w-full max-w-4xl space-y-8">
-                <Clock />
-                <div className="bg-white p-6 rounded-xl shadow-lg text-center space-y-4">
-                    <h2 className="text-2xl font-bold text-gray-800">Stato Timbratura</h2>
-                    {status.clockedIn ? (
-                        <div className="p-4 bg-green-100 border-l-4 border-green-500 text-green-700 rounded-lg">
-                            <p className="font-bold">Timbratura ATTIVA</p>
-                            <p>Area: {status.area}</p>
-                        </div>
+
+            <main className="bg-white shadow-md rounded-lg p-6 w-full max-w-md mb-6">
+                <h2 className="text-2xl font-bold text-gray-800 mb-4 text-center">Stato Timbratura</h2>
+                <div className="text-center mb-4">
+                    {activeEntry ? (
+                        <>
+                            <p className="text-green-600 text-xl font-bold">Timbratura ATTIVA</p>
+                            <p className="text-gray-700 mt-2">Area: {workAreas.find(area => area.id === activeEntry.workAreaId)?.name || 'Sconosciuta'}</p>
+                            <button onClick={handleClockOut} className="mt-4 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 text-lg font-medium">TIMBRA USCITA</button>
+                        </>
                     ) : (
-                        <div className="p-4 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 rounded-lg">
-                            <p className="font-bold">Timbratura NON ATTIVA</p>
-                        </div>
-                    )}
-                    {status.clockedIn ? (
-                        <button 
-                            onClick={handleClockOut}
-                            disabled={clockingInProgress}
-                            className="w-full md:w-1/2 py-4 px-6 bg-red-600 hover:bg-red-700 text-white font-bold text-xl rounded-lg shadow-lg transition duration-300 ease-in-out transform hover:scale-105 disabled:bg-red-300"
-                        >
-                            {clockingInProgress ? '...' : 'TIMBRA USCITA'}
-                        </button>
-                    ) : (
-                        <button 
-                            onClick={handleClockIn}
-                            disabled={!canClockIn || clockingInProgress}
-                            className="w-full md:w-1/2 py-4 px-6 bg-green-600 hover:bg-green-700 text-white font-bold text-xl rounded-lg shadow-lg transition duration-300 ease-in-out transform hover:scale-105 disabled:bg-gray-400 disabled:cursor-not-allowed"
-                        >
-                             {clockingInProgress ? '...' : 'TIMBRA ENTRATA'}
-                        </button>
-                    )}
-                    {!status.clockedIn && !canClockIn && (
-                        <p className="text-red-500 mt-2 text-sm">
-                            {locationError ? locationError : "Non sei in un'area di lavoro autorizzata per la timbratura."}
-                        </p>
+                        <>
+                            <p className="text-red-600 text-xl font-bold">Timbratura NON ATTIVA</p>
+                            {workAreas.length > 0 ? (
+                                <div className="mt-4">
+                                    <label htmlFor="areaSelect" className="block text-sm font-medium text-gray-700 mb-2">Seleziona Area per timbrare:</label>
+                                    <div className="grid grid-cols-1 gap-2">
+                                        {workAreas.map(area => (
+                                            <button 
+                                                key={area.id}
+                                                onClick={() => handleClockIn(area.id)}
+                                                className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-lg font-medium w-full"
+                                            >
+                                                TIMBRA ENTRATA ({area.name})
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : (
+                                <p className="text-gray-500 mt-2">Nessuna area di lavoro assegnata o disponibile.</p>
+                            )}
+                        </>
                     )}
                 </div>
-                <div className="bg-white p-6 rounded-xl shadow-lg">
-                    <h3 className="text-xl font-bold text-gray-800 mb-4">Le tue Aree di Lavoro</h3>
-                    {workAreas.length > 0 ? (
-                        <ul className="list-disc list-inside space-y-2 text-gray-700">
-                            {workAreas.map(area => <li key={area.id}>{area.name}</li>)}
-                        </ul>
-                    ) : (
-                        <p className="text-gray-500">Nessuna area di lavoro assegnata.</p>
-                    )}
+                {locationError && (
+                    <p className="text-red-500 text-sm mt-4 text-center">{locationError}</p>
+                )}
+            </main>
+
+            {employeeData && workAreas.length > 0 && (
+                <div className="bg-white shadow-md rounded-lg p-6 w-full max-w-md mb-6">
+                    <h2 className="text-2xl font-bold text-gray-800 mb-4 text-center">Le tue Aree di Lavoro</h2>
+                    <ul className="list-disc list-inside text-gray-700 text-center">
+                        {workAreas.map(area => (
+                            <li key={area.id}>{area.name}</li>
+                        ))}
+                    </ul>
                 </div>
-                <div className="bg-white p-6 rounded-xl shadow-lg">
-                    <h3 className="text-xl font-bold text-gray-800 mb-4">Cronologia Timbrature</h3>
+            )}
+            
+            <div className="bg-white shadow-md rounded-lg p-6 w-full max-w-md">
+                <h2 className="text-2xl font-bold text-gray-800 mb-4 text-center">Cronologia Timbrature</h2>
+                {employeeTimestamps.length > 0 ? (
                     <div className="overflow-x-auto">
                         <table className="min-w-full divide-y divide-gray-200">
-                             <thead className="bg-gray-50">
+                            <thead className="bg-gray-50">
                                 <tr>
-                                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
-                                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Area</th>
-                                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entrata</th>
-                                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Uscita</th>
-                                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Totale Ore</th>
+                                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
+                                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Area</th>
+                                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entrata</th>
+                                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Uscita</th>
+                                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ore</th>
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
-                                {isLoadingHistory ? (
-                                    <tr><td colSpan="5" className="text-center py-4">Caricamento cronologia...</td></tr>
-                                ) : history.length > 0 ? (
-                                    history.map(entry => (
-                                        <tr key={entry.id}>
-                                            <td className="px-4 py-4 whitespace-nowrap text-sm">{entry.clockInTime.toDate().toLocaleDateString('it-IT')}</td>
-                                            <td className="px-4 py-4 whitespace-nowrap text-sm">
-                                                {workAreas.find(wa => wa.id === entry.workAreaId)?.name || 'N/A'}
-                                            </td>
-                                            <td className="px-4 py-4 whitespace-nowrap text-sm">{entry.clockInTime.toDate().toLocaleTimeString('it-IT')}</td>
-                                            <td className="px-4 py-4 whitespace-nowrap text-sm">{entry.clockOutTime.toDate().toLocaleTimeString('it-IT')}</td>
-                                            <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">
-                                                {((entry.clockOutTime.toDate() - entry.clockInTime.toDate()) / 3600000).toFixed(2)}
-                                            </td>
-                                        </tr>
-                                    ))
-                                ) : (
-                                    <tr><td colSpan="5" className="text-center py-4 text-gray-500">Nessuna timbratura passata trovata.</td></tr>
-                                )}
+                                {employeeTimestamps.map((entry) => (
+                                    <tr key={entry.id}>
+                                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-700">{entry.date}</td>
+                                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-700">{entry.areaName}</td>
+                                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-700">{entry.clockIn}</td>
+                                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-700">{entry.clockOut}</td>
+                                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-700">{entry.duration}</td>
+                                    </tr>
+                                ))}
                             </tbody>
                         </table>
                     </div>
-                </div>
-            </main>
-        </>
+                ) : (
+                    <p className="text-gray-500 text-center">Nessuna timbratura passata trovata.</p>
+                )}
+            </div>
+        </div>
     );
 };
 
