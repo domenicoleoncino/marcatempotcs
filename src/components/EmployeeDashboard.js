@@ -20,14 +20,25 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
     return d;
 };
 
+// Funzione per ottenere (o creare) un ID unico per il dispositivo
+const getDeviceId = () => {
+    let deviceId = localStorage.getItem('marcatempotcs_deviceId');
+    if (!deviceId) {
+        deviceId = crypto.randomUUID();
+        localStorage.setItem('marcatempotcs_deviceId', deviceId);
+    }
+    return deviceId;
+};
+
 const EmployeeDashboard = ({ user, handleLogout }) => {
     const [employeeData, setEmployeeData] = useState(null);
     const [employeeTimestamps, setEmployeeTimestamps] = useState([]);
     const [activeEntry, setActiveEntry] = useState(null);
     const [workAreas, setWorkAreas] = useState([]);
     const [currentLocation, setCurrentLocation] = useState(null);
-    const [locationError, setLocationError] = useState('');
+    const [statusMessage, setStatusMessage] = useState({ type: '', text: '' }); // Unico stato per i messaggi
     const [isLoading, setIsLoading] = useState(true);
+    const [isDeviceOk, setIsDeviceOk] = useState(false); // Stato per validare il dispositivo
 
     const fetchEmployeeData = useCallback(async () => {
         if (!user) {
@@ -42,6 +53,20 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
             if (!employeeSnapshot.empty) {
                 const data = { id: employeeSnapshot.docs[0].id, ...employeeSnapshot.docs[0].data() };
                 setEmployeeData(data);
+
+                // *** CONTROLLO DISPOSITIVO ***
+                const deviceId = getDeviceId();
+                if (!data.deviceId) {
+                    // L'utente non ha ancora registrato un dispositivo. Va bene.
+                    setIsDeviceOk(true);
+                } else if (data.deviceId === deviceId) {
+                    // Il dispositivo corrisponde. Va bene.
+                    setIsDeviceOk(true);
+                } else {
+                    // Il dispositivo non corrisponde. Blocco.
+                    setIsDeviceOk(false);
+                    setStatusMessage({ type: 'error', text: "Questo non è il dispositivo autorizzato per la timbratura. Contatta un amministratore per resettare il tuo dispositivo." });
+                }
 
                 let fetchedAreas = [];
                 if (data.workAreaIds && data.workAreaIds.length > 0) {
@@ -100,6 +125,7 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
             }
         } catch (error) {
             console.error("Errore nel recupero dati dipendente:", error);
+            setStatusMessage({ type: 'error', text: 'Errore nel caricamento dei dati.' });
         } finally {
             setIsLoading(false);
         }
@@ -111,7 +137,7 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
 
     const getCurrentLocation = () => {
         if (!navigator.geolocation) {
-            setLocationError("La geolocalizzazione non è supportata dal tuo browser.");
+            setStatusMessage({ type: 'error', text: "La geolocalizzazione non è supportata dal tuo browser."});
             return;
         }
 
@@ -121,25 +147,15 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
                     latitude: position.coords.latitude,
                     longitude: position.coords.longitude,
                 });
-                setLocationError('');
+                setStatusMessage({ type: '', text: '' });
             },
             (error) => {
-                switch(error.code) {
-                    case error.PERMISSION_DENIED:
-                        setLocationError("Permesso di geolocalizzazione negato. Abilitalo nelle impostazioni del browser.");
-                        break;
-                    case error.POSITION_UNAVAILABLE:
-                        setLocationError("Informazioni sulla posizione non disponibili.");
-                        break;
-                    case error.TIMEOUT:
-                        setLocationError("La richiesta di geolocalizzazione è scaduta.");
-                        break;
-                    default:
-                        setLocationError("Errore sconosciuto di geolocalizzazione.");
-                        break;
-                }
+                let message = "Errore sconosciuto di geolocalizzazione.";
+                if (error.code === error.PERMISSION_DENIED) message = "Permesso di geolocalizzazione negato. Abilitalo nelle impostazioni del browser.";
+                if (error.code === error.POSITION_UNAVAILABLE) message = "Informazioni sulla posizione non disponibili.";
+                if (error.code === error.TIMEOUT) message = "La richiesta di geolocalizzazione è scaduta.";
+                setStatusMessage({ type: 'error', text: message });
                 setCurrentLocation(null);
-                console.error("Errore di geolocalizzazione:", error);
             },
             { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
         );
@@ -152,14 +168,17 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
     }, []);
 
     const handleClockIn = async (areaId) => {
+        // Blocco preventivo se il dispositivo non è valido
+        if (!isDeviceOk) return;
+
         if (!currentLocation) {
-            setLocationError("Impossibile rilevare la posizione. Riprova o abilita la geolocalizzazione.");
+            setStatusMessage({ type: 'error', text: "Impossibile rilevare la posizione. Riprova o abilita la geolocalizzazione."});
             return;
         }
 
         const selectedArea = workAreas.find(area => area.id === areaId);
         if (!selectedArea) {
-            setLocationError("Area di lavoro non trovata.");
+            setStatusMessage({ type: 'error', text: "Area di lavoro non trovata." });
             return;
         }
 
@@ -170,6 +189,13 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
 
         if (distance <= selectedArea.radius) {
             try {
+                // Se è la prima timbratura, registra il dispositivo
+                if (!employeeData.deviceId) {
+                    const deviceId = getDeviceId();
+                    const employeeRef = doc(db, "employees", employeeData.id);
+                    await updateDoc(employeeRef, { deviceId: deviceId });
+                }
+
                 await addDoc(collection(db, "time_entries"), {
                     employeeId: employeeData.id,
                     workAreaId: areaId,
@@ -178,17 +204,20 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
                     status: 'clocked-in'
                 });
                 fetchEmployeeData();
-                setLocationError('');
+                setStatusMessage({ type: 'success', text: 'Timbratura di entrata registrata!' });
             } catch (error) {
                 console.error("Errore durante la timbratura di entrata:", error);
-                setLocationError("Errore durante la timbratura di entrata.");
+                setStatusMessage({ type: 'error', text: "Errore durante la timbratura di entrata." });
             }
         } else {
-            setLocationError(`Non sei in un'area di lavoro autorizzata per la timbratura. Distanza: ${distance.toFixed(2)}m (Max: ${selectedArea.radius}m)`);
+            setStatusMessage({ type: 'error', text: `Non sei in un'area di lavoro autorizzata per la timbratura. Distanza: ${distance.toFixed(0)}m (Max: ${selectedArea.radius}m)` });
         }
     };
 
     const handleClockOut = async () => {
+         // Blocco preventivo se il dispositivo non è valido
+        if (!isDeviceOk) return;
+
         if (activeEntry && employeeData) {
             try {
                 await updateDoc(doc(db, "time_entries", activeEntry.id), {
@@ -196,10 +225,10 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
                     status: 'clocked-out'
                 });
                 fetchEmployeeData();
-                setLocationError('');
+                setStatusMessage({ type: 'success', text: 'Timbratura di uscita registrata!' });
             } catch (error) {
                 console.error("Errore durante la timbratura di uscita:", error);
-                setLocationError("Errore durante la timbratura di uscita.");
+                setStatusMessage({ type: 'error', text: "Errore durante la timbratura di uscita." });
             }
         }
     };
@@ -233,12 +262,20 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
 
             <main className="bg-white shadow-md rounded-lg p-6 w-full max-w-md mb-6">
                 <h2 className="text-2xl font-bold text-gray-800 mb-4 text-center">Stato Timbratura</h2>
+                
+                {/* Messaggio informativo per la prima registrazione */}
+                {!employeeData.deviceId && !activeEntry && isDeviceOk &&
+                    <div className="bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-3 text-sm mb-4" role="alert">
+                      <p>Questo dispositivo verrà registrato con la tua prossima timbratura.</p>
+                    </div>
+                }
+
                 <div className="text-center mb-4">
                     {activeEntry ? (
                         <>
                             <p className="text-green-600 text-xl font-bold">Timbratura ATTIVA</p>
                             <p className="text-gray-700 mt-2">Area: {workAreas.find(area => area.id === activeEntry.workAreaId)?.name || 'Sconosciuta'}</p>
-                            <button onClick={handleClockOut} className="mt-4 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 text-lg font-medium">TIMBRA USCITA</button>
+                            <button onClick={handleClockOut} disabled={!isDeviceOk} className="mt-4 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 text-lg font-medium disabled:bg-gray-400">TIMBRA USCITA</button>
                         </>
                     ) : (
                         <>
@@ -251,7 +288,8 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
                                             <button 
                                                 key={area.id}
                                                 onClick={() => handleClockIn(area.id)}
-                                                className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-lg font-medium w-full"
+                                                disabled={!isDeviceOk}
+                                                className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-lg font-medium w-full disabled:bg-gray-400"
                                             >
                                                 TIMBRA ENTRATA ({area.name})
                                             </button>
@@ -264,8 +302,8 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
                         </>
                     )}
                 </div>
-                {locationError && (
-                    <p className="text-red-500 text-sm mt-4 text-center">{locationError}</p>
+                {statusMessage.text && (
+                    <p className={`${statusMessage.type === 'error' ? 'text-red-500' : 'text-green-500'} text-sm mt-4 text-center`}>{statusMessage.text}</p>
                 )}
             </main>
 
@@ -314,5 +352,3 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
         </div>
     );
 };
-
-export default EmployeeDashboard;

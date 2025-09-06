@@ -32,6 +32,7 @@ const EmployeeManagementView = ({ employees, openModal }) => (
                             <td className="px-6 py-4 whitespace-nowrap">
                                 <div className="text-sm font-medium text-gray-900">{emp.name} {emp.surname}</div>
                                 <div className="text-sm text-gray-500 break-all">{emp.email}</div>
+                                {emp.deviceId && <span className="text-xs text-green-600">(Dispositivo Registrato)</span>}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
                                 {emp.activeEntry ? 
@@ -40,7 +41,6 @@ const EmployeeManagementView = ({ employees, openModal }) => (
                                 }
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{emp.workAreaNames?.join(', ') || 'Nessuna'}</td>
-                            {/* FIX RESPONSIVE: I pulsanti ora si impilano su schermi piccoli */}
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
                                 {emp.activeEntry ? 
@@ -50,6 +50,10 @@ const EmployeeManagementView = ({ employees, openModal }) => (
                                 <button onClick={() => openModal('assignArea', emp)} className="text-indigo-600 hover:text-indigo-900">Aree</button>
                                 <button onClick={() => openModal('editEmployee', emp)} className="text-green-600 hover:text-green-900">Modifica</button>
                                 <button onClick={() => openModal('deleteEmployee', emp)} className="text-red-600 hover:text-red-900">Elimina</button>
+                                {/* *** NUOVO PULSANTE *** */}
+                                {emp.deviceId && (
+                                    <button onClick={() => openModal('resetDevice', emp)} className="text-yellow-600 hover:text-yellow-900">Resetta Dispositivo</button>
+                                )}
                                 </div>
                             </td>
                         </tr>
@@ -87,7 +91,6 @@ const AreaManagementView = ({ workAreas, openModal }) => (
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{area.latitude}</td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{area.longitude}</td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{area.radius}</td>
-                             {/* FIX RESPONSIVE: Pulsanti allineati */}
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                <div className="flex items-center gap-4">
                                 <button onClick={() => openModal('editArea', area)} className="text-green-600 hover:text-green-900">Modifica</button>
@@ -235,6 +238,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
         setError('');
         try {
             switch (type) {
+                // ... (casi esistenti)
                 case 'newEmployee':
                     const userCred = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
                     await setDoc(doc(db, "users", userCred.user.uid), { email: formData.email, role: 'employee' });
@@ -283,6 +287,13 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
                 case 'manualClockOut':
                     await updateDoc(doc(db, "time_entries", item.activeEntry.id), { clockOutTime: new Date(formData.timestamp), status: 'clocked-out' });
                     break;
+
+                // *** NUOVO CASO PER IL RESET ***
+                case 'resetDevice':
+                    const employeeRef = doc(db, "employees", item.id);
+                    await updateDoc(employeeRef, { deviceId: null });
+                    break;
+
                 default: break;
             }
             await onDataUpdate();
@@ -299,6 +310,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
     
     const renderForm = () => {
         switch (type) {
+            // ... (casi esistenti)
             case 'newEmployee':
             case 'editEmployee':
                 return (
@@ -406,19 +418,58 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
                         </div>
                     </>
                 );
+
+            // *** NUOVO MODALE DI CONFERMA ***
+            case 'resetDevice':
+                return (
+                    <>
+                        <h3 className="text-lg leading-6 font-medium text-gray-900">Conferma Reset Dispositivo</h3>
+                        <p className="mt-2 text-sm text-gray-500">
+                            Sei sicuro di voler scollegare il dispositivo attuale per il dipendente <strong>{item.name} {item.surname}</strong>?
+                        </p>
+                        <p className="mt-2 text-sm text-gray-500">
+                            Potrà registrare un nuovo dispositivo alla sua prossima timbratura.
+                        </p>
+                    </>
+                );
+
             default:
                 return null;
         }
     };
     
-    const isDeleteAction = type.startsWith('delete');
+    // Modificato per gestire il colore del pulsante di reset
+    const isDeleteAction = type.startsWith('delete') || type === 'resetDevice';
+    const primaryButtonClass = () => {
+        if (type.startsWith('delete')) return 'bg-red-600 hover:bg-red-700 disabled:bg-red-300';
+        if (type === 'resetDevice') return 'bg-yellow-500 hover:bg-yellow-600 disabled:bg-yellow-300';
+        return 'bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300';
+    }
+    const primaryButtonText = () => {
+        if (type.startsWith('delete')) return 'Elimina';
+        if (type === 'resetDevice') return 'Resetta';
+        return 'Salva';
+    }
+
+
     return (
         <div className="fixed z-10 inset-0 overflow-y-auto">
             <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
                 <div className="fixed inset-0 transition-opacity" aria-hidden="true"><div className="absolute inset-0 bg-gray-500 opacity-75"></div></div>
                 <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">​</span>
                 <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-                    <form onSubmit={handleSubmit}><div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">{renderForm()}{error && <p className="text-red-500 text-sm mt-2">{error}</p>}</div><div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse"><button type="submit" disabled={isLoading} className={`w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 text-base font-medium text-white focus:outline-none sm:ml-3 sm:w-auto sm:text-sm ${isDeleteAction ? 'bg-red-600 hover:bg-red-700 disabled:bg-red-300' : 'bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300'}`}>{isLoading ? 'In corso...' : (isDeleteAction ? 'Elimina' : 'Salva')}</button><button type="button" onClick={() => setShowModal(false)} className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:mt-0 sm:w-auto sm:text-sm">Annulla</button></div></form>
+                    <form onSubmit={handleSubmit}>
+                        <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                            {renderForm()}
+                            {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
+                        </div>
+                        <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                            <button type="submit" disabled={isLoading} className={`w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 text-base font-medium text-white focus:outline-none sm:ml-3 sm:w-auto sm:text-sm ${primaryButtonClass()}`}>
+                                {isLoading ? 'In corso...' : primaryButtonText()}
+                            </button>
+                            <button type="button" onClick={() => setShowModal(false)} className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:mt-0 sm:w-auto sm:text-sm">Annulla</button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>
@@ -439,13 +490,11 @@ const AdminDashboard = ({ user, handleLogout }) => {
     const [selectedItem, setSelectedItem] = React.useState(null);
     const [reportEntryIds, setReportEntryIds] = React.useState([]);
     const [selectedReportAreas, setSelectedReportAreas] = React.useState([]);
-    const [isLoading, setIsLoading] = React.useState(true); // Aggiunto stato di caricamento
+    const [isLoading, setIsLoading] = React.useState(true); 
 
-    // **** MODIFICA ****: Creata una funzione per caricare tutti i dati manualmente
     const fetchData = React.useCallback(async () => {
         setIsLoading(true);
         try {
-            // Carica dipendenti, aree, admin e timbrature attive
             const employeesSnapshot = await getDocs(collection(db, "employees"));
             setEmployees(employeesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
 
@@ -466,9 +515,8 @@ const AdminDashboard = ({ user, handleLogout }) => {
         } finally {
             setIsLoading(false);
         }
-    }, []); // useCallback per evitare ricreazioni non necessarie
+    }, []); 
 
-    // **** MODIFICA ****: useEffect ora chiama solo fetchData al caricamento iniziale
     React.useEffect(() => {
         fetchData();
     }, [fetchData]);
@@ -552,7 +600,6 @@ const AdminDashboard = ({ user, handleLogout }) => {
             });
             await batch.commit();
             alert(`Cancellazione completata con successo! Sono state rimosse ${reportEntryIds.length} timbrature.`);
-            // Ricarica i dati per vedere i cambiamenti
             await fetchData();
             setView('employees');
         } catch (error) {
@@ -589,14 +636,12 @@ const AdminDashboard = ({ user, handleLogout }) => {
         return { ...area, activeEmployeeCount: activeCount };
     });
 
-    // Mostra un caricamento mentre i dati vengono caricati
     if (isLoading) {
         return <div className="min-h-screen flex items-center justify-center">Caricamento in corso...</div>;
     }
 
     return (
         <div className="min-h-screen bg-gray-100">
-             {/* FIX RESPONSIVE: Header modificato per schermi piccoli */}
             <header className="bg-white shadow-md p-4 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                 <CompanyLogo />
                 <div className="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-4 w-full sm:w-auto">
@@ -604,7 +649,6 @@ const AdminDashboard = ({ user, handleLogout }) => {
                     <button onClick={handleLogout} className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 w-full sm:w-auto">Logout</button>
                 </div>
             </header>
-             {/* FIX RESPONSIVE: Navigazione modificata per schermi piccoli */}
             <nav className="bg-white border-b border-gray-200">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex flex-col sm:flex-row justify-center sm:justify-start h-auto sm:h-16 py-2 sm:py-0">
@@ -650,7 +694,6 @@ const AdminDashboard = ({ user, handleLogout }) => {
                     </div>
                 </div>
             )}
-             {/* FIX RESPONSIVE: Padding ridotto su schermi piccoli */}
             <main className="p-4 sm:p-8 max-w-7xl mx-auto w-full">
                 {view === 'employees' && <EmployeeManagementView employees={employeesWithStatus} openModal={openModal} />}
                 {view === 'areas' && <AreaManagementView workAreas={workAreasWithCounts} openModal={openModal} />}
