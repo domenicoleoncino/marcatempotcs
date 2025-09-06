@@ -55,7 +55,6 @@ const DashboardView = ({ employees, activeEntries, workAreas }) => {
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
                 <div className="bg-white p-6 rounded-lg shadow-md flex items-center">
-                    {/* *** MODIFICA: Ridimensionata l'icona *** */}
                     <div className="bg-green-100 p-3 rounded-full mr-4 flex-shrink-0">
                         <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
                     </div>
@@ -65,7 +64,6 @@ const DashboardView = ({ employees, activeEntries, workAreas }) => {
                     </div>
                 </div>
                 <div className="bg-white p-6 rounded-lg shadow-md flex items-center">
-                    {/* *** MODIFICA: Ridimensionata l'icona *** */}
                     <div className="bg-blue-100 p-3 rounded-full mr-4 flex-shrink-0">
                         <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                     </div>
@@ -138,10 +136,13 @@ const EmployeeManagementView = ({ employees, openModal }) => (
                                 {emp.deviceId && <span className="text-xs text-green-600">(Dispositivo Registrato)</span>}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
-                                {emp.activeEntry ? 
-                                    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Al Lavoro</span> : 
+                                {emp.activeEntry ? (
+                                    emp.isOnBreak ? 
+                                    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">In Pausa</span> :
+                                    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Al Lavoro</span>
+                                ) : ( 
                                     <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Non al Lavoro</span>
-                                }
+                                )}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{emp.workAreaNames?.join(', ') || 'Nessuna'}</td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -208,7 +209,8 @@ const AreaManagementView = ({ workAreas, openModal }) => (
 );
 
 // Componente per la Gestione Admin
-const AdminManagementView = ({ admins, openModal, user }) => (
+// *** MODIFICA: Aggiunto "superAdminEmail" come prop ***
+const AdminManagementView = ({ admins, openModal, user, superAdminEmail }) => (
     <div>
         <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
             <h1 className="text-3xl font-bold text-gray-800">Gestione Admin ({admins.length}/10)</h1>
@@ -227,12 +229,21 @@ const AdminManagementView = ({ admins, openModal, user }) => (
                 <tbody className="bg-white divide-y divide-gray-200">
                     {admins.map(admin => (
                         <tr key={admin.id}>
-                            <td className="px-6 py-4 whitespace-nowrap break-all">{admin.email}</td>
+                            <td className="px-6 py-4 whitespace-nowrap break-all flex items-center">
+                                {admin.email}
+                                {/* *** MODIFICA: Mostra badge "Super Admin" *** */}
+                                {admin.email === superAdminEmail && (
+                                    <span className="ml-3 px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">Super Admin</span>
+                                )}
+                            </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                {user && admin.id !== user.uid ? ( 
+                                {/* *** MODIFICA: Logica per nascondere il pulsante Elimina *** */}
+                                {user && admin.email !== superAdminEmail && admin.id !== user.uid ? ( 
                                     <button onClick={() => openModal('deleteAdmin', admin)} className="text-red-600 hover:text-red-900">Elimina</button>
                                 ) : (
-                                    <span className="text-gray-400">Attuale</span>
+                                    <span className="text-gray-400">
+                                        {admin.id === user.uid ? 'Attuale' : 'N/A'}
+                                    </span>
                                 )}
                             </td>
                         </tr>
@@ -256,12 +267,13 @@ const ReportView = ({ reports, title, handleDeleteReportData }) => {
             'Data': entry.clockInDate,
             'Ora Entrata': entry.clockInTimeFormatted,
             'Ora Uscita': entry.clockOutTimeFormatted,
-            'Ore Lavorate': (entry.duration !== null) ? parseFloat(entry.duration.toFixed(2)) : "In corso"
+            'Ore Lavorate': (entry.duration !== null) ? parseFloat(entry.duration.toFixed(2)) : "In corso",
+            'Note': entry.note
         }));
         const ws = window.XLSX.utils.json_to_sheet(dataToExport);
         const wb = window.XLSX.utils.book_new();
         window.XLSX.utils.book_append_sheet(wb, ws, "Report Ore");
-        ws['!cols'] = [{ wch: 30 }, { wch: 30 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }];
+        ws['!cols'] = [{ wch: 30 }, { wch: 30 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 40 }];
         window.XLSX.writeFile(wb, `${title.replace(/ /g, '_')}.xlsx`);
     };
     return (
@@ -286,6 +298,7 @@ const ReportView = ({ reports, title, handleDeleteReportData }) => {
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entrata</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Uscita</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ore Lavorate</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Note</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
@@ -299,6 +312,7 @@ const ReportView = ({ reports, title, handleDeleteReportData }) => {
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         {entry.duration !== null ? entry.duration.toFixed(2) : <span className="text-blue-500 font-semibold">In corso...</span>}
                                     </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{entry.note}</td>
                                 </tr>
                             ))}
                         </tbody>
@@ -310,7 +324,7 @@ const ReportView = ({ reports, title, handleDeleteReportData }) => {
 };
 
 // Componente Modale
-const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmployees, onDataUpdate }) => {
+const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmployees, onDataUpdate, superAdminEmail }) => {
     const [formData, setFormData] = React.useState(item || {});
     const [isLoading, setIsLoading] = React.useState(false);
     const [error, setError] = React.useState('');
@@ -332,7 +346,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
             now.setSeconds(0);
             now.setMilliseconds(0);
             const localDateTime = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
-            setFormData({ ...item, timestamp: localDateTime, workAreaId: item?.workAreaIds?.[0] || '' });
+            setFormData({ ...item, timestamp: localDateTime, workAreaId: item?.workAreaIds?.[0] || '', note: item?.note || '' });
         }
     }, [type, item]);
 
@@ -342,6 +356,12 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
             setError("La password deve essere di almeno 6 caratteri.");
             return;
         }
+        // *** MODIFICA: Blocco eliminazione Super Admin ***
+        if (type === 'deleteAdmin' && item.email === superAdminEmail) {
+            setError("L'amministratore principale non può essere eliminato.");
+            return;
+        }
+
         setIsLoading(true);
         setError('');
         try {
@@ -389,10 +409,22 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
                     await deleteDoc(doc(db, "users", item.id)); 
                     break;
                 case 'manualClockIn':
-                    await addDoc(collection(db, "time_entries"), { employeeId: item.id, workAreaId: formData.workAreaId, clockInTime: new Date(formData.timestamp), clockOutTime: null, status: 'clocked-in' });
+                    await addDoc(collection(db, "time_entries"), { 
+                        employeeId: item.id, 
+                        workAreaId: formData.workAreaId, 
+                        clockInTime: new Date(formData.timestamp), 
+                        clockOutTime: null, 
+                        status: 'clocked-in',
+                        note: formData.note || null,
+                        pauses: []
+                    });
                     break;
                 case 'manualClockOut':
-                    await updateDoc(doc(db, "time_entries", item.activeEntry.id), { clockOutTime: new Date(formData.timestamp), status: 'clocked-out' });
+                    await updateDoc(doc(db, "time_entries", item.activeEntry.id), { 
+                        clockOutTime: new Date(formData.timestamp), 
+                        status: 'clocked-out',
+                        note: formData.note || item.activeEntry.note || null
+                    });
                     break;
                 case 'resetDevice':
                     const employeeRef = doc(db, "employees", item.id);
@@ -509,6 +541,10 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
                                 ))}
                             </select>
                         </div>
+                        <div className="mt-4">
+                            <label className="block text-sm font-medium text-gray-700">Note (opzionale)</label>
+                            <input name="note" value={formData.note || ''} onChange={handleInputChange} placeholder="Es: Dimenticanza del dipendente" className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md" />
+                        </div>
                     </>
                 );
             case 'manualClockOut':
@@ -518,6 +554,10 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
                         <div className="mt-4">
                             <label className="block text-sm font-medium text-gray-700">Data e Ora di Uscita</label>
                             <input type="datetime-local" name="timestamp" value={formData.timestamp || ''} onChange={handleInputChange} className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md" required />
+                        </div>
+                        <div className="mt-4">
+                            <label className="block text-sm font-medium text-gray-700">Note (opzionale)</label>
+                            <input name="note" value={formData.note || ''} onChange={handleInputChange} placeholder="Es: Uscita anticipata per permesso" className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md" />
                         </div>
                     </>
                 );
@@ -575,7 +615,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
 
 // Componente Principale
 const AdminDashboard = ({ user, handleLogout }) => {
-    // *** MODIFICA: La vista di default ora è la 'dashboard' ***
     const [view, setView] = React.useState('dashboard');
     const [employees, setEmployees] = React.useState([]);
     const [workAreas, setWorkAreas] = React.useState([]);
@@ -589,6 +628,8 @@ const AdminDashboard = ({ user, handleLogout }) => {
     const [reportEntryIds, setReportEntryIds] = React.useState([]);
     const [selectedReportAreas, setSelectedReportAreas] = React.useState([]);
     const [isLoading, setIsLoading] = React.useState(true); 
+    // *** NUOVA COSTANTE: Email del Super Amministratore ***
+    const superAdminEmail = "documentazione@tcsitalia.com";
 
     const fetchData = React.useCallback(async () => {
         setIsLoading(true);
@@ -670,6 +711,18 @@ const AdminDashboard = ({ user, handleLogout }) => {
                 const clockInTime = entry.clockInTime.toDate();
                 const clockOutTime = entry.clockOutTime ? entry.clockOutTime.toDate() : null;
 
+                let duration = null;
+                if (clockOutTime) {
+                    const totalDurationMs = clockOutTime - clockInTime;
+                    const pauseDurationMs = (entry.pauses || []).reduce((acc, p) => {
+                        if (p.start && p.end) {
+                            return acc + (p.end.toDate() - p.start.toDate());
+                        }
+                        return acc;
+                    }, 0);
+                    duration = (totalDurationMs - pauseDurationMs) / 3600000;
+                }
+
                 reportData.push({
                     id: entry.id,
                     employeeName: `${employeeData.name} ${employeeData.surname}`,
@@ -677,7 +730,8 @@ const AdminDashboard = ({ user, handleLogout }) => {
                     clockInDate: clockInTime.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit'}),
                     clockInTimeFormatted: clockInTime.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
                     clockOutTimeFormatted: clockOutTime ? clockOutTime.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : 'In corso',
-                    duration: clockOutTime ? (clockOutTime - clockInTime) / 3600000 : null
+                    duration: duration,
+                    note: entry.note || ''
                 });
             }
         }
@@ -731,7 +785,8 @@ const AdminDashboard = ({ user, handleLogout }) => {
 
     const employeesWithStatus = employees.map(emp => {
         const activeEntry = activeEntries.find(entry => entry.employeeId === emp.id);
-        return { ...emp, activeEntry };
+        const isOnBreak = activeEntry?.pauses?.some(p => !p.end) || false;
+        return { ...emp, activeEntry, isOnBreak };
     });
 
     const workAreasWithCounts = workAreas.map(area => {
@@ -755,7 +810,6 @@ const AdminDashboard = ({ user, handleLogout }) => {
             <nav className="bg-white border-b border-gray-200">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex flex-col sm:flex-row justify-center sm:justify-start h-auto sm:h-16 py-2 sm:py-0">
-                        {/* *** MODIFICA: Aggiunto pulsante Dashboard e aggiornati stili *** */}
                         <div className="flex flex-col sm:flex-row sm:space-x-8">
                             <button onClick={() => setView('dashboard')} className={`text-center py-2 sm:py-0 sm:inline-flex items-center px-1 sm:pt-1 sm:border-b-2 text-sm font-medium ${view === 'dashboard' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Dashboard</button>
                             <button onClick={() => setView('employees')} className={`text-center py-2 sm:py-0 sm:inline-flex items-center px-1 sm:pt-1 sm:border-b-2 text-sm font-medium ${view === 'employees' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Dipendenti</button>
@@ -800,14 +854,14 @@ const AdminDashboard = ({ user, handleLogout }) => {
                 </div>
             )}
             <main className="p-4 sm:p-8 max-w-7xl mx-auto w-full">
-                {/* *** MODIFICA: Render condizionale per la nuova Dashboard *** */}
                 {view === 'dashboard' && <DashboardView employees={employees} activeEntries={activeEntries} workAreas={workAreas} />}
                 {view === 'employees' && <EmployeeManagementView employees={employeesWithStatus} openModal={openModal} />}
                 {view === 'areas' && <AreaManagementView workAreas={workAreasWithCounts} openModal={openModal} />}
-                {view === 'admins' && user && <AdminManagementView admins={admins} openModal={openModal} user={user} />}
+                {/* *** MODIFICA: Passato 'superAdminEmail' al componente *** */}
+                {view === 'admins' && user && <AdminManagementView admins={admins} openModal={openModal} user={user} superAdminEmail={superAdminEmail} />}
                 {view === 'reports' && <ReportView reports={reports} title={reportTitle} handleDeleteReportData={handleDeleteReportData} />}
             </main>
-            {showModal && <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} workAreas={workAreas} adminsCount={admins.length} allEmployees={employees} onDataUpdate={fetchData} />}
+            {showModal && <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} workAreas={workAreas} adminsCount={admins.length} allEmployees={employees} onDataUpdate={fetchData} superAdminEmail={superAdminEmail} />}
         </div>
     );
 };
