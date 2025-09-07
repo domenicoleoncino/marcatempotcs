@@ -3,7 +3,7 @@ import React from 'react';
 const CompanyLogo = () => (
     <div className="flex flex-col items-center text-center w-full">
         <p className="text-xs font-serif font-bold text-gray-700 mb-2">
-            Creata da Domenico Leoncino
+            Creator D.leoncino
         </p>
         
         {/* MODIFICA: Dimensioni ridotte e testi aziendali rimossi */}
