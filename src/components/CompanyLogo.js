@@ -10,7 +10,7 @@ const CompanyLogo = () => (
         <img 
             src="https://i.imgur.com/EJHuOxb.png" 
             alt="Logo TCS" 
-            className="h-auto w-full max-w-[160px] sm:max-w-[200px]" 
+            className="h-auto w-full max-w-[100px] sm:max-w-[150px]" 
             onError={(e) => { e.target.onerror = null; e.target.src='https://placehold.co/200x60/cccccc/ffffff?text=Logo'; }}
         />
         
