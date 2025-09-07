@@ -51,48 +51,48 @@ const DashboardView = ({ employees, activeEntries, workAreas }) => {
 
     return (
         <div>
-            <h1 className="text-3xl font-bold text-gray-800 mb-6">Dashboard Riepilogativa</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-4">Dashboard</h1>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-                <div className="bg-white p-6 rounded-lg shadow-md flex items-center">
-                    <div className="bg-green-100 p-3 rounded-full mr-4 flex-shrink-0">
-                        <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+            <div className="flex flex-col md:grid md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                <div className="bg-white p-4 rounded-lg shadow-md flex items-center">
+                    <div className="bg-green-100 p-2 rounded-full mr-3 flex-shrink-0">
+                        <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
                     </div>
                     <div>
-                        <p className="text-sm text-gray-500">Dipendenti Attivi</p>
-                        <p className="text-2xl font-bold text-gray-800">{activeEntries.length} / {employees.length}</p>
+                        <p className="text-xs text-gray-500">Dipendenti Attivi</p>
+                        <p className="text-xl font-bold text-gray-800">{activeEntries.length} / {employees.length}</p>
                     </div>
                 </div>
-                <div className="bg-white p-6 rounded-lg shadow-md flex items-center">
-                    <div className="bg-blue-100 p-3 rounded-full mr-4 flex-shrink-0">
+                <div className="bg-white p-4 rounded-lg shadow-md flex items-center">
+                    <div className="bg-blue-100 p-2 rounded-full mr-3 flex-shrink-0">
                         <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                     </div>
                     <div>
-                        <p className="text-sm text-gray-500">Ore Lavorate Oggi (nette)</p>
-                        <p className="text-2xl font-bold text-gray-800">{calculateCurrentHours()}</p>
+                        <p className="text-xs text-gray-500">Ore Lavorate Oggi (nette)</p>
+                        <p className="text-xl font-bold text-gray-800">{calculateCurrentHours()}</p>
                     </div>
                 </div>
             </div>
 
-            <h2 className="text-2xl font-bold text-gray-800 mb-4">Chi è al Lavoro Ora</h2>
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-3">Chi è al Lavoro Ora</h2>
             <div className="bg-white shadow-md rounded-lg overflow-x-auto">
                 {activeEmployeesDetails.length > 0 ? (
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                             <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dipendente</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Area di Lavoro</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ora di Entrata</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stato</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dipendente</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Area</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entrata</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stato</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                             {activeEmployeesDetails.map(entry => (
                                 <tr key={entry.id}>
-                                    <td className="px-6 py-4 whitespace-nowrap">{entry.employeeName}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap">{entry.areaName}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap">{entry.clockInTimeFormatted}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.employeeName}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.areaName}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.clockInTimeFormatted}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap">
                                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${entry.status === 'In Pausa' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
                                             {entry.status}
                                         </span>
@@ -102,7 +102,7 @@ const DashboardView = ({ employees, activeEntries, workAreas }) => {
                         </tbody>
                     </table>
                 ) : (
-                    <p className="p-6 text-gray-500">Nessun dipendente è attualmente al lavoro.</p>
+                    <p className="p-4 text-sm text-gray-500">Nessun dipendente è attualmente al lavoro.</p>
                 )}
             </div>
         </div>
@@ -114,28 +114,28 @@ const DashboardView = ({ employees, activeEntries, workAreas }) => {
 const EmployeeManagementView = ({ employees, openModal }) => (
     <div>
         <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
-            <h1 className="text-3xl font-bold text-gray-800">Gestione Dipendenti</h1>
-            <button onClick={() => openModal('newEmployee')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto">Aggiungi Dipendente</button>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Gestione Dipendenti</h1>
+            <button onClick={() => openModal('newEmployee')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">Aggiungi Dipendente</button>
         </div>
         <div className="bg-white shadow-md rounded-lg overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                     <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stato</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aree Assegnate</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Azioni</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stato</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aree</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Azioni</th>
                     </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                     {employees.map(emp => (
                         <tr key={emp.id}>
-                            <td className="px-6 py-4 whitespace-nowrap">
+                            <td className="px-4 py-2 whitespace-nowrap">
                                 <div className="text-sm font-medium text-gray-900">{emp.name} {emp.surname}</div>
-                                <div className="text-sm text-gray-500 break-all">{emp.email}</div>
-                                {emp.deviceId && <span className="text-xs text-green-600">(Dispositivo Registrato)</span>}
+                                <div className="text-xs text-gray-500 break-all">{emp.email}</div>
+                                {emp.deviceId && <span className="text-xs text-green-600">(Dispositivo OK)</span>}
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
+                            <td className="px-4 py-2 whitespace-nowrap">
                                 {emp.activeEntry ? (
                                     emp.isOnBreak ? 
                                     <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">In Pausa</span> :
@@ -144,18 +144,20 @@ const EmployeeManagementView = ({ employees, openModal }) => (
                                     <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Non al Lavoro</span>
                                 )}
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{emp.workAreaNames?.join(', ') || 'Nessuna'}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                            <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{emp.workAreaNames?.join(', ') || 'N/A'}</td>
+                            <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
+                                <div className="flex flex-col items-start gap-1">
                                 {emp.activeEntry ? 
-                                    <button onClick={() => openModal('manualClockOut', emp)} className="px-2 py-1 text-sm bg-yellow-500 text-white rounded-md hover:bg-yellow-600 w-full text-center sm:w-auto">Timbra Uscita</button> :
-                                    <button onClick={() => openModal('manualClockIn', emp)} className="px-2 py-1 text-sm bg-blue-500 text-white rounded-md hover:bg-blue-600 w-full text-center sm:w-auto">Timbra Entrata</button>
+                                    <button onClick={() => openModal('manualClockOut', emp)} className="px-2 py-1 text-xs bg-yellow-500 text-white rounded-md hover:bg-yellow-600 w-full text-center">Timbra Uscita</button> :
+                                    <button onClick={() => openModal('manualClockIn', emp)} className="px-2 py-1 text-xs bg-blue-500 text-white rounded-md hover:bg-blue-600 w-full text-center">Timbra Entrata</button>
                                 }
-                                <button onClick={() => openModal('assignArea', emp)} className="text-indigo-600 hover:text-indigo-900">Aree</button>
-                                <button onClick={() => openModal('editEmployee', emp)} className="text-green-600 hover:text-green-900">Modifica</button>
-                                <button onClick={() => openModal('deleteEmployee', emp)} className="text-red-600 hover:text-red-900">Elimina</button>
+                                <div className="flex gap-2 w-full justify-start mt-1">
+                                    <button onClick={() => openModal('assignArea', emp)} className="text-xs text-indigo-600 hover:text-indigo-900">Aree</button>
+                                    <button onClick={() => openModal('editEmployee', emp)} className="text-xs text-green-600 hover:text-green-900">Modifica</button>
+                                    <button onClick={() => openModal('deleteEmployee', emp)} className="text-xs text-red-600 hover:text-red-900">Elimina</button>
+                                </div>
                                 {emp.deviceId && (
-                                    <button onClick={() => openModal('resetDevice', emp)} className="text-yellow-600 hover:text-yellow-900">Resetta Dispositivo</button>
+                                    <button onClick={() => openModal('resetDevice', emp)} className="text-xs text-yellow-600 hover:text-yellow-900 mt-1">Resetta Disp.</button>
                                 )}
                                 </div>
                             </td>
@@ -171,30 +173,30 @@ const EmployeeManagementView = ({ employees, openModal }) => (
 const AreaManagementView = ({ workAreas, openModal }) => (
     <div>
         <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
-            <h1 className="text-3xl font-bold text-gray-800">Gestione Aree di Lavoro</h1>
-            <button onClick={() => openModal('newArea')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto">Aggiungi Area</button>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Gestione Aree di Lavoro</h1>
+            <button onClick={() => openModal('newArea')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">Aggiungi Area</button>
         </div>
         <div className="bg-white shadow-md rounded-lg overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
                  <thead className="bg-gray-50">
                     <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome Area</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Presenze</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Latitudine</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Longitudine</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Raggio (m)</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Azioni</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome Area</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Presenze</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Latitudine</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Longitudine</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Raggio (m)</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Azioni</th>
                     </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                     {workAreas.map(area => (
                         <tr key={area.id}>
-                            <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">{area.name}</td>
-                            <td className="px-6 py-4 whitespace-nowrap font-bold text-lg text-center">{area.activeEmployeeCount}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{area.latitude}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{area.longitude}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{area.radius}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{area.name}</td>
+                            <td className="px-4 py-2 whitespace-nowrap text-sm font-bold text-center">{area.activeEmployeeCount}</td>
+                            <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{area.latitude}</td>
+                            <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{area.longitude}</td>
+                            <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{area.radius}</td>
+                            <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
                                <div className="flex items-center gap-4">
                                 <button onClick={() => openModal('editArea', area)} className="text-green-600 hover:text-green-900">Modifica</button>
                                 <button onClick={() => openModal('deleteArea', area)} className="text-red-600 hover:text-red-900">Elimina</button>
@@ -212,29 +214,29 @@ const AreaManagementView = ({ workAreas, openModal }) => (
 const AdminManagementView = ({ admins, openModal, user }) => (
     <div>
         <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
-            <h1 className="text-3xl font-bold text-gray-800">Gestione Admin ({admins.length}/10)</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Gestione Admin ({admins.length}/10)</h1>
             {admins.length < 10 && (
-                <button onClick={() => openModal('newAdmin')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto">Aggiungi Admin</button>
+                <button onClick={() => openModal('newAdmin')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">Aggiungi Admin</button>
             )}
         </div>
         <div className="bg-white shadow-md rounded-lg overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
                  <thead className="bg-gray-50">
                     <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email Amministratore</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Azioni</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Azioni</th>
                     </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                     {admins.map(admin => (
                         <tr key={admin.id}>
-                            <td className="px-6 py-4 whitespace-nowrap break-all flex items-center">
+                            <td className="px-4 py-2 whitespace-nowrap break-all flex items-center text-sm">
                                 {admin.email}
                                 {user && admin.id === user.uid && (
                                     <span className="ml-3 px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">Attuale</span>
                                 )}
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
                                 {user && admin.id !== user.uid ? ( 
                                     <button onClick={() => openModal('deleteAdmin', admin)} className="text-red-600 hover:text-red-900">Elimina</button>
                                 ) : (
@@ -258,56 +260,56 @@ const ReportView = ({ reports, title, handleDeleteReportData }) => {
         }
         const dataToExport = reports.map(entry => ({
             'Dipendente': entry.employeeName,
-            'Area di Lavoro': entry.areaName,
+            'Area': entry.areaName,
             'Data': entry.clockInDate,
-            'Ora Entrata': entry.clockInTimeFormatted,
-            'Ora Uscita': entry.clockOutTimeFormatted,
+            'Entrata': entry.clockInTimeFormatted,
+            'Uscita': entry.clockOutTimeFormatted,
             'Ore Lavorate': (entry.duration !== null) ? parseFloat(entry.duration.toFixed(2)) : "In corso",
             'Note': entry.note
         }));
         const ws = window.XLSX.utils.json_to_sheet(dataToExport);
         const wb = window.XLSX.utils.book_new();
         window.XLSX.utils.book_append_sheet(wb, ws, "Report Ore");
-        ws['!cols'] = [{ wch: 30 }, { wch: 30 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 40 }];
+        ws['!cols'] = [{ wch: 30 }, { wch: 20 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 40 }];
         window.XLSX.writeFile(wb, `${title.replace(/ /g, '_')}.xlsx`);
     };
     return (
         <div>
             <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 flex-wrap gap-4">
-                <h1 className="text-3xl font-bold text-gray-800">{title || 'Report'}</h1>
+                <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">{title || 'Report'}</h1>
                 <div className="flex items-center space-x-2">
-                    <button onClick={handleExportExcel} disabled={reports.length === 0} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400">Esporta in Excel</button>
-                    <button onClick={handleDeleteReportData} disabled={reports.length === 0} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-800 disabled:bg-gray-400">Cancella Dati Report</button>
+                    <button onClick={handleExportExcel} disabled={reports.length === 0} className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 text-sm">Esporta</button>
+                    <button onClick={handleDeleteReportData} disabled={reports.length === 0} className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-800 disabled:bg-gray-400 text-sm">Cancella</button>
                 </div>
             </div>
             <div className="bg-white shadow-md rounded-lg overflow-x-auto">
                 {reports.length === 0 ? (
-                    <p className="p-6 text-gray-500">Nessun dato di timbratura per il periodo selezionato.</p>
+                    <p className="p-4 text-sm text-gray-500">Nessun dato di timbratura per il periodo selezionato.</p>
                 ) : (
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                             <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dipendente</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Area di Lavoro</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entrata</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Uscita</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ore Lavorate</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Note</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dipendente</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Area</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entrata</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Uscita</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ore</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Note</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                             {reports.map((entry) => (
                                 <tr key={entry.id}>
-                                    <td className="px-6 py-4 whitespace-nowrap">{entry.employeeName}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap">{entry.areaName}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap">{entry.clockInDate}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap">{entry.clockInTimeFormatted}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap">{entry.clockOutTimeFormatted}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        {entry.duration !== null ? entry.duration.toFixed(2) : <span className="text-blue-500 font-semibold">In corso...</span>}
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.employeeName}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.areaName}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.clockInDate}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.clockInTimeFormatted}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.clockOutTimeFormatted}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm">
+                                        {entry.duration !== null ? entry.duration.toFixed(2) : <span className="text-blue-500 font-semibold">...</span>}
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{entry.note}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{entry.note}</td>
                                 </tr>
                             ))}
                         </tbody>
@@ -792,11 +794,11 @@ const AdminDashboard = ({ user, handleLogout }) => {
 
     return (
         <div className="min-h-screen bg-gray-100">
-            <header className="bg-white shadow-md p-4 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+            <header className="bg-white shadow-md p-2 sm:p-4 flex flex-col sm:flex-row justify-between sm:items-center gap-2">
                 <CompanyLogo />
                 <div className="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-4 w-full sm:w-auto">
-                    <span className="text-gray-600 text-sm text-center break-all">Admin: {user?.email}</span> 
-                    <button onClick={handleLogout} className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 w-full sm:w-auto">Logout</button>
+                    <span className="text-xs text-gray-600 text-center break-all">Admin: {user?.email}</span> 
+                    <button onClick={handleLogout} className="px-3 py-1.5 bg-red-500 text-white rounded-lg hover:bg-red-600 w-full sm:w-auto text-sm">Logout</button>
                 </div>
             </header>
             <nav className="bg-white border-b border-gray-200">
