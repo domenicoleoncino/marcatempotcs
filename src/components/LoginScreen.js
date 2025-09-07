@@ -202,7 +202,7 @@ const LoginScreen = () => {
 
     return (
         <div className="min-h-screen bg-gray-100 flex flex-col justify-center items-center p-4">
-            <div className="w-full max-w-sm mx-auto">
+            <div className="w-full max-w-md mx-auto">
                 {renderContent()}
             </div>
         </div>
