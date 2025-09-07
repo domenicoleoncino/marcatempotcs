@@ -50,6 +50,7 @@ const LoginScreen = () => {
             } else {
                 setError('Si è verificato un errore di connessione. Riprova.');
             }
+        } finally {
             setIsLoading(false);
         }
     };
@@ -117,85 +118,95 @@ const LoginScreen = () => {
         setRegisterData({ ...registerData, [e.target.name]: e.target.value });
     };
 
-    if (view === 'reset') {
-        return (
-            <div className="max-w-lg w-full bg-white p-8 rounded-xl shadow-lg space-y-6">
-                <div className="flex justify-center mb-4"><CompanyLogo /></div>
-                <h2 className="text-center text-3xl font-extrabold text-gray-900">Recupera Password</h2>
-                <p className="text-center text-sm text-gray-600">Inserisci la tua email per ricevere un link di recupero.</p>
-                <form onSubmit={handlePasswordReset} className="space-y-6">
-                    <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="La tua Email" required className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" />
-                    {error && <p className="text-red-500 text-sm">{error}</p>}
-                    {successMessage && <p className="text-green-600 text-sm">{successMessage}</p>}
-                    <button type="submit" disabled={isLoading} className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-300">
-                        {isLoading ? 'Invio in corso...' : 'Invia Email di Recupero'}
-                    </button>
-                </form>
-                <div className="text-center">
-                    <button onClick={() => { setView('login'); setError(''); setSuccessMessage(''); }} className="text-sm font-medium text-indigo-600 hover:text-indigo-500">
-                        Torna al Login
-                    </button>
+    const renderContent = () => {
+        if (view === 'reset') {
+            return (
+                <div className="w-full bg-white p-6 sm:p-8 rounded-xl shadow-lg space-y-6">
+                    <div className="flex justify-center mb-4"><CompanyLogo /></div>
+                    <h2 className="text-center text-xl sm:text-2xl font-extrabold text-gray-900">Recupera Password</h2>
+                    <p className="text-center text-sm text-gray-600">Inserisci la tua email per ricevere un link di recupero.</p>
+                    <form onSubmit={handlePasswordReset} className="space-y-6">
+                        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="La tua Email" required className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" />
+                        {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+                        {successMessage && <p className="text-green-600 text-sm text-center">{successMessage}</p>}
+                        <button type="submit" disabled={isLoading} className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-300">
+                            {isLoading ? 'Invio in corso...' : 'Invia Email di Recupero'}
+                        </button>
+                    </form>
+                    <div className="text-center">
+                        <button onClick={() => { setView('login'); setError(''); setSuccessMessage(''); }} className="text-sm font-medium text-indigo-600 hover:text-indigo-500">
+                            Torna al Login
+                        </button>
+                    </div>
                 </div>
-            </div>
-        );
-    }
+            );
+        }
 
-    if (view === 'register') {
+        if (view === 'register') {
+            return (
+                 <div className="w-full bg-white p-6 sm:p-8 rounded-xl shadow-lg space-y-6">
+                    <div className="flex justify-center mb-4"><CompanyLogo /></div>
+                    <h2 className="text-center text-xl sm:text-2xl font-extrabold text-gray-900">Registra un nuovo account</h2>
+                    <form onSubmit={handleRegister} className="space-y-4">
+                         <input name="name" onChange={handleRegisterInputChange} placeholder="Nome" required className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" />
+                         <input name="surname" onChange={handleRegisterInputChange} placeholder="Cognome" required className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" />
+                         <input name="phone" onChange={handleRegisterInputChange} placeholder="Telefono" required className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" />
+                         <input type="email" name="email" onChange={handleRegisterInputChange} placeholder="Email" required className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" />
+                         <input type="password" name="password" onChange={handleRegisterInputChange} placeholder="Password (min. 6 caratteri)" required className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" />
+                        
+                        {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+                        {successMessage && <p className="text-green-600 text-sm text-center">{successMessage}</p>}
+
+                        <button type="submit" disabled={isLoading} className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-300">
+                            {isLoading ? 'Registrazione in corso...' : 'Registrati'}
+                        </button>
+                    </form>
+                    <div className="text-center">
+                        <button onClick={() => { setView('login'); setError(''); setSuccessMessage(''); }} className="text-sm font-medium text-indigo-600 hover:text-indigo-500">
+                            Hai già un account? Accedi
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+
         return (
-             <div className="max-w-lg w-full bg-white p-8 rounded-xl shadow-lg space-y-6">
-                <div className="flex justify-center mb-4"><CompanyLogo /></div>
-                <h2 className="text-center text-3xl font-extrabold text-gray-900">Registra un nuovo account</h2>
-                <form onSubmit={handleRegister} className="space-y-4">
-                     <input name="name" onChange={handleRegisterInputChange} placeholder="Nome" required className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" />
-                     <input name="surname" onChange={handleRegisterInputChange} placeholder="Cognome" required className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" />
-                     <input name="phone" onChange={handleRegisterInputChange} placeholder="Telefono" required className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" />
-                     <input type="email" name="email" onChange={handleRegisterInputChange} placeholder="Email" required className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" />
-                     <input type="password" name="password" onChange={handleRegisterInputChange} placeholder="Password (min. 6 caratteri)" required className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" />
+            <div className="w-full bg-white p-6 sm:p-8 rounded-xl shadow-lg space-y-6">
+                <div className="flex justify-center mb-4">
+                    <CompanyLogo />
+                </div>
+                <h2 className="text-center text-xl sm:text-2xl font-extrabold text-gray-900">Accedi al tuo account</h2>
+                <form onSubmit={handleLogin} className="space-y-6">
+                    <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" required className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" />
+                    <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" required className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" />
                     
-                    {error && <p className="text-red-500 text-sm">{error}</p>}
-                    {successMessage && <p className="text-green-600 text-sm">{successMessage}</p>}
+                    <div className="flex items-center justify-between text-sm">
+                        <button type="button" onClick={() => { setView('register'); setError(''); setSuccessMessage(''); }} className="font-medium text-indigo-600 hover:text-indigo-500">
+                            Non hai un account? Registrati
+                        </button>
+                        <button type="button" onClick={() => { setView('reset'); setError(''); setSuccessMessage(''); }} className="font-medium text-indigo-600 hover:text-indigo-500">
+                            Password dimenticata?
+                        </button>
+                    </div>
+
+                    {error && <p className="text-red-500 text-sm whitespace-pre-wrap text-center">{error}</p>}
+                    {successMessage && <p className="text-green-600 text-sm text-center">{successMessage}</p>}
 
                     <button type="submit" disabled={isLoading} className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-300">
-                        {isLoading ? 'Registrazione in corso...' : 'Registrati'}
+                        {isLoading ? 'Accesso in corso...' : 'Accedi'}
                     </button>
                 </form>
-                <div className="text-center">
-                    <button onClick={() => { setView('login'); setError(''); setSuccessMessage(''); }} className="text-sm font-medium text-indigo-600 hover:text-indigo-500">
-                        Hai già un account? Accedi
-                    </button>
-                </div>
             </div>
         );
     }
 
     return (
-        <div className="max-w-lg w-full bg-white p-8 rounded-xl shadow-lg space-y-6">
-            <div className="flex justify-center mb-4">
-                <CompanyLogo />
+        <div className="min-h-screen bg-gray-100 flex flex-col justify-center items-center p-4">
+            <div className="w-full max-w-sm mx-auto">
+                {renderContent()}
             </div>
-            <h2 className="text-center text-3xl font-extrabold text-gray-900">Accedi al tuo account</h2>
-            <form onSubmit={handleLogin} className="space-y-6">
-                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" required className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" />
-                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" required className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" />
-                
-                <div className="flex items-center justify-between text-sm">
-                    <button type="button" onClick={() => { setView('register'); setError(''); setSuccessMessage(''); }} className="font-medium text-indigo-600 hover:text-indigo-500">
-                        Non hai un account? Registrati
-                    </button>
-                    <button type="button" onClick={() => { setView('reset'); setError(''); setSuccessMessage(''); }} className="font-medium text-indigo-600 hover:text-indigo-500">
-                        Password dimenticata?
-                    </button>
-                </div>
-
-                {error && <p className="text-red-500 text-sm whitespace-pre-wrap">{error}</p>}
-                {successMessage && <p className="text-green-600 text-sm">{successMessage}</p>}
-
-                <button type="submit" disabled={isLoading} className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-300">
-                    {isLoading ? 'Accesso in corso...' : 'Accedi'}
-                </button>
-            </form>
         </div>
-    );
+    )
 };
 
 export default LoginScreen;
