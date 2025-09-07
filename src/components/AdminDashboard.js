@@ -20,17 +20,16 @@ const DashboardView = ({ employees, activeEntries, workAreas }) => {
             const clockInTime = entry.clockInTime.toDate();
             let pauseDurationMs = 0;
 
-            // Calcola la durata delle pause completate e di quella in corso
             if (entry.pauses && entry.pauses.length > 0) {
                 entry.pauses.forEach(p => {
                     const start = p.start.toDate();
-                    const end = p.end ? p.end.toDate() : now; // Se la pausa è in corso, calcola fino ad ora
+                    const end = p.end ? p.end.toDate() : now;
                     pauseDurationMs += (end - start);
                 });
             }
 
             const durationMs = (now - clockInTime) - pauseDurationMs;
-            totalHours += durationMs / 3600000; // Converti in ore
+            totalHours += durationMs / 3600000;
         });
         return totalHours > 0 ? totalHours.toFixed(2) : '0.00';
     };
@@ -214,34 +213,40 @@ const AreaManagementView = ({ workAreas, openModal }) => (
 const AdminManagementView = ({ admins, openModal, user }) => (
     <div>
         <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Gestione Admin ({admins.length}/10)</h1>
-            {admins.length < 10 && (
-                <button onClick={() => openModal('newAdmin')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">Aggiungi Admin</button>
-            )}
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Gestione Personale Amministrativo</h1>
+            <button onClick={() => openModal('newAdmin')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">Aggiungi Personale</button>
         </div>
         <div className="bg-white shadow-md rounded-lg overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
                  <thead className="bg-gray-50">
                     <tr>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ruolo</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aree Gestite</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Azioni</th>
                     </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                     {admins.map(admin => (
                         <tr key={admin.id}>
-                            <td className="px-4 py-2 whitespace-nowrap break-all flex items-center text-sm">
-                                {admin.email}
-                                {user && admin.id === user.uid && (
-                                    <span className="ml-3 px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">Attuale</span>
-                                )}
+                            <td className="px-4 py-2 whitespace-nowrap break-all text-sm">{admin.email}</td>
+                            <td className="px-4 py-2 whitespace-nowrap">
+                                <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${admin.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-orange-100 text-orange-800'}`}>
+                                    {admin.role === 'admin' ? 'Admin' : 'Preposto'}
+                                </span>
                             </td>
+                            <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-500">{admin.managedAreaNames?.join(', ') || 'Tutte'}</td>
                             <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
-                                {user && admin.id !== user.uid ? ( 
-                                    <button onClick={() => openModal('deleteAdmin', admin)} className="text-red-600 hover:text-red-900">Elimina</button>
-                                ) : (
-                                    <span className="text-gray-400">N/A</span>
-                                )}
+                                <div className="flex items-center gap-3">
+                                    {admin.role === 'preposto' && (
+                                        <button onClick={() => openModal('assignManagedAreas', admin)} className="text-indigo-600 hover:text-indigo-900 text-xs">Assegna Aree</button>
+                                    )}
+                                    {user && admin.id !== user.uid ? ( 
+                                        <button onClick={() => openModal('deleteAdmin', admin)} className="text-red-600 hover:text-red-900 text-xs">Elimina</button>
+                                    ) : (
+                                        <span className="text-gray-400 text-xs">Attuale</span>
+                                    )}
+                                </div>
                             </td>
                         </tr>
                     ))}
@@ -322,7 +327,7 @@ const ReportView = ({ reports, title, handleDeleteReportData }) => {
 
 // Componente Modale
 const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmployees, onDataUpdate }) => {
-    const [formData, setFormData] = React.useState(item || {});
+    const [formData, setFormData] = React.useState(item ? { ...item, role: item.role || 'admin' } : { role: 'admin' });
     const [isLoading, setIsLoading] = React.useState(false);
     const [error, setError] = React.useState('');
     
@@ -334,6 +339,15 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
             setFormData({...formData, workAreaIds: [...currentAreas, name]});
         } else {
             setFormData({...formData, workAreaIds: currentAreas.filter(id => id !== name)});
+        }
+    };
+     const handleManagedAreasChange = (e) => {
+        const { name, checked } = e.target;
+        const currentAreas = formData.managedAreaIds || item?.managedAreaIds || [];
+        if (checked) {
+            setFormData({ ...formData, managedAreaIds: [...currentAreas, name] });
+        } else {
+            setFormData({ ...formData, managedAreaIds: currentAreas.filter(id => id !== name) });
         }
     };
 
@@ -397,12 +411,24 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
                     await updateDoc(doc(db, "employees", item.id), { workAreaIds: formData.workAreaIds || [], workAreaNames: selectedAreaNames });
                     break;
                 case 'newAdmin':
-                    if (adminsCount >= 10) throw new Error("Limite massimo di 10 amministratori raggiunto.");
+                    if (adminsCount >= 10) throw new Error("Limite massimo raggiunto.");
                     const adminCred = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
-                    await setDoc(doc(db, "users", adminCred.user.uid), { email: formData.email, role: 'admin' });
+                    await setDoc(doc(db, "users", adminCred.user.uid), { 
+                        email: formData.email, 
+                        role: formData.role,
+                        managedAreaIds: formData.role === 'preposto' ? [] : null,
+                        managedAreaNames: formData.role === 'preposto' ? [] : null
+                    });
                     break;
                 case 'deleteAdmin':
                     await deleteDoc(doc(db, "users", item.id)); 
+                    break;
+                case 'assignManagedAreas':
+                    const selectedManagedAreaNames = workAreas.filter(area => formData.managedAreaIds?.includes(area.id)).map(area => area.name);
+                    await updateDoc(doc(db, "users", item.id), { 
+                        managedAreaIds: formData.managedAreaIds || [],
+                        managedAreaNames: selectedManagedAreaNames
+                    });
                     break;
                 case 'manualClockIn':
                     await addDoc(collection(db, "time_entries"), { 
@@ -442,6 +468,40 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
     
     const renderForm = () => {
         switch (type) {
+            case 'newAdmin':
+                 return (
+                    <>
+                        <h3 className="text-lg leading-6 font-medium text-gray-900">Nuovo Personale Amministrativo</h3>
+                        <input type="email" name="email" value={formData.email || ''} onChange={handleInputChange} placeholder="Email" className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md" required />
+                        <input type="password" name="password" value={formData.password || ''} onChange={handleInputChange} placeholder="Password (min. 6 caratteri)" className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md" required />
+                        <div className="mt-4">
+                            <label className="block text-sm font-medium text-gray-700">Ruolo</label>
+                            <select name="role" value={formData.role} onChange={handleInputChange} className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md">
+                                <option value="admin">Admin</option>
+                                <option value="preposto">Preposto</option>
+                            </select>
+                        </div>
+                    </>
+                );
+            case 'assignManagedAreas':
+                return (
+                    <>
+                        <h3 className="text-lg leading-6 font-medium text-gray-900">Assegna Aree a Preposto: {item.email}</h3>
+                        <div className="mt-4 space-y-2 max-h-60 overflow-y-auto">
+                            {workAreas.map(area => (
+                                <div key={area.id} className="flex items-center">
+                                    <input
+                                        id={`area-${area.id}`} name={area.id} type="checkbox"
+                                        onChange={handleManagedAreasChange} defaultChecked={item.managedAreaIds?.includes(area.id)}
+                                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                                    />
+                                    <label htmlFor={`area-${area.id}`} className="ml-3 block text-sm font-medium text-gray-700">{area.name}</label>
+                                </div>
+                            ))}
+                        </div>
+                    </>
+                );
+            // ... (altri casi del form)
             case 'newEmployee':
             case 'editEmployee':
                 return (
@@ -500,14 +560,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
                                 </div>
                             ))}
                         </div>
-                    </>
-                );
-            case 'newAdmin':
-                 return (
-                    <>
-                        <h3 className="text-lg leading-6 font-medium text-gray-900">Nuovo Amministratore</h3>
-                        <input type="email" name="email" value={formData.email || ''} onChange={handleInputChange} placeholder="Email" className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md" required />
-                        <input type="password" name="password" value={formData.password || ''} onChange={handleInputChange} placeholder="Password (min. 6 caratteri)" className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md" required />
                     </>
                 );
             case 'deleteAdmin':
@@ -633,12 +685,20 @@ const AdminDashboard = ({ user, handleLogout }) => {
 
             const areasSnapshot = await getDocs(collection(db, "work_areas"));
             const areas = areasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            
+            const qAdmins = query(collection(db, "users"), where("role", "in", ["admin", "preposto"]));
+            const adminsSnapshot = await getDocs(qAdmins);
+            const adminUsers = adminsSnapshot.docs.map(doc => {
+                const data = doc.data();
+                const managedAreaNames = data.managedAreaIds 
+                    ? data.managedAreaIds.map(id => areas.find(a => a.id === id)?.name).filter(Boolean)
+                    : [];
+                return { id: doc.id, ...data, managedAreaNames };
+            });
+            setAdmins(adminUsers);
+            
             setWorkAreas(areas);
             setSelectedReportAreas(areas.map(a => a.id));
-
-            const qAdmins = query(collection(db, "users"), where("role", "==", "admin"));
-            const adminsSnapshot = await getDocs(qAdmins);
-            setAdmins(adminsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
 
             const qEntries = query(collection(db, "time_entries"), where("status", "==", "clocked-in"));
             const entriesSnapshot = await getDocs(qEntries);
