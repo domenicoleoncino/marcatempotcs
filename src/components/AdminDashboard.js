@@ -1,7 +1,7 @@
 import React from 'react';
-import { db } from '../firebase';
+import { db, auth } from '../firebase';
 import { 
-    doc, collection, addDoc, getDocs, query, where, 
+    doc, setDoc, collection, addDoc, getDocs, query, where, 
     updateDoc, deleteDoc, writeBatch
 } from 'firebase/firestore';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
@@ -56,7 +56,6 @@ const DashboardView = ({ employees, activeEntries, workAreas }) => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
                 <div className="bg-white p-6 rounded-lg shadow-md flex items-center">
                     <div className="bg-green-100 p-3 rounded-full mr-4 flex-shrink-0">
-                        {/* *** MODIFICA: Ridimensionata l'icona *** */}
                         <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
                     </div>
                     <div>
@@ -66,7 +65,6 @@ const DashboardView = ({ employees, activeEntries, workAreas }) => {
                 </div>
                 <div className="bg-white p-6 rounded-lg shadow-md flex items-center">
                     <div className="bg-blue-100 p-3 rounded-full mr-4 flex-shrink-0">
-                        {/* *** MODIFICA: Ridimensionata l'icona *** */}
                         <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                     </div>
                     <div>
@@ -211,8 +209,7 @@ const AreaManagementView = ({ workAreas, openModal }) => (
 );
 
 // Componente per la Gestione Admin
-// *** MODIFICA ***: Aggiunto "superAdminEmail" come prop per identificare il super admin
-const AdminManagementView = ({ admins, openModal, user, superAdminEmail }) => (
+const AdminManagementView = ({ admins, openModal, user }) => (
     <div>
         <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
             <h1 className="text-3xl font-bold text-gray-800">Gestione Admin ({admins.length}/10)</h1>
@@ -233,14 +230,12 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail }) => (
                         <tr key={admin.id}>
                             <td className="px-6 py-4 whitespace-nowrap break-all flex items-center">
                                 {admin.email}
-                                {/* *** MODIFICA ***: Mostra un badge se l'email corrisponde a quella del super admin */}
-                                {admin.email === superAdminEmail && (
-                                    <span className="ml-3 px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">Super Admin</span>
+                                {user && admin.id === user.uid && (
+                                    <span className="ml-3 px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">Attuale</span>
                                 )}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                {/* *** MODIFICA ***: Il pulsante "Elimina" è nascosto per il super admin */}
-                                {admin.email !== superAdminEmail ? ( 
+                                {user && admin.id !== user.uid ? ( 
                                     <button onClick={() => openModal('deleteAdmin', admin)} className="text-red-600 hover:text-red-900">Elimina</button>
                                 ) : (
                                     <span className="text-gray-400">N/A</span>
@@ -324,8 +319,7 @@ const ReportView = ({ reports, title, handleDeleteReportData }) => {
 };
 
 // Componente Modale
-// *** MODIFICA ***: Aggiunto "superAdminEmail" come prop per la logica di sicurezza
-const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmployees, onDataUpdate, superAdminEmail }) => {
+const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmployees, onDataUpdate }) => {
     const [formData, setFormData] = React.useState(item || {});
     const [isLoading, setIsLoading] = React.useState(false);
     const [error, setError] = React.useState('');
@@ -358,9 +352,8 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
             return;
         }
         
-        // *** MODIFICA ***: Blocco di sicurezza per impedire l'eliminazione del super admin
-        if (type === 'deleteAdmin' && item.email === superAdminEmail) {
-            setError("L'amministratore principale non può essere eliminato.");
+        if (type === 'deleteAdmin' && item.id === auth.currentUser.uid) {
+            setError("Non puoi eliminare te stesso.");
             return;
         }
 
@@ -407,7 +400,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
                     await setDoc(doc(db, "users", adminCred.user.uid), { email: formData.email, role: 'admin' });
                     break;
                 case 'deleteAdmin':
-                    if (item.id === auth.currentUser.uid) throw new Error("Non puoi eliminare te stesso.");
                     await deleteDoc(doc(db, "users", item.id)); 
                     break;
                 case 'manualClockIn':
@@ -630,8 +622,6 @@ const AdminDashboard = ({ user, handleLogout }) => {
     const [reportEntryIds, setReportEntryIds] = React.useState([]);
     const [selectedReportAreas, setSelectedReportAreas] = React.useState([]);
     const [isLoading, setIsLoading] = React.useState(true); 
-    // *** MODIFICA ***: Definita l'email del Super Amministratore
-    const superAdminEmail = "domenico.leoncino@tcsitalia.com";
 
     const fetchData = React.useCallback(async () => {
         setIsLoading(true);
@@ -859,12 +849,10 @@ const AdminDashboard = ({ user, handleLogout }) => {
                 {view === 'dashboard' && <DashboardView employees={employees} activeEntries={activeEntries} workAreas={workAreas} />}
                 {view === 'employees' && <EmployeeManagementView employees={employeesWithStatus} openModal={openModal} />}
                 {view === 'areas' && <AreaManagementView workAreas={workAreasWithCounts} openModal={openModal} />}
-                {/* *** MODIFICA ***: Passata l'email del super admin per la logica di visualizzazione */}
-                {view === 'admins' && user && <AdminManagementView admins={admins} openModal={openModal} user={user} superAdminEmail={superAdminEmail} />}
+                {view === 'admins' && user && <AdminManagementView admins={admins} openModal={openModal} user={user} />}
                 {view === 'reports' && <ReportView reports={reports} title={reportTitle} handleDeleteReportData={handleDeleteReportData} />}
             </main>
-            {/* *** MODIFICA ***: Passata l'email del super admin per la logica di sicurezza nel modale */}
-            {showModal && <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} workAreas={workAreas} adminsCount={admins.length} allEmployees={employees} onDataUpdate={fetchData} superAdminEmail={superAdminEmail} />}
+            {showModal && <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} workAreas={workAreas} adminsCount={admins.length} allEmployees={employees} onDataUpdate={fetchData} />}
         </div>
     );
 };
