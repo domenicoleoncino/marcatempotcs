@@ -1,7 +1,7 @@
 import React from 'react';
-import { db, auth } from '../firebase';
+import { db } from '../firebase';
 import { 
-    doc, setDoc, collection, addDoc, getDocs, query, where, 
+    doc, collection, addDoc, getDocs, query, where, 
     updateDoc, deleteDoc, writeBatch
 } from 'firebase/firestore';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
@@ -12,6 +12,7 @@ import CompanyLogo from './CompanyLogo';
 // Componente DashboardView
 const DashboardView = ({ employees, activeEntries, workAreas }) => {
     
+    // Calcola le ore totali accumulate fino ad ora dai dipendenti attivi, SOTTRAENDO le pause
     const calculateCurrentHours = () => {
         let totalHours = 0;
         const now = new Date();
@@ -19,16 +20,17 @@ const DashboardView = ({ employees, activeEntries, workAreas }) => {
             const clockInTime = entry.clockInTime.toDate();
             let pauseDurationMs = 0;
 
+            // Calcola la durata delle pause completate e di quella in corso
             if (entry.pauses && entry.pauses.length > 0) {
                 entry.pauses.forEach(p => {
                     const start = p.start.toDate();
-                    const end = p.end ? p.end.toDate() : now;
+                    const end = p.end ? p.end.toDate() : now; // Se la pausa è in corso, calcola fino ad ora
                     pauseDurationMs += (end - start);
                 });
             }
 
             const durationMs = (now - clockInTime) - pauseDurationMs;
-            totalHours += durationMs / 3600000;
+            totalHours += durationMs / 3600000; // Converti in ore
         });
         return totalHours > 0 ? totalHours.toFixed(2) : '0.00';
     };
@@ -54,7 +56,8 @@ const DashboardView = ({ employees, activeEntries, workAreas }) => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
                 <div className="bg-white p-6 rounded-lg shadow-md flex items-center">
                     <div className="bg-green-100 p-3 rounded-full mr-4 flex-shrink-0">
-                        <svg className="w-0.5 h-0.5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                        {/* *** MODIFICA: Ridimensionata l'icona *** */}
+                        <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
                     </div>
                     <div>
                         <p className="text-sm text-gray-500">Dipendenti Attivi</p>
@@ -63,7 +66,8 @@ const DashboardView = ({ employees, activeEntries, workAreas }) => {
                 </div>
                 <div className="bg-white p-6 rounded-lg shadow-md flex items-center">
                     <div className="bg-blue-100 p-3 rounded-full mr-4 flex-shrink-0">
-                        <svg className="w-0.5 h-0.5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        {/* *** MODIFICA: Ridimensionata l'icona *** */}
+                        <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                     </div>
                     <div>
                         <p className="text-sm text-gray-500">Ore Lavorate Oggi (nette)</p>
