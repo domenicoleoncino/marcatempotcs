@@ -119,7 +119,6 @@ const LoginScreen = () => {
     };
 
     const renderContent = () => {
-        // Contenitore comune per tutti i form
         const formContainer = (title, formContent, footerLink) => (
             <div className="w-full bg-white p-4 rounded-xl shadow-lg space-y-3">
                 <div className="flex justify-center mb-1"><CompanyLogo /></div>
