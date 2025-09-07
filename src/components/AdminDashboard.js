@@ -12,7 +12,6 @@ import CompanyLogo from './CompanyLogo';
 // Componente DashboardView
 const DashboardView = ({ employees, activeEntries, workAreas }) => {
     
-    // Calcola le ore totali accumulate fino ad ora dai dipendenti attivi, SOTTRAENDO le pause
     const calculateCurrentHours = () => {
         let totalHours = 0;
         const now = new Date();
@@ -209,52 +208,70 @@ const AreaManagementView = ({ workAreas, openModal }) => (
     </div>
 );
 
-// Componente per la Gestione Admin
-const AdminManagementView = ({ admins, openModal, user }) => (
-    <div>
-        <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Gestione Personale Amministrativo</h1>
-            <button onClick={() => openModal('newAdmin')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">Aggiungi Personale</button>
-        </div>
-        <div className="bg-white shadow-md rounded-lg overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-                 <thead className="bg-gray-50">
-                    <tr>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ruolo</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aree Gestite</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Azioni</th>
-                    </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                    {admins.map(admin => (
-                        <tr key={admin.id}>
-                            <td className="px-4 py-2 whitespace-nowrap break-all text-sm">{admin.email}</td>
-                            <td className="px-4 py-2 whitespace-nowrap">
-                                <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${admin.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-orange-100 text-orange-800'}`}>
-                                    {admin.role === 'admin' ? 'Admin' : 'Preposto'}
-                                </span>
-                            </td>
-                            <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-500">{admin.managedAreaNames?.join(', ') || 'Tutte'}</td>
-                            <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
-                                <div className="flex items-center gap-3">
-                                    {admin.role === 'preposto' && (
-                                        <button onClick={() => openModal('assignManagedAreas', admin)} className="text-indigo-600 hover:text-indigo-900 text-xs">Assegna Aree</button>
-                                    )}
-                                    {user && admin.id !== user.uid ? ( 
-                                        <button onClick={() => openModal('deleteAdmin', admin)} className="text-red-600 hover:text-red-900 text-xs">Elimina</button>
-                                    ) : (
-                                        <span className="text-gray-400 text-xs">Attuale</span>
-                                    )}
-                                </div>
-                            </td>
+// *** MODIFICA ***: Aggiunta la prop "currentUserRole" per la logica dei permessi
+const AdminManagementView = ({ admins, openModal, user, superAdminEmail, currentUserRole }) => {
+    
+    // *** MODIFICA: Logica di visualizzazione basata su chi è loggato ***
+    const adminsToDisplay = user && user.email === superAdminEmail
+        ? admins // Il Super Admin vede tutti
+        : admins.filter(admin => admin.email !== superAdminEmail); // Gli altri non vedono il Super Admin
+
+    return (
+        <div>
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
+                <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Gestione Personale Amministrativo</h1>
+                {/* *** MODIFICA: Solo Admin e Super Admin possono aggiungere personale *** */}
+                {currentUserRole === 'admin' && (
+                    <button onClick={() => openModal('newAdmin')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">Aggiungi Personale</button>
+                )}
+            </div>
+            <div className="bg-white shadow-md rounded-lg overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                     <thead className="bg-gray-50">
+                        <tr>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ruolo</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aree Gestite</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Azioni</th>
                         </tr>
-                    ))}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                        {adminsToDisplay.map(admin => (
+                            <tr key={admin.id}>
+                                <td className="px-4 py-2 whitespace-nowrap break-all text-sm flex items-center">
+                                    {admin.email}
+                                    {admin.email === superAdminEmail && (
+                                        <span className="ml-3 px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">Super Admin</span>
+                                    )}
+                                </td>
+                                <td className="px-4 py-2 whitespace-nowrap">
+                                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${admin.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-orange-100 text-orange-800'}`}>
+                                        {admin.role === 'admin' ? 'Admin' : 'Preposto'}
+                                    </span>
+                                </td>
+                                <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-500">{admin.managedAreaNames?.join(', ') || (admin.role === 'admin' ? 'Tutte' : 'Nessuna')}</td>
+                                <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
+                                    <div className="flex items-center gap-3">
+                                        {admin.role === 'preposto' && currentUserRole === 'admin' && (
+                                            <button onClick={() => openModal('assignManagedAreas', admin)} className="text-indigo-600 hover:text-indigo-900 text-xs">Assegna Aree</button>
+                                        )}
+                                        {/* *** MODIFICA: Logica complessa per il pulsante "Elimina" *** */}
+                                        {user && user.email === superAdminEmail && admin.id !== user.uid && (
+                                            <button onClick={() => openModal('deleteAdmin', admin)} className="text-red-600 hover:text-red-900 text-xs">Elimina</button>
+                                        )}
+                                        {user && user.email !== superAdminEmail && admin.role === 'preposto' && (
+                                            <button onClick={() => openModal('deleteAdmin', admin)} className="text-red-600 hover:text-red-900 text-xs">Elimina</button>
+                                        )}
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
         </div>
-    </div>
-);
+    );
+};
 
 // Componente per i Report
 const ReportView = ({ reports, title, handleDeleteReportData }) => {
@@ -326,7 +343,7 @@ const ReportView = ({ reports, title, handleDeleteReportData }) => {
 };
 
 // Componente Modale
-const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmployees, onDataUpdate }) => {
+const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmployees, onDataUpdate, superAdminEmail }) => {
     const [formData, setFormData] = React.useState(item ? { ...item, role: item.role || 'admin' } : { role: 'admin' });
     const [isLoading, setIsLoading] = React.useState(false);
     const [error, setError] = React.useState('');
@@ -368,8 +385,8 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
             return;
         }
         
-        if (type === 'deleteAdmin' && item.id === auth.currentUser.uid) {
-            setError("Non puoi eliminare te stesso.");
+        if (type === 'deleteAdmin' && item.email === superAdminEmail) {
+            setError("L'amministratore principale non può essere eliminato.");
             return;
         }
 
@@ -676,6 +693,9 @@ const AdminDashboard = ({ user, handleLogout }) => {
     const [reportEntryIds, setReportEntryIds] = React.useState([]);
     const [selectedReportAreas, setSelectedReportAreas] = React.useState([]);
     const [isLoading, setIsLoading] = React.useState(true); 
+    const [currentUserRole, setCurrentUserRole] = React.useState(null);
+    // *** MODIFICA ***: Definita l'email del Super Admin
+    const superAdminEmail = "domenico.leoncino@tcsitalia.com";
 
     const fetchData = React.useCallback(async () => {
         setIsLoading(true);
@@ -697,6 +717,12 @@ const AdminDashboard = ({ user, handleLogout }) => {
             });
             setAdmins(adminUsers);
             
+            // *** MODIFICA: Determina il ruolo dell'utente attuale ***
+            const currentUserData = adminUsers.find(admin => user && admin.id === user.uid);
+            if (currentUserData) {
+                setCurrentUserRole(currentUserData.role);
+            }
+
             setWorkAreas(areas);
             setSelectedReportAreas(areas.map(a => a.id));
 
@@ -708,7 +734,7 @@ const AdminDashboard = ({ user, handleLogout }) => {
         } finally {
             setIsLoading(false);
         }
-    }, []); 
+    }, [user]); 
 
     React.useEffect(() => {
         fetchData();
@@ -868,7 +894,10 @@ const AdminDashboard = ({ user, handleLogout }) => {
                             <button onClick={() => setView('dashboard')} className={`text-center py-2 sm:py-0 sm:inline-flex items-center px-1 sm:pt-1 sm:border-b-2 text-sm font-medium ${view === 'dashboard' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Dashboard</button>
                             <button onClick={() => setView('employees')} className={`text-center py-2 sm:py-0 sm:inline-flex items-center px-1 sm:pt-1 sm:border-b-2 text-sm font-medium ${view === 'employees' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Dipendenti</button>
                             <button onClick={() => setView('areas')} className={`text-center py-2 sm:py-0 sm:inline-flex items-center px-1 sm:pt-1 sm:border-b-2 text-sm font-medium ${view === 'areas' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Aree</button>
-                            <button onClick={() => setView('admins')} className={`text-center py-2 sm:py-0 sm:inline-flex items-center px-1 sm:pt-1 sm:border-b-2 text-sm font-medium ${view === 'admins' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Admin</button>
+                            {/* *** MODIFICA: La Gestione Admin è visibile solo agli Admin, non ai Preposti *** */}
+                            {currentUserRole === 'admin' && (
+                                <button onClick={() => setView('admins')} className={`text-center py-2 sm:py-0 sm:inline-flex items-center px-1 sm:pt-1 sm:border-b-2 text-sm font-medium ${view === 'admins' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Admin</button>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -911,10 +940,19 @@ const AdminDashboard = ({ user, handleLogout }) => {
                 {view === 'dashboard' && <DashboardView employees={employees} activeEntries={activeEntries} workAreas={workAreas} />}
                 {view === 'employees' && <EmployeeManagementView employees={employeesWithStatus} openModal={openModal} />}
                 {view === 'areas' && <AreaManagementView workAreas={workAreasWithCounts} openModal={openModal} />}
-                {view === 'admins' && user && <AdminManagementView admins={admins} openModal={openModal} user={user} />}
+                {/* *** MODIFICA: Passate le nuove props per la logica dei permessi *** */}
+                {view === 'admins' && user && currentUserRole === 'admin' && (
+                    <AdminManagementView 
+                        admins={admins} 
+                        openModal={openModal} 
+                        user={user} 
+                        superAdminEmail={superAdminEmail} 
+                        currentUserRole={currentUserRole}
+                    />
+                )}
                 {view === 'reports' && <ReportView reports={reports} title={reportTitle} handleDeleteReportData={handleDeleteReportData} />}
             </main>
-            {showModal && <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} workAreas={workAreas} adminsCount={admins.length} allEmployees={employees} onDataUpdate={fetchData} />}
+            {showModal && <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} workAreas={workAreas} adminsCount={admins.length} allEmployees={employees} onDataUpdate={fetchData} superAdminEmail={superAdminEmail} />}
         </div>
     );
 };
