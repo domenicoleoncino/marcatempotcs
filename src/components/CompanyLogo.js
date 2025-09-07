@@ -6,15 +6,13 @@ const CompanyLogo = () => (
             Creata da Domenico Leoncino
         </p>
         
-        {/* MODIFICA: Ridotta ulteriormente la larghezza massima del logo */}
+        {/* MODIFICA: Dimensioni ridotte e testi aziendali rimossi */}
         <img 
             src="https://i.imgur.com/EJHuOxb.png" 
             alt="Logo TCS" 
-            className="h-auto w-full max-w-[50px] sm:max-w-[100px]" 
+            className="h-auto w-full max-w-[150px]" 
             onError={(e) => { e.target.onerror = null; e.target.src='https://placehold.co/200x60/cccccc/ffffff?text=Logo'; }}
         />
-        
-        {/* MODIFICA: Testi resi più piccoli */}
     </div>
 );
 

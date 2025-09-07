@@ -121,9 +121,9 @@ const LoginScreen = () => {
     const renderContent = () => {
         // Contenitore comune per tutti i form
         const formContainer = (title, formContent, footerLink) => (
-            <div className="w-full bg-white p-4 sm:p-6 rounded-xl shadow-lg space-y-3">
-                <div className="flex justify-center mb-2"><CompanyLogo /></div>
-                <h2 className="text-center text-lg sm:text-xl font-bold text-gray-900">{title}</h2>
+            <div className="w-full bg-white p-4 rounded-xl shadow-lg space-y-3">
+                <div className="flex justify-center mb-1"><CompanyLogo /></div>
+                <h2 className="text-center text-lg font-bold text-gray-900">{title}</h2>
                 {formContent}
                 <div className="text-center">
                     {footerLink}
@@ -135,17 +135,17 @@ const LoginScreen = () => {
             return formContainer(
                 'Recupera Password',
                 <>
-                    <p className="text-center text-sm text-gray-600">Inserisci la tua email per ricevere un link di recupero.</p>
+                    <p className="text-center text-xs text-gray-600">Inserisci la tua email per ricevere un link di recupero.</p>
                     <form onSubmit={handlePasswordReset} className="space-y-3">
-                        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="La tua Email" required className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" />
+                        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="La tua Email" required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm" />
                         {error && <p className="text-red-500 text-xs text-center">{error}</p>}
                         {successMessage && <p className="text-green-600 text-xs text-center">{successMessage}</p>}
-                        <button type="submit" disabled={isLoading} className="w-full py-2 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-300">
-                            {isLoading ? 'Invio...' : 'Invia Email di Recupero'}
+                        <button type="submit" disabled={isLoading} className="w-full py-2 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-md text-sm">
+                            {isLoading ? 'Invio...' : 'Invia Email'}
                         </button>
                     </form>
                 </>,
-                <button onClick={() => { setView('login'); setError(''); setSuccessMessage(''); }} className="text-sm font-medium text-indigo-600 hover:text-indigo-500">
+                <button onClick={() => { setView('login'); setError(''); setSuccessMessage(''); }} className="text-xs font-medium text-indigo-600 hover:text-indigo-500">
                     Torna al Login
                 </button>
             );
@@ -155,20 +155,20 @@ const LoginScreen = () => {
             return formContainer(
                 'Registra un nuovo account',
                 <form onSubmit={handleRegister} className="space-y-2">
-                     <input name="name" onChange={handleRegisterInputChange} placeholder="Nome" required className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" />
-                     <input name="surname" onChange={handleRegisterInputChange} placeholder="Cognome" required className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" />
-                     <input name="phone" onChange={handleRegisterInputChange} placeholder="Telefono" required className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" />
-                     <input type="email" name="email" onChange={handleRegisterInputChange} placeholder="Email" required className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" />
-                     <input type="password" name="password" onChange={handleRegisterInputChange} placeholder="Password (min. 6 caratteri)" required className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" />
+                     <input name="name" onChange={handleRegisterInputChange} placeholder="Nome" required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm" />
+                     <input name="surname" onChange={handleRegisterInputChange} placeholder="Cognome" required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm" />
+                     <input name="phone" onChange={handleRegisterInputChange} placeholder="Telefono" required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm" />
+                     <input type="email" name="email" onChange={handleRegisterInputChange} placeholder="Email" required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm" />
+                     <input type="password" name="password" onChange={handleRegisterInputChange} placeholder="Password (min. 6 caratteri)" required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm" />
                     
                     {error && <p className="text-red-500 text-xs text-center">{error}</p>}
                     {successMessage && <p className="text-green-600 text-xs text-center">{successMessage}</p>}
 
-                    <button type="submit" disabled={isLoading} className="w-full py-2 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-300">
+                    <button type="submit" disabled={isLoading} className="w-full py-2 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-md text-sm">
                         {isLoading ? 'Registrazione...' : 'Registrati'}
                     </button>
                 </form>,
-                <button onClick={() => { setView('login'); setError(''); setSuccessMessage(''); }} className="text-sm font-medium text-indigo-600 hover:text-indigo-500">
+                <button onClick={() => { setView('login'); setError(''); setSuccessMessage(''); }} className="text-xs font-medium text-indigo-600 hover:text-indigo-500">
                     Hai già un account? Accedi
                 </button>
             );
@@ -177,8 +177,8 @@ const LoginScreen = () => {
         return formContainer(
             'Accedi al tuo account',
             <form onSubmit={handleLogin} className="space-y-3">
-                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" required className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" />
-                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" required className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" />
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm" />
+                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm" />
                 
                 <div className="flex items-center justify-between text-xs">
                     <button type="button" onClick={() => { setView('register'); setError(''); setSuccessMessage(''); }} className="font-medium text-indigo-600 hover:text-indigo-500">
@@ -192,7 +192,7 @@ const LoginScreen = () => {
                 {error && <p className="text-red-500 text-xs whitespace-pre-wrap text-center">{error}</p>}
                 {successMessage && <p className="text-green-600 text-xs text-center">{successMessage}</p>}
 
-                <button type="submit" disabled={isLoading} className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-300">
+                <button type="submit" disabled={isLoading} className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-md text-sm">
                     {isLoading ? 'Accesso...' : 'Accedi'}
                 </button>
             </form>
@@ -201,7 +201,7 @@ const LoginScreen = () => {
 
     return (
         <div className="min-h-screen bg-gray-100 flex flex-col justify-center items-center p-4">
-            <div className="w-full max-w-sm mx-auto">
+            <div className="w-full max-w-xs mx-auto">
                 {renderContent()}
             </div>
         </div>
