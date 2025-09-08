@@ -5,7 +5,7 @@
  */
 import React from 'react';
 
-const LOGO_URL = 'https://imgur.com/gallery/tcs-IKx9HAc#tfoGjSD.pig';
+const LOGO_URL = 'https://imgur.com/gallery/tcs-IKx9HAc#tfoGjSD';
 const PLACEHOLDER_URL = 'https://placehold.co/200x60/cccccc/ffffff?text=Logo';
 
 /**
