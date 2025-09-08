@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { db } from '../firebase';
-import { collection, query, where, orderBy, getDocs, addDoc, updateDoc, doc } from 'firebase/firestore';
+import { collection, query, where, orderBy, getDocs, addDoc, updateDoc, doc, arrayUnion, Timestamp } from 'firebase/firestore';
 import CompanyLogo from './CompanyLogo';
 
 // Funzione per calcolare la distanza tra due punti geografici (Haversine formula)
@@ -40,6 +40,8 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [isDeviceOk, setIsDeviceOk] = useState(false); // Stato per validare il dispositivo
 
+    const isOnBreak = activeEntry?.pauses?.some(p => !p.end) || false;
+
     const fetchEmployeeData = useCallback(async () => {
         if (!user) {
             setIsLoading(false);
@@ -54,29 +56,23 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
                 const data = { id: employeeSnapshot.docs[0].id, ...employeeSnapshot.docs[0].data() };
                 setEmployeeData(data);
 
-                // *** CONTROLLO DISPOSITIVO ***
                 const deviceId = getDeviceId();
-                if (!data.deviceId) {
-                    // L'utente non ha ancora registrato un dispositivo. Va bene.
-                    setIsDeviceOk(true);
-                } else if (data.deviceId === deviceId) {
-                    // Il dispositivo corrisponde. Va bene.
+                if (!data.deviceId || data.deviceId === deviceId) {
                     setIsDeviceOk(true);
                 } else {
-                    // Il dispositivo non corrisponde. Blocco.
                     setIsDeviceOk(false);
                     setStatusMessage({ type: 'error', text: "Questo non è il dispositivo autorizzato per la timbratura. Contatta un amministratore per resettare il tuo dispositivo." });
                 }
 
-                let fetchedAreas = [];
+                // *** FIX: Carica tutte le aree una sola volta per poterle usare nella cronologia ***
+                const allAreasSnapshot = await getDocs(collection(db, "work_areas"));
+                const allAreas = allAreasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+                let assignedAreas = [];
                 if (data.workAreaIds && data.workAreaIds.length > 0) {
-                    const areasQuery = query(collection(db, "work_areas"), where("__name__", "in", data.workAreaIds));
-                    const areasSnapshot = await getDocs(areasQuery);
-                    fetchedAreas = areasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    setWorkAreas(fetchedAreas);
-                } else {
-                    setWorkAreas([]);
+                    assignedAreas = allAreas.filter(area => data.workAreaIds.includes(area.id));
                 }
+                setWorkAreas(assignedAreas);
                 
                 const qActiveEntry = query(
                     collection(db, "time_entries"),
@@ -100,13 +96,21 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
                 
                 const pastEntries = pastEntriesSnapshot.docs.map(doc => {
                     const entryData = doc.data();
-                    const area = fetchedAreas.find(wa => wa.id === entryData.workAreaId);
+                    // *** FIX: Cerca il nome dell'area nella lista completa di tutte le aree ***
+                    const area = allAreas.find(wa => wa.id === entryData.workAreaId);
                     const clockInTime = entryData.clockInTime?.toDate();
                     const clockOutTime = entryData.clockOutTime?.toDate();
-                    let duration = null;
-
+                    
+                    let duration = 0;
                     if (clockInTime && clockOutTime) {
-                        duration = (clockOutTime.getTime() - clockInTime.getTime()) / (1000 * 60 * 60);
+                        const totalDurationMs = clockOutTime.getTime() - clockInTime.getTime();
+                        const pauseDurationMs = (entryData.pauses || []).reduce((acc, p) => {
+                            if (p.start && p.end) {
+                                return acc + (p.end.toDate().getTime() - p.start.toDate().getTime());
+                            }
+                            return acc;
+                        }, 0);
+                        duration = (totalDurationMs - pauseDurationMs) / (1000 * 60 * 60);
                     }
                     
                     return {
@@ -115,7 +119,7 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
                         clockIn: clockInTime ? clockInTime.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : 'N/A',
                         clockOut: clockOutTime ? clockOutTime.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : 'N/A',
                         date: clockInTime ? clockInTime.toLocaleDateString('it-IT') : 'N/A',
-                        duration: duration ? duration.toFixed(2) : 'N/A'
+                        duration: duration > 0 ? duration.toFixed(2) : '0.00'
                     };
                 });
                 setEmployeeTimestamps(pastEntries);
@@ -168,7 +172,6 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
     }, []);
 
     const handleClockIn = async (areaId) => {
-        // Blocco preventivo se il dispositivo non è valido
         if (!isDeviceOk) return;
 
         if (!currentLocation) {
@@ -189,7 +192,6 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
 
         if (distance <= selectedArea.radius) {
             try {
-                // Se è la prima timbratura, registra il dispositivo
                 if (!employeeData.deviceId) {
                     const deviceId = getDeviceId();
                     const employeeRef = doc(db, "employees", employeeData.id);
@@ -201,7 +203,8 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
                     workAreaId: areaId,
                     clockInTime: new Date(),
                     clockOutTime: null,
-                    status: 'clocked-in'
+                    status: 'clocked-in',
+                    pauses: []
                 });
                 fetchEmployeeData();
                 setStatusMessage({ type: 'success', text: 'Timbratura di entrata registrata!' });
@@ -215,11 +218,13 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
     };
 
     const handleClockOut = async () => {
-         // Blocco preventivo se il dispositivo non è valido
         if (!isDeviceOk) return;
 
         if (activeEntry && employeeData) {
             try {
+                if (isOnBreak) {
+                    await handleEndPause(false); 
+                }
                 await updateDoc(doc(db, "time_entries", activeEntry.id), {
                     clockOutTime: new Date(),
                     status: 'clocked-out'
@@ -232,6 +237,44 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
             }
         }
     };
+
+    const handleStartPause = async () => {
+        if (!isDeviceOk || !activeEntry) return;
+        try {
+            const entryRef = doc(db, "time_entries", activeEntry.id);
+            await updateDoc(entryRef, {
+                pauses: arrayUnion({ start: Timestamp.now(), end: null })
+            });
+            fetchEmployeeData();
+            setStatusMessage({ type: 'success', text: 'Pausa iniziata.' });
+        } catch (error) {
+            console.error("Errore durante l'inizio della pausa:", error);
+            setStatusMessage({ type: 'error', text: "Errore durante l'inizio della pausa." });
+        }
+    };
+
+    const handleEndPause = async (refresh = true) => {
+        if (!isDeviceOk || !activeEntry) return;
+
+        const currentPauses = activeEntry.pauses || [];
+        const openPauseIndex = currentPauses.findIndex(p => !p.end);
+
+        if (openPauseIndex > -1) {
+            currentPauses[openPauseIndex].end = Timestamp.now();
+            try {
+                const entryRef = doc(db, "time_entries", activeEntry.id);
+                await updateDoc(entryRef, {
+                    pauses: currentPauses
+                });
+                if (refresh) fetchEmployeeData();
+                setStatusMessage({ type: 'success', text: 'Pausa terminata.' });
+            } catch (error) {
+                console.error("Errore durante la fine della pausa:", error);
+                setStatusMessage({ type: 'error', text: "Errore durante la fine della pausa." });
+            }
+        }
+    };
+
 
     if (isLoading) {
         return <div className="min-h-screen flex items-center justify-center bg-gray-100"><p>Caricamento dati dipendente...</p></div>;
@@ -263,7 +306,6 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
             <main className="bg-white shadow-md rounded-lg p-6 w-full max-w-md mb-6">
                 <h2 className="text-2xl font-bold text-gray-800 mb-4 text-center">Stato Timbratura</h2>
                 
-                {/* Messaggio informativo per la prima registrazione */}
                 {!employeeData.deviceId && !activeEntry && isDeviceOk &&
                     <div className="bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-3 text-sm mb-4" role="alert">
                       <p>Questo dispositivo verrà registrato con la tua prossima timbratura.</p>
@@ -273,16 +315,25 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
                 <div className="text-center mb-4">
                     {activeEntry ? (
                         <>
-                            <p className="text-green-600 text-xl font-bold">Timbratura ATTIVA</p>
+                            <p className={`text-xl font-bold ${isOnBreak ? 'text-yellow-600' : 'text-green-600'}`}>
+                                {isOnBreak ? 'IN PAUSA' : 'Timbratura ATTIVA'}
+                            </p>
                             <p className="text-gray-700 mt-2">Area: {workAreas.find(area => area.id === activeEntry.workAreaId)?.name || 'Sconosciuta'}</p>
-                            <button onClick={handleClockOut} disabled={!isDeviceOk} className="mt-4 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 text-lg font-medium disabled:bg-gray-400">TIMBRA USCITA</button>
+                            <div className="mt-4 flex flex-col gap-3">
+                                {!isOnBreak ? (
+                                    <button onClick={handleStartPause} disabled={!isDeviceOk} className="px-6 py-3 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 text-lg font-medium disabled:bg-gray-400">INIZIA PAUSA</button>
+                                ) : (
+                                    <button onClick={handleEndPause} disabled={!isDeviceOk} className="px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 text-lg font-medium disabled:bg-gray-400">FINE PAUSA</button>
+                                )}
+                                <button onClick={handleClockOut} disabled={!isDeviceOk} className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 text-lg font-medium disabled:bg-gray-400">TIMBRA USCITA</button>
+                            </div>
                         </>
                     ) : (
                         <>
                             <p className="text-red-600 text-xl font-bold">Timbratura NON ATTIVA</p>
                             {workAreas.length > 0 ? (
                                 <div className="mt-4">
-                                    <label htmlFor="areaSelect" className="block text-sm font-medium text-gray-700 mb-2">Seleziona Area per timbrare:</label>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Seleziona Area per timbrare:</label>
                                     <div className="grid grid-cols-1 gap-2">
                                         {workAreas.map(area => (
                                             <button 
@@ -354,3 +405,4 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
 };
 
 export default EmployeeDashboard;
+
