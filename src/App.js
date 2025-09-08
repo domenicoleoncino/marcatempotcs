@@ -8,23 +8,45 @@ import EmployeeDashboard from './components/EmployeeDashboard';
 
 function App() {
     const [user, setUser] = useState(null);
-    const [userData, setUserData] = useState(null); // Stato per i dati utente da Firestore (con il ruolo)
+    const [userData, setUserData] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (authenticatedUser) => {
             if (authenticatedUser) {
-                // Utente loggato, ora carichiamo i suoi dati specifici (incluso il ruolo)
                 const userDocRef = doc(db, 'users', authenticatedUser.uid);
                 const userDocSnap = await getDoc(userDocRef);
 
                 if (userDocSnap.exists()) {
-                    setUserData(userDocSnap.data());
+                    const fetchedUserData = userDocSnap.data();
+
+                    // *** NUOVA LOGICA DI CONTROLLO DISPOSITIVO BASATA SUL RUOLO ***
+                    if (fetchedUserData.role === 'employee') {
+                        const deviceLock = localStorage.getItem('deviceLock');
+                        if (deviceLock) {
+                            const lockData = JSON.parse(deviceLock);
+                            if (lockData.email !== authenticatedUser.email) {
+                                // Dispositivo bloccato da un altro dipendente, logout forzato
+                                sessionStorage.setItem('loginError', 'Accesso bloccato. Questo dispositivo è registrato per un altro utente.');
+                                await signOut(auth);
+                                setIsLoading(false);
+                                return; // Interrompe l'esecuzione per evitare di impostare l'utente
+                            }
+                        } else {
+                            // Primo login di un dipendente su questo dispositivo, imposta il blocco
+                            localStorage.setItem('deviceLock', JSON.stringify({ email: authenticatedUser.email }));
+                        }
+                    } else if (fetchedUserData.role === 'admin' || fetchedUserData.role === 'preposto') {
+                        // Gli admin e i preposti non bloccano il dispositivo, anzi, lo sbloccano
+                        localStorage.removeItem('deviceLock');
+                    }
+
+                    setUserData(fetchedUserData);
+                    setUser(authenticatedUser);
                 } else {
-                    // Se non troviamo i dati, potrebbe essere un errore o un utente incompleto
-                    setUserData({ role: 'unknown' }); 
+                    setUserData({ role: 'unknown' });
+                    setUser(authenticatedUser);
                 }
-                setUser(authenticatedUser);
             } else {
                 setUser(null);
                 setUserData(null);
@@ -37,8 +59,11 @@ function App() {
 
     const handleLogout = async () => {
         try {
+            // Rimuove il blocco del dispositivo solo se l'utente che fa logout è un dipendente
+            if (userData && userData.role === 'employee') {
+                localStorage.removeItem('deviceLock');
+            }
             await signOut(auth);
-            // Pulizia stati
             setUser(null);
             setUserData(null);
         } catch (error) {
@@ -54,7 +79,6 @@ function App() {
         );
     }
     
-    // Logica per decidere quale pannello mostrare
     if (user && userData) {
         if (userData.role === 'admin' || userData.role === 'preposto') {
             return <AdminDashboard user={user} userData={userData} handleLogout={handleLogout} />;
@@ -63,7 +87,6 @@ function App() {
         }
     }
     
-    // Se non c'è utente, mostra la schermata di login
     return (
         <div className="min-h-screen bg-gray-100 flex flex-col justify-center items-center p-4">
             <div className="w-full max-w-sm mx-auto">

@@ -32,15 +32,7 @@ const LoginScreen = () => {
         setIsLoading(true);
         setError('');
         setSuccessMessage('');
-        const deviceLock = localStorage.getItem('deviceLock');
-        if (deviceLock) {
-            const lockData = JSON.parse(deviceLock);
-            if (lockData.email !== email) {
-                setError('Accesso bloccato. Questo dispositivo è già stato usato da un altro utente. Eseguire il logout prima di cambiare utente.');
-                setIsLoading(false);
-                return;
-            }
-        }
+        // *** MODIFICA: La logica di deviceLock è stata rimossa da qui ***
         try {
             await signInWithEmailAndPassword(auth, email, password);
         } catch (err) {
