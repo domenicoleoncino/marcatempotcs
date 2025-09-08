@@ -14,7 +14,6 @@ const CompanyLogo = () => (
             onError={(e) => { e.target.onerror = null; e.target.src='https://placehold.co/200x60/cccccc/ffffff?text=Logo'; }}
         />
         
-        <h2 className="text-lg font-bold text-gray-800 mt-2">TCS ITALIA S.r.l.</h2>
     </div>
 );
 
