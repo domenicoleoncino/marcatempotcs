@@ -3,7 +3,7 @@ import React from 'react';
 const CompanyLogo = () => (
     <div className="flex flex-col items-center text-center w-full">
         <p className="text-xs font-serif font-bold text-gray-700 mb-2">
-            Crator D. Leoncino
+            Creata da Domenico Leoncino
         </p>
         
         {/* MODIFICA: Dimensioni drasticamente ridotte per mobile */}

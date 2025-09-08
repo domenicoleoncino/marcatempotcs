@@ -226,8 +226,8 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
     const isSuperAdmin = user && user.email === superAdminEmail;
 
     const adminsToDisplay = isSuperAdmin
-        ? admins.filter(admin => admin.id !== user.id) // Super admin vede tutti tranne se stesso
-        : admins.filter(admin => admin.email !== superAdminEmail && admin.id !== user.id); // Gli altri non vedono il super admin e se stessi
+        ? admins // Il Super Admin vede tutti
+        : admins.filter(admin => admin.email !== superAdminEmail); // Gli altri non vedono il Super Admin
 
     return (
         <div>
@@ -268,7 +268,7 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
                                             <button onClick={() => openModal('assignManagedAreas', admin)} className="text-indigo-600 hover:text-indigo-900 text-xs">Assegna Aree</button>
                                         )}
                                         
-                                        {isSuperAdmin && (
+                                        {isSuperAdmin && admin.id !== user.uid && (
                                             <button onClick={() => openModal('deleteAdmin', admin)} className="text-red-600 hover:text-red-900 text-xs">Elimina</button>
                                         )}
                                         {!isSuperAdmin && admin.role === 'preposto' && (
@@ -707,6 +707,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const [isLoading, setIsLoading] = React.useState(true); 
 
     const currentUserRole = userData?.role;
+    const superAdminEmail = "domenico.leoncino@tcsitalia.com";
 
     const fetchData = React.useCallback(async () => {
         if (!user || !userData) {
@@ -969,12 +970,13 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                         admins={admins} 
                         openModal={openModal} 
                         user={user} 
+                        superAdminEmail={superAdminEmail} 
                         currentUserRole={currentUserRole}
                     />
                 )}
                 {view === 'reports' && <ReportView reports={reports} title={reportTitle} handleDeleteReportData={handleDeleteReportData} />}
             </main>
-            {showModal && <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} workAreas={workAreas} adminsCount={admins.length} allEmployees={employees} onDataUpdate={fetchData} />}
+            {showModal && <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} workAreas={workAreas} adminsCount={admins.length} allEmployees={employees} onDataUpdate={fetchData} superAdminEmail={superAdminEmail} />}
         </div>
     );
 };
