@@ -1,99 +1,76 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
-import { auth, db } from './firebase';
-import './App.css'; // <-- Riga FONDAMENTALE per importare gli stili
-
-// Importa i componenti che abbiamo estratto
 import LoginScreen from './components/LoginScreen';
 import AdminDashboard from './components/AdminDashboard';
 import EmployeeDashboard from './components/EmployeeDashboard';
 
-export default function App() {
-    const [user, setUser] = React.useState(null);
-    const [userRole, setUserRole] = React.useState(null);
-    const [isLoading, setIsLoading] = React.useState(true);
+function App() {
+    const [user, setUser] = useState(null);
+    const [userData, setUserData] = useState(null); // Stato per i dati utente da Firestore (con il ruolo)
+    const [isLoading, setIsLoading] = useState(true);
 
-    React.useEffect(() => {
-        const script = document.createElement('script');
-        script.src = "https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js";
-        script.async = true;
-        document.head.appendChild(script);
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, async (authenticatedUser) => {
+            if (authenticatedUser) {
+                // Utente loggato, ora carichiamo i suoi dati specifici (incluso il ruolo)
+                const userDocRef = doc(db, 'users', authenticatedUser.uid);
+                const userDocSnap = await getDoc(userDocRef);
 
-        const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-            if (firebaseUser) {
-                const lockData = { email: firebaseUser.email };
-                localStorage.setItem('deviceLock', JSON.stringify(lockData));
-            }
-            try {
-                if (firebaseUser) {
-                    const userDocRef = doc(db, "users", firebaseUser.uid);
-                    const userDoc = await getDoc(userDocRef);
-                    if (userDoc.exists()) {
-                        setUser(firebaseUser);
-                        setUserRole(userDoc.data().role);
-                    } else {
-                        const detailedError = `ERRORE: L'utente ${firebaseUser.email} non ha un ruolo nel DB.`;
-                        sessionStorage.setItem('loginError', detailedError);
-                        await signOut(auth);
-                    }
+                if (userDocSnap.exists()) {
+                    setUserData(userDocSnap.data());
                 } else {
-                    setUser(null);
-                    setUserRole(null);
+                    // Se non troviamo i dati, potrebbe essere un errore o un utente incompleto
+                    setUserData({ role: 'unknown' }); 
                 }
-            } catch (error) {
-                let errorMessage = 'Errore di rete o di configurazione. Riprova.';
-                if (error.code === 'permission-denied') {
-                    errorMessage = "ERRORE DI PERMESSI: Controlla le Regole di Sicurezza in Firebase.";
-                }
-                sessionStorage.setItem('loginError', errorMessage);
-            } finally {
-                setIsLoading(false);
+                setUser(authenticatedUser);
+            } else {
+                setUser(null);
+                setUserData(null);
             }
+            setIsLoading(false);
         });
 
-        return () => {
-            document.head.removeChild(script);
-            unsubscribe();
-        };
+        return () => unsubscribe();
     }, []);
 
     const handleLogout = async () => {
-        localStorage.removeItem('deviceLock');
-        await signOut(auth);
+        try {
+            await signOut(auth);
+            // Pulizia stati
+            setUser(null);
+            setUserData(null);
+        } catch (error) {
+            console.error("Errore durante il logout:", error);
+        }
     };
 
-    const renderContent = () => {
-        if (isLoading) {
-            return <p className="text-xl font-semibold">Caricamento in corso...</p>;
-        }
-    
-        if (!user) {
-            return <LoginScreen />;
-        }
-    
-        if (userRole === 'admin') {
-            return <AdminDashboard user={user} handleLogout={handleLogout} />;
-        }
-    
-        if (userRole === 'employee') {
-            return <EmployeeDashboard user={user} handleLogout={handleLogout} />;
-        }
-        
+    if (isLoading) {
         return (
-            <>
-                <p className="text-xl font-semibold">Ruolo utente non definito.</p>
-                <button onClick={handleLogout} className="mt-4 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600">Logout</button>
-            </>
+            <div className="min-h-screen flex items-center justify-center bg-gray-100">
+                <p>Caricamento applicazione...</p>
+            </div>
         );
     }
-
-    // Qui usiamo le nuove classi per centrare tutto il contenuto
+    
+    // Logica per decidere quale pannello mostrare
+    if (user && userData) {
+        if (userData.role === 'admin' || userData.role === 'preposto') {
+            return <AdminDashboard user={user} userData={userData} handleLogout={handleLogout} />;
+        } else if (userData.role === 'employee') {
+            return <EmployeeDashboard user={user} handleLogout={handleLogout} />;
+        }
+    }
+    
+    // Se non c'è utente, mostra la schermata di login
     return (
-        <div className="layout-container">
-            <main className="layout-main-centered">
-                {renderContent()}
-            </main>
+        <div className="min-h-screen bg-gray-100 flex flex-col justify-center items-center p-4">
+            <div className="w-full max-w-sm mx-auto">
+                <LoginScreen />
+            </div>
         </div>
     );
 }
+
+export default App;

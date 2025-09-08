@@ -223,9 +223,11 @@ const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
 // Componente per la Gestione Admin
 const AdminManagementView = ({ admins, openModal, user, superAdminEmail, currentUserRole }) => {
     
-    const adminsToDisplay = user && user.email === superAdminEmail
-        ? admins 
-        : admins.filter(admin => admin.email !== superAdminEmail);
+    const isSuperAdmin = user && user.email === superAdminEmail;
+
+    const adminsToDisplay = isSuperAdmin
+        ? admins.filter(admin => admin.id !== user.id) // Super admin vede tutti tranne se stesso
+        : admins.filter(admin => admin.email !== superAdminEmail && admin.id !== user.id); // Gli altri non vedono il super admin e se stessi
 
     return (
         <div>
@@ -266,10 +268,10 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
                                             <button onClick={() => openModal('assignManagedAreas', admin)} className="text-indigo-600 hover:text-indigo-900 text-xs">Assegna Aree</button>
                                         )}
                                         
-                                        {user && user.email === superAdminEmail && admin.id !== user.uid && (
+                                        {isSuperAdmin && (
                                             <button onClick={() => openModal('deleteAdmin', admin)} className="text-red-600 hover:text-red-900 text-xs">Elimina</button>
                                         )}
-                                        {user && user.email !== superAdminEmail && admin.role === 'preposto' && (
+                                        {!isSuperAdmin && admin.role === 'preposto' && (
                                             <button onClick={() => openModal('deleteAdmin', admin)} className="text-red-600 hover:text-red-900 text-xs">Elimina</button>
                                         )}
                                     </div>
@@ -689,7 +691,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
 };
 
 // Componente Principale
-const AdminDashboard = ({ user, handleLogout }) => {
+const AdminDashboard = ({ user, handleLogout, userData }) => {
     const [view, setView] = React.useState('dashboard');
     const [employees, setEmployees] = React.useState([]);
     const [workAreas, setWorkAreas] = React.useState([]);
@@ -703,11 +705,11 @@ const AdminDashboard = ({ user, handleLogout }) => {
     const [reportEntryIds, setReportEntryIds] = React.useState([]);
     const [selectedReportAreas, setSelectedReportAreas] = React.useState([]);
     const [isLoading, setIsLoading] = React.useState(true); 
-    const [currentUserData, setCurrentUserData] = React.useState(null);
-    const superAdminEmail = "domenico.leoncino@tcsitalia.com";
+
+    const currentUserRole = userData?.role;
 
     const fetchData = React.useCallback(async () => {
-        if (!user) {
+        if (!user || !userData) {
             setIsLoading(false);
             return;
         }
@@ -727,14 +729,11 @@ const AdminDashboard = ({ user, handleLogout }) => {
             });
             setAdmins(adminUsers);
             
-            const currentUser = adminUsers.find(admin => admin.id === user.uid);
-            setCurrentUserData(currentUser);
-
             let areasToDisplay = allAreas;
             let employeesToDisplayQuery;
-            if (currentUser && currentUser.role === 'preposto' && currentUser.managedAreaIds) {
-                areasToDisplay = allAreas.filter(area => currentUser.managedAreaIds.includes(area.id));
-                const managedAreaIdsForQuery = currentUser.managedAreaIds.length > 0 ? currentUser.managedAreaIds : ['placeholder'];
+            if (currentUserRole === 'preposto' && userData.managedAreaIds) {
+                areasToDisplay = allAreas.filter(area => userData.managedAreaIds.includes(area.id));
+                const managedAreaIdsForQuery = userData.managedAreaIds.length > 0 ? userData.managedAreaIds : ['placeholder'];
                 employeesToDisplayQuery = query(collection(db, "employees"), where("workAreaIds", "array-contains-any", managedAreaIdsForQuery));
             } else {
                 employeesToDisplayQuery = query(collection(db, "employees"));
@@ -760,7 +759,7 @@ const AdminDashboard = ({ user, handleLogout }) => {
         } finally {
             setIsLoading(false);
         }
-    }, [user]); 
+    }, [user, userData, currentUserRole]); 
 
     React.useEffect(() => {
         fetchData();
@@ -920,7 +919,7 @@ const AdminDashboard = ({ user, handleLogout }) => {
                             <button onClick={() => setView('dashboard')} className={`text-center py-2 sm:py-0 sm:inline-flex items-center px-1 sm:pt-1 sm:border-b-2 text-sm font-medium ${view === 'dashboard' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Dashboard</button>
                             <button onClick={() => setView('employees')} className={`text-center py-2 sm:py-0 sm:inline-flex items-center px-1 sm:pt-1 sm:border-b-2 text-sm font-medium ${view === 'employees' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Dipendenti</button>
                             <button onClick={() => setView('areas')} className={`text-center py-2 sm:py-0 sm:inline-flex items-center px-1 sm:pt-1 sm:border-b-2 text-sm font-medium ${view === 'areas' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Aree</button>
-                            {currentUserData?.role === 'admin' && (
+                            {currentUserRole === 'admin' && (
                                 <button onClick={() => setView('admins')} className={`text-center py-2 sm:py-0 sm:inline-flex items-center px-1 sm:pt-1 sm:border-b-2 text-sm font-medium ${view === 'admins' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Admin</button>
                             )}
                         </div>
@@ -963,20 +962,19 @@ const AdminDashboard = ({ user, handleLogout }) => {
             )}
             <main className="p-4 sm:p-8 max-w-7xl mx-auto w-full">
                 {view === 'dashboard' && <DashboardView employees={employees} activeEntries={activeEntries} workAreas={workAreas} />}
-                {view === 'employees' && <EmployeeManagementView employees={employeesWithStatus} openModal={openModal} currentUserRole={currentUserData?.role} />}
-                {view === 'areas' && <AreaManagementView workAreas={workAreasWithCounts} openModal={openModal} currentUserRole={currentUserData?.role} />}
-                {view === 'admins' && user && currentUserData?.role === 'admin' && (
+                {view === 'employees' && <EmployeeManagementView employees={employeesWithStatus} openModal={openModal} currentUserRole={currentUserRole} />}
+                {view === 'areas' && <AreaManagementView workAreas={workAreasWithCounts} openModal={openModal} currentUserRole={currentUserRole} />}
+                {view === 'admins' && user && currentUserRole === 'admin' && (
                     <AdminManagementView 
                         admins={admins} 
                         openModal={openModal} 
                         user={user} 
-                        superAdminEmail={superAdminEmail} 
-                        currentUserRole={currentUserData?.role}
+                        currentUserRole={currentUserRole}
                     />
                 )}
                 {view === 'reports' && <ReportView reports={reports} title={reportTitle} handleDeleteReportData={handleDeleteReportData} />}
             </main>
-            {showModal && <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} workAreas={workAreas} adminsCount={admins.length} allEmployees={employees} onDataUpdate={fetchData} superAdminEmail={superAdminEmail} />}
+            {showModal && <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} workAreas={workAreas} adminsCount={admins.length} allEmployees={employees} onDataUpdate={fetchData} />}
         </div>
     );
 };
