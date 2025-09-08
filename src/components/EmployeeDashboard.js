@@ -40,7 +40,6 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [isDeviceOk, setIsDeviceOk] = useState(false); // Stato per validare il dispositivo
 
-    // *** NUOVA LOGICA: Determina se l'utente è in pausa ***
     const isOnBreak = activeEntry?.pauses?.some(p => !p.end) || false;
 
     const fetchEmployeeData = useCallback(async () => {
@@ -65,6 +64,7 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
                     setStatusMessage({ type: 'error', text: "Questo non è il dispositivo autorizzato per la timbratura. Contatta un amministratore per resettare il tuo dispositivo." });
                 }
 
+                // *** FIX: Carica tutte le aree una sola volta per poterle usare nella cronologia ***
                 const allAreasSnapshot = await getDocs(collection(db, "work_areas"));
                 const allAreas = allAreasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
@@ -96,6 +96,7 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
                 
                 const pastEntries = pastEntriesSnapshot.docs.map(doc => {
                     const entryData = doc.data();
+                    // *** FIX: Cerca il nome dell'area nella lista completa di tutte le aree ***
                     const area = allAreas.find(wa => wa.id === entryData.workAreaId);
                     const clockInTime = entryData.clockInTime?.toDate();
                     const clockOutTime = entryData.clockOutTime?.toDate();
@@ -203,7 +204,7 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
                     clockInTime: new Date(),
                     clockOutTime: null,
                     status: 'clocked-in',
-                    pauses: [] // Inizializza l'array delle pause
+                    pauses: []
                 });
                 fetchEmployeeData();
                 setStatusMessage({ type: 'success', text: 'Timbratura di entrata registrata!' });
@@ -221,9 +222,8 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
 
         if (activeEntry && employeeData) {
             try {
-                // Se il dipendente è in pausa, termina prima la pausa
                 if (isOnBreak) {
-                    await handleEndPause(false); // Passa 'false' per non ricaricare i dati due volte
+                    await handleEndPause(false); 
                 }
                 await updateDoc(doc(db, "time_entries", activeEntry.id), {
                     clockOutTime: new Date(),
@@ -238,7 +238,6 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
         }
     };
 
-    // *** NUOVA FUNZIONE: Inizia Pausa ***
     const handleStartPause = async () => {
         if (!isDeviceOk || !activeEntry) return;
         try {
@@ -246,7 +245,7 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
             await updateDoc(entryRef, {
                 pauses: arrayUnion({ start: Timestamp.now(), end: null })
             });
-            fetchEmployeeData(); // Ricarica i dati per aggiornare lo stato del pulsante
+            fetchEmployeeData();
             setStatusMessage({ type: 'success', text: 'Pausa iniziata.' });
         } catch (error) {
             console.error("Errore durante l'inizio della pausa:", error);
@@ -254,7 +253,6 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
         }
     };
 
-    // *** NUOVA FUNZIONE: Fine Pausa ***
     const handleEndPause = async (refresh = true) => {
         if (!isDeviceOk || !activeEntry) return;
 
@@ -317,13 +315,11 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
                 <div className="text-center mb-4">
                     {activeEntry ? (
                         <>
-                            {/* *** MODIFICA: Mostra stato "In Pausa" *** */}
                             <p className={`text-xl font-bold ${isOnBreak ? 'text-yellow-600' : 'text-green-600'}`}>
                                 {isOnBreak ? 'IN PAUSA' : 'Timbratura ATTIVA'}
                             </p>
                             <p className="text-gray-700 mt-2">Area: {workAreas.find(area => area.id === activeEntry.workAreaId)?.name || 'Sconosciuta'}</p>
                             <div className="mt-4 flex flex-col gap-3">
-                                {/* *** MODIFICA: Logica pulsanti per la pausa *** */}
                                 {!isOnBreak ? (
                                     <button onClick={handleStartPause} disabled={!isDeviceOk} className="px-6 py-3 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 text-lg font-medium disabled:bg-gray-400">INIZIA PAUSA</button>
                                 ) : (

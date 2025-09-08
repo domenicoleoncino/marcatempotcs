@@ -52,23 +52,15 @@ const DashboardView = ({ employees, activeEntries, workAreas }) => {
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-4">Dashboard</h1>
             
             <div className="flex flex-col md:grid md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-                <div className="bg-white p-4 rounded-lg shadow-md flex items-center">
-                    <div className="bg-green-100 p-2 rounded-full mr-3 flex-shrink-0">
-                        <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
-                    </div>
-                    <div>
-                        <p className="text-xs text-gray-500">Dipendenti Attivi</p>
-                        <p className="text-xl font-bold text-gray-800">{activeEntries.length} / {employees.length}</p>
-                    </div>
+                {/* *** MODIFICA: Rimosso il div contenente l'icona *** */}
+                <div className="bg-white p-4 rounded-lg shadow-md text-center sm:text-left">
+                    <p className="text-sm text-gray-500">Dipendenti Attivi</p>
+                    <p className="text-2xl font-bold text-gray-800">{activeEntries.length} / {employees.length}</p>
                 </div>
-                <div className="bg-white p-4 rounded-lg shadow-md flex items-center">
-                    <div className="bg-blue-100 p-2 rounded-full mr-3 flex-shrink-0">
-                        <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                    </div>
-                    <div>
-                        <p className="text-xs text-gray-500">Ore Lavorate Oggi (nette)</p>
-                        <p className="text-xl font-bold text-gray-800">{calculateCurrentHours()}</p>
-                    </div>
+                {/* *** MODIFICA: Rimosso il div contenente l'icona *** */}
+                <div className="bg-white p-4 rounded-lg shadow-md text-center sm:text-left">
+                    <p className="text-sm text-gray-500">Ore Lavorate Oggi (nette)</p>
+                    <p className="text-2xl font-bold text-gray-800">{calculateCurrentHours()}</p>
                 </div>
             </div>
 
@@ -223,7 +215,6 @@ const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
 // Componente per la Gestione Admin
 const AdminManagementView = ({ admins, openModal, user, currentUserRole }) => {
     
-    // L'utente attuale non vede mai se stesso nella lista
     const adminsToDisplay = admins.filter(admin => user && admin.id !== user.uid);
 
     return (
@@ -342,7 +333,6 @@ const ReportView = ({ reports, title, handleDeleteReportData }) => {
 
 // Componente Modale
 const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmployees, onDataUpdate }) => {
-    // *** MODIFICA: Imposta il ruolo di default a 'preposto' per sicurezza ***
     const [formData, setFormData] = React.useState(item ? { ...item, role: item.role || 'admin' } : { role: 'preposto' });
     const [isLoading, setIsLoading] = React.useState(false);
     const [error, setError] = React.useState('');
@@ -484,7 +474,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
     
     const renderForm = () => {
         switch (type) {
-            // *** MODIFICA: Aggiunto il selettore per il ruolo ***
             case 'newAdmin':
                  return (
                     <>
@@ -494,8 +483,8 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
                         <div className="mt-4">
                             <label className="block text-sm font-medium text-gray-700">Ruolo</label>
                             <select name="role" value={formData.role} onChange={handleInputChange} className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md">
-                                <option value="preposto">Preposto</option>
                                 <option value="admin">Admin</option>
+                                <option value="preposto">Preposto</option>
                             </select>
                         </div>
                     </>
