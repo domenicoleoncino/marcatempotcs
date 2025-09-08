@@ -52,23 +52,15 @@ const DashboardView = ({ employees, activeEntries, workAreas }) => {
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-4">Dashboard</h1>
             
             <div className="flex flex-col md:grid md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-                <div className="bg-white p-4 rounded-lg shadow-md flex items-center">
-                    <div className="bg-green-100 p-2 rounded-full mr-3 flex-shrink-0">
-                        <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
-                    </div>
-                    <div>
-                        <p className="text-xs text-gray-500">Dipendenti Attivi</p>
-                        <p className="text-xl font-bold text-gray-800">{activeEntries.length} / {employees.length}</p>
-                    </div>
+                {/* *** MODIFICA: Rimosso il div contenente l'icona *** */}
+                <div className="bg-white p-4 rounded-lg shadow-md text-center sm:text-left">
+                    <p className="text-sm text-gray-500">Dipendenti Attivi</p>
+                    <p className="text-2xl font-bold text-gray-800">{activeEntries.length} / {employees.length}</p>
                 </div>
-                <div className="bg-white p-4 rounded-lg shadow-md flex items-center">
-                    <div className="bg-blue-100 p-2 rounded-full mr-3 flex-shrink-0">
-                        <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                    </div>
-                    <div>
-                        <p className="text-xs text-gray-500">Ore Lavorate Oggi (nette)</p>
-                        <p className="text-xl font-bold text-gray-800">{calculateCurrentHours()}</p>
-                    </div>
+                {/* *** MODIFICA: Rimosso il div contenente l'icona *** */}
+                <div className="bg-white p-4 rounded-lg shadow-md text-center sm:text-left">
+                    <p className="text-sm text-gray-500">Ore Lavorate Oggi (nette)</p>
+                    <p className="text-2xl font-bold text-gray-800">{calculateCurrentHours()}</p>
                 </div>
             </div>
 
@@ -221,13 +213,9 @@ const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
 );
 
 // Componente per la Gestione Admin
-const AdminManagementView = ({ admins, openModal, user, superAdminEmail, currentUserRole }) => {
+const AdminManagementView = ({ admins, openModal, user, currentUserRole }) => {
     
-    const isSuperAdmin = user && user.email === superAdminEmail;
-
-    const adminsToDisplay = isSuperAdmin
-        ? admins // Il Super Admin vede tutti
-        : admins.filter(admin => admin.email !== superAdminEmail); // Gli altri non vedono il Super Admin
+    const adminsToDisplay = admins.filter(admin => user && admin.id !== user.uid);
 
     return (
         <div>
@@ -250,12 +238,7 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
                     <tbody className="bg-white divide-y divide-gray-200">
                         {adminsToDisplay.map(admin => (
                             <tr key={admin.id}>
-                                <td className="px-4 py-2 whitespace-nowrap break-all text-sm flex items-center">
-                                    {admin.email}
-                                    {admin.email === superAdminEmail && (
-                                        <span className="ml-3 px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">Super Admin</span>
-                                    )}
-                                </td>
+                                <td className="px-4 py-2 whitespace-nowrap break-all text-sm">{admin.email}</td>
                                 <td className="px-4 py-2 whitespace-nowrap">
                                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${admin.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-orange-100 text-orange-800'}`}>
                                         {admin.role === 'admin' ? 'Admin' : 'Preposto'}
@@ -267,13 +250,7 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
                                         {admin.role === 'preposto' && currentUserRole === 'admin' && (
                                             <button onClick={() => openModal('assignManagedAreas', admin)} className="text-indigo-600 hover:text-indigo-900 text-xs">Assegna Aree</button>
                                         )}
-                                        
-                                        {isSuperAdmin && admin.id !== user.uid && (
-                                            <button onClick={() => openModal('deleteAdmin', admin)} className="text-red-600 hover:text-red-900 text-xs">Elimina</button>
-                                        )}
-                                        {!isSuperAdmin && admin.role === 'preposto' && (
-                                            <button onClick={() => openModal('deleteAdmin', admin)} className="text-red-600 hover:text-red-900 text-xs">Elimina</button>
-                                        )}
+                                        <button onClick={() => openModal('deleteAdmin', admin)} className="text-red-600 hover:text-red-900 text-xs">Elimina</button>
                                     </div>
                                 </td>
                             </tr>
@@ -355,7 +332,7 @@ const ReportView = ({ reports, title, handleDeleteReportData }) => {
 };
 
 // Componente Modale
-const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmployees, onDataUpdate, superAdminEmail }) => {
+const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmployees, onDataUpdate }) => {
     const [formData, setFormData] = React.useState(item ? { ...item, role: item.role || 'admin' } : { role: 'admin' });
     const [isLoading, setIsLoading] = React.useState(false);
     const [error, setError] = React.useState('');
@@ -397,8 +374,8 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
             return;
         }
         
-        if (type === 'deleteAdmin' && item.email === superAdminEmail) {
-            setError("L'amministratore principale non può essere eliminato.");
+        if (type === 'deleteAdmin' && item.id === auth.currentUser.uid) {
+            setError("Non puoi eliminare te stesso.");
             return;
         }
 
