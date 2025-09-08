@@ -704,6 +704,7 @@ const AdminDashboard = ({ user, handleLogout }) => {
     const [selectedReportAreas, setSelectedReportAreas] = React.useState([]);
     const [isLoading, setIsLoading] = React.useState(true); 
     const [currentUserData, setCurrentUserData] = React.useState(null);
+    const superAdminEmail = "domenico.leoncino@tcsitalia.com";
 
     const fetchData = React.useCallback(async () => {
         if (!user) {
@@ -969,12 +970,13 @@ const AdminDashboard = ({ user, handleLogout }) => {
                         admins={admins} 
                         openModal={openModal} 
                         user={user} 
+                        superAdminEmail={superAdminEmail} 
                         currentUserRole={currentUserData?.role}
                     />
                 )}
                 {view === 'reports' && <ReportView reports={reports} title={reportTitle} handleDeleteReportData={handleDeleteReportData} />}
             </main>
-            {showModal && <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} workAreas={workAreas} adminsCount={admins.length} allEmployees={employees} onDataUpdate={fetchData} />}
+            {showModal && <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} workAreas={workAreas} adminsCount={admins.length} allEmployees={employees} onDataUpdate={fetchData} superAdminEmail={superAdminEmail} />}
         </div>
     );
 };
