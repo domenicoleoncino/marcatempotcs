@@ -1,26 +1,21 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { db } from '../firebase';
-import { collection, query, where, orderBy, getDocs, addDoc, updateDoc, doc, arrayUnion, Timestamp } from 'firebase/firestore';
+import { collection, query, where, orderBy, getDocs, addDoc, updateDoc, doc, arrayUnion, Timestamp, writeBatch } from 'firebase/firestore';
 import CompanyLogo from './CompanyLogo';
 
-// Funzione per calcolare la distanza tra due punti geografici (Haversine formula)
+// Funzione per calcolare la distanza (Haversine formula)
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
     const R = 6371e3; // metres
-    const φ1 = lat1 * Math.PI / 180; // φ, λ in radians
+    const φ1 = lat1 * Math.PI / 180;
     const φ2 = lat2 * Math.PI / 180;
     const Δφ = (lat2 - lat1) * Math.PI / 180;
     const Δλ = (lon2 - lon1) * Math.PI / 180;
-
-    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-              Math.cos(φ1) * Math.cos(φ2) *
-              Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-    const d = R * c; // in metres
-    return d;
+    return R * c; // in metres
 };
 
-// Funzione per ottenere (o creare) un ID unico per il dispositivo
+// Funzione per ottenere l'ID del dispositivo
 const getDeviceId = () => {
     let deviceId = localStorage.getItem('marcatempotcs_deviceId');
     if (!deviceId) {
@@ -35,19 +30,46 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
     const [employeeTimestamps, setEmployeeTimestamps] = useState([]);
     const [activeEntry, setActiveEntry] = useState(null);
     const [workAreas, setWorkAreas] = useState([]);
-    const [currentLocation, setCurrentLocation] = useState(null);
-    const [statusMessage, setStatusMessage] = useState({ type: '', text: '' }); // Unico stato per i messaggi
+    const [statusMessage, setStatusMessage] = useState({ type: '', text: '' });
     const [isLoading, setIsLoading] = useState(true);
-    const [isDeviceOk, setIsDeviceOk] = useState(false); // Stato per validare il dispositivo
+    const [isDeviceOk, setIsDeviceOk] = useState(false);
+    const [currentTime, setCurrentTime] = useState(new Date());
 
     const isOnBreak = activeEntry?.pauses?.some(p => !p.end) || false;
+
+    // Funzione di geolocalizzazione che restituisce una Promise
+    const getCurrentLocation = () => {
+        return new Promise((resolve, reject) => {
+            if (!navigator.geolocation) {
+                reject("La geolocalizzazione non è supportata dal tuo browser.");
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    resolve({
+                        latitude: position.coords.latitude,
+                        longitude: position.coords.longitude,
+                    });
+                },
+                (error) => {
+                    let message = "Errore sconosciuto di geolocalizzazione.";
+                    if (error.code === error.PERMISSION_DENIED) message = "Permesso di geolocalizzazione negato. Abilitalo nelle impostazioni.";
+                    if (error.code === error.POSITION_UNAVAILABLE) message = "Informazioni sulla posizione non disponibili.";
+                    if (error.code === error.TIMEOUT) message = "La richiesta di geolocalizzazione è scaduta.";
+                    reject(message);
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
+        });
+    };
 
     const fetchEmployeeData = useCallback(async () => {
         if (!user) {
             setIsLoading(false);
             return;
         }
-
+        
         try {
             const qEmployee = query(collection(db, "employees"), where("userId", "==", user.uid));
             const employeeSnapshot = await getDocs(qEmployee);
@@ -61,42 +83,26 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
                     setIsDeviceOk(true);
                 } else {
                     setIsDeviceOk(false);
-                    setStatusMessage({ type: 'error', text: "Questo non è il dispositivo autorizzato per la timbratura. Contatta un amministratore per resettare il tuo dispositivo." });
+                    setStatusMessage({ type: 'error', text: "Questo non è il dispositivo autorizzato. Contatta un amministratore per resettarlo." });
                 }
 
-                // *** FIX: Carica tutte le aree una sola volta per poterle usare nella cronologia ***
                 const allAreasSnapshot = await getDocs(collection(db, "work_areas"));
-                const allAreas = allAreasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                const allAreas = allAreasSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
 
-                let assignedAreas = [];
-                if (data.workAreaIds && data.workAreaIds.length > 0) {
-                    assignedAreas = allAreas.filter(area => data.workAreaIds.includes(area.id));
-                }
+                const assignedAreas = data.workAreaIds?.length > 0
+                    ? allAreas.filter(area => data.workAreaIds.includes(area.id))
+                    : [];
                 setWorkAreas(assignedAreas);
-                
-                const qActiveEntry = query(
-                    collection(db, "time_entries"),
-                    where("employeeId", "==", data.id),
-                    where("status", "==", "clocked-in")
-                );
-                const activeEntrySnapshot = await getDocs(qActiveEntry);
-                if (!activeEntrySnapshot.empty) {
-                    setActiveEntry({ id: activeEntrySnapshot.docs[0].id, ...activeEntrySnapshot.docs[0].data() });
-                } else {
-                    setActiveEntry(null);
-                }
 
-                const qPastEntries = query(
-                    collection(db, "time_entries"),
-                    where("employeeId", "==", data.id),
-                    where("status", "==", "clocked-out"),
-                    orderBy("clockInTime", "desc")
-                );
+                const qActiveEntry = query(collection(db, "time_entries"), where("employeeId", "==", data.id), where("status", "==", "clocked-in"));
+                const activeEntrySnapshot = await getDocs(qActiveEntry);
+                setActiveEntry(activeEntrySnapshot.empty ? null : { id: activeEntrySnapshot.docs[0].id, ...activeEntrySnapshot.docs[0].data() });
+
+                const qPastEntries = query(collection(db, "time_entries"), where("employeeId", "==", data.id), where("status", "==", "clocked-out"), orderBy("clockInTime", "desc"));
                 const pastEntriesSnapshot = await getDocs(qPastEntries);
                 
-                const pastEntries = pastEntriesSnapshot.docs.map(doc => {
-                    const entryData = doc.data();
-                    // *** FIX: Cerca il nome dell'area nella lista completa di tutte le aree ***
+                const pastEntries = pastEntriesSnapshot.docs.map(docSnap => {
+                    const entryData = docSnap.data();
                     const area = allAreas.find(wa => wa.id === entryData.workAreaId);
                     const clockInTime = entryData.clockInTime?.toDate();
                     const clockOutTime = entryData.clockOutTime?.toDate();
@@ -114,7 +120,7 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
                     }
                     
                     return {
-                        id: doc.id,
+                        id: docSnap.id,
                         areaName: area ? area.name : 'N/D',
                         clockIn: clockInTime ? clockInTime.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : 'N/A',
                         clockOut: clockOutTime ? clockOutTime.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : 'N/A',
@@ -136,46 +142,24 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
     }, [user]);
 
     useEffect(() => {
+        setIsLoading(true);
         fetchEmployeeData();
     }, [fetchEmployeeData]);
 
-    const getCurrentLocation = () => {
-        if (!navigator.geolocation) {
-            setStatusMessage({ type: 'error', text: "La geolocalizzazione non è supportata dal tuo browser."});
-            return;
-        }
-
-        navigator.geolocation.getCurrentPosition(
-            (position) => {
-                setCurrentLocation({
-                    latitude: position.coords.latitude,
-                    longitude: position.coords.longitude,
-                });
-                setStatusMessage({ type: '', text: '' });
-            },
-            (error) => {
-                let message = "Errore sconosciuto di geolocalizzazione.";
-                if (error.code === error.PERMISSION_DENIED) message = "Permesso di geolocalizzazione negato. Abilitalo nelle impostazioni del browser.";
-                if (error.code === error.POSITION_UNAVAILABLE) message = "Informazioni sulla posizione non disponibili.";
-                if (error.code === error.TIMEOUT) message = "La richiesta di geolocalizzazione è scaduta.";
-                setStatusMessage({ type: 'error', text: message });
-                setCurrentLocation(null);
-            },
-            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-        );
-    };
-
     useEffect(() => {
-        getCurrentLocation();
-        const geoIntervalId = setInterval(getCurrentLocation, 60000);
-        return () => clearInterval(geoIntervalId);
+        const timerId = setInterval(() => setCurrentTime(new Date()), 1000);
+        return () => clearInterval(timerId);
     }, []);
 
     const handleClockIn = async (areaId) => {
         if (!isDeviceOk) return;
 
-        if (!currentLocation) {
-            setStatusMessage({ type: 'error', text: "Impossibile rilevare la posizione. Riprova o abilita la geolocalizzazione."});
+        setStatusMessage({ type: 'info', text: 'Sto rilevando la tua posizione...' });
+        let currentLocation;
+        try {
+            currentLocation = await getCurrentLocation();
+        } catch (error) {
+            setStatusMessage({ type: 'error', text: error });
             return;
         }
 
@@ -185,10 +169,7 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
             return;
         }
 
-        const distance = calculateDistance(
-            currentLocation.latitude, currentLocation.longitude,
-            selectedArea.latitude, selectedArea.longitude
-        );
+        const distance = calculateDistance(currentLocation.latitude, currentLocation.longitude, selectedArea.latitude, selectedArea.longitude);
 
         if (distance <= selectedArea.radius) {
             try {
@@ -206,35 +187,45 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
                     status: 'clocked-in',
                     pauses: []
                 });
-                fetchEmployeeData();
                 setStatusMessage({ type: 'success', text: 'Timbratura di entrata registrata!' });
+                fetchEmployeeData();
             } catch (error) {
-                console.error("Errore durante la timbratura di entrata:", error);
-                setStatusMessage({ type: 'error', text: "Errore durante la timbratura di entrata." });
+                console.error("Errore ClockIn:", error);
+                setStatusMessage({ type: 'error', text: "Errore durante la timbratura." });
             }
         } else {
-            setStatusMessage({ type: 'error', text: `Non sei in un'area di lavoro autorizzata per la timbratura. Distanza: ${distance.toFixed(0)}m (Max: ${selectedArea.radius}m)` });
+            setStatusMessage({ type: 'error', text: `Non sei nell'area di lavoro. Distanza: ${distance.toFixed(0)}m (Max: ${selectedArea.radius}m)` });
         }
     };
-
+    
     const handleClockOut = async () => {
-        if (!isDeviceOk) return;
+        if (!isDeviceOk || !activeEntry) return;
 
-        if (activeEntry && employeeData) {
-            try {
-                if (isOnBreak) {
-                    await handleEndPause(false); 
+        try {
+            const batch = writeBatch(db);
+            const entryRef = doc(db, "time_entries", activeEntry.id);
+
+            if (isOnBreak) {
+                const currentPauses = activeEntry.pauses || [];
+                const openPauseIndex = currentPauses.findIndex(p => !p.end);
+                if (openPauseIndex > -1) {
+                    currentPauses[openPauseIndex].end = Timestamp.now();
+                    batch.update(entryRef, { pauses: currentPauses });
                 }
-                await updateDoc(doc(db, "time_entries", activeEntry.id), {
-                    clockOutTime: new Date(),
-                    status: 'clocked-out'
-                });
-                fetchEmployeeData();
-                setStatusMessage({ type: 'success', text: 'Timbratura di uscita registrata!' });
-            } catch (error) {
-                console.error("Errore durante la timbratura di uscita:", error);
-                setStatusMessage({ type: 'error', text: "Errore durante la timbratura di uscita." });
             }
+            
+            batch.update(entryRef, {
+                clockOutTime: new Date(),
+                status: 'clocked-out'
+            });
+
+            await batch.commit();
+            
+            setStatusMessage({ type: 'success', text: 'Timbratura di uscita registrata!' });
+            fetchEmployeeData();
+        } catch (error) {
+            console.error("Errore ClockOut:", error);
+            setStatusMessage({ type: 'error', text: "Errore durante la timbratura di uscita." });
         }
     };
 
@@ -245,17 +236,16 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
             await updateDoc(entryRef, {
                 pauses: arrayUnion({ start: Timestamp.now(), end: null })
             });
-            fetchEmployeeData();
             setStatusMessage({ type: 'success', text: 'Pausa iniziata.' });
+            fetchEmployeeData();
         } catch (error) {
-            console.error("Errore durante l'inizio della pausa:", error);
+            console.error("Errore Inizio Pausa:", error);
             setStatusMessage({ type: 'error', text: "Errore durante l'inizio della pausa." });
         }
     };
 
-    const handleEndPause = async (refresh = true) => {
+    const handleEndPause = async () => {
         if (!isDeviceOk || !activeEntry) return;
-
         const currentPauses = activeEntry.pauses || [];
         const openPauseIndex = currentPauses.findIndex(p => !p.end);
 
@@ -263,34 +253,32 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
             currentPauses[openPauseIndex].end = Timestamp.now();
             try {
                 const entryRef = doc(db, "time_entries", activeEntry.id);
-                await updateDoc(entryRef, {
-                    pauses: currentPauses
-                });
-                if (refresh) fetchEmployeeData();
+                await updateDoc(entryRef, { pauses: currentPauses });
                 setStatusMessage({ type: 'success', text: 'Pausa terminata.' });
+                fetchEmployeeData();
             } catch (error) {
-                console.error("Errore durante la fine della pausa:", error);
+                console.error("Errore Fine Pausa:", error);
                 setStatusMessage({ type: 'error', text: "Errore durante la fine della pausa." });
             }
         }
     };
-
 
     if (isLoading) {
         return <div className="min-h-screen flex items-center justify-center bg-gray-100"><p>Caricamento dati dipendente...</p></div>;
     }
 
     if (!employeeData) {
-        return <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 p-4">
-            <CompanyLogo />
-            <p className="mt-8 text-xl text-red-600 text-center">Errore: Dati dipendente non trovati o non autorizzato.</p>
-            <button onClick={handleLogout} className="mt-4 px-6 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600">Logout</button>
-        </div>;
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 p-4">
+                <CompanyLogo />
+                <p className="mt-8 text-xl text-red-600 text-center">Errore: Dati dipendente non trovati o non autorizzato.</p>
+                <button onClick={handleLogout} className="mt-4 px-6 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600">Logout</button>
+            </div>
+        );
     }
 
-    const currentDateTime = new Date();
-    const formattedDate = currentDateTime.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-    const formattedTime = currentDateTime.toLocaleTimeString('it-IT');
+    const formattedDate = currentTime.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    const formattedTime = currentTime.toLocaleTimeString('it-IT');
 
     return (
         <div className="min-h-screen bg-gray-100 flex flex-col items-center p-4">
@@ -354,7 +342,7 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
                     )}
                 </div>
                 {statusMessage.text && (
-                    <p className={`${statusMessage.type === 'error' ? 'text-red-500' : 'text-green-500'} text-sm mt-4 text-center`}>{statusMessage.text}</p>
+                    <p className={`${statusMessage.type === 'error' ? 'text-red-500' : statusMessage.type === 'info' ? 'text-blue-500' : 'text-green-500'} text-sm mt-4 text-center`}>{statusMessage.text}</p>
                 )}
             </main>
 
