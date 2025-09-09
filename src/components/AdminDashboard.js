@@ -12,25 +12,42 @@ import CompanyLogo from './CompanyLogo';
 // Componente DashboardView
 const DashboardView = ({ employees, activeEntries, workAreas }) => {
     
-    const calculateCurrentHours = () => {
-        let totalHours = 0;
-        const now = new Date();
-        activeEntries.forEach(entry => {
-            const clockInTime = entry.clockInTime.toDate();
-            let pauseDurationMs = 0;
+const calculateCurrentHours = () => {
+    let totalNetMinutes = 0;
+    const now = new Date();
 
-            if (entry.pauses && entry.pauses.length > 0) {
-                entry.pauses.forEach(p => {
-                    const start = p.start.toDate();
-                    const end = p.end ? p.end.toDate() : now;
-                    pauseDurationMs += (end - start);
-                });
-            }
+    activeEntries.forEach(entry => {
+        const clockInTime = entry.clockInTime.toDate();
+        let pauseDurationMs = 0;
 
-            const durationMs = (now - clockInTime) - pauseDurationMs;
-            totalHours += durationMs / 3600000;
-        });
-        return totalHours > 0 ? totalHours.toFixed(2) : '0.00';
+        if (entry.pauses && entry.pauses.length > 0) {
+            entry.pauses.forEach(p => {
+                const start = p.start.toDate();
+                // Se la pausa non è terminata, calcola fino ad ora
+                const end = p.end ? p.end.toDate() : now;
+                pauseDurationMs += (end.getTime() - start.getTime());
+            });
+        }
+
+        const durationMs = (now.getTime() - clockInTime.getTime()) - pauseDurationMs;
+        
+        // Aggiunge i minuti netti di questo dipendente al totale
+        if (durationMs > 0) {
+            totalNetMinutes += Math.round(durationMs / 60000);
+        }
+    });
+
+    if (totalNetMinutes <= 0) {
+        return '0.00';
+    }
+
+    // Ora converte il totale dei minuti in ore decimali
+    const hours = Math.floor(totalNetMinutes / 60);
+    const minutes = totalNetMinutes % 60;
+    const decimalHours = hours + (minutes / 60);
+
+    return decimalHours.toFixed(2);
+};
     };
 
     const activeEmployeesDetails = activeEntries.map(entry => {
@@ -97,7 +114,7 @@ const DashboardView = ({ employees, activeEntries, workAreas }) => {
             </div>
         </div>
     );
-};
+    
 
 
 // Componente per la Gestione Dipendenti
