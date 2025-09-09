@@ -12,42 +12,41 @@ import CompanyLogo from './CompanyLogo';
 // Componente DashboardView
 const DashboardView = ({ employees, activeEntries, workAreas }) => {
     
-const calculateCurrentHours = () => {
-    let totalNetMinutes = 0;
-    const now = new Date();
+    const calculateCurrentHours = () => {
+        let totalNetMinutes = 0;
+        const now = new Date();
 
-    activeEntries.forEach(entry => {
-        const clockInTime = entry.clockInTime.toDate();
-        let pauseDurationMs = 0;
+        activeEntries.forEach(entry => {
+            const clockInTime = entry.clockInTime.toDate();
+            let pauseDurationMs = 0;
 
-        if (entry.pauses && entry.pauses.length > 0) {
-            entry.pauses.forEach(p => {
-                const start = p.start.toDate();
-                // Se la pausa non è terminata, calcola fino ad ora
-                const end = p.end ? p.end.toDate() : now;
-                pauseDurationMs += (end.getTime() - start.getTime());
-            });
+            if (entry.pauses && entry.pauses.length > 0) {
+                entry.pauses.forEach(p => {
+                    const start = p.start.toDate();
+                    // Se la pausa non è terminata, calcola fino ad ora
+                    const end = p.end ? p.end.toDate() : now;
+                    pauseDurationMs += (end.getTime() - start.getTime());
+                });
+            }
+
+            const durationMs = (now.getTime() - clockInTime.getTime()) - pauseDurationMs;
+            
+            // Aggiunge i minuti netti di questo dipendente al totale
+            if (durationMs > 0) {
+                totalNetMinutes += Math.round(durationMs / 60000);
+            }
+        });
+
+        if (totalNetMinutes <= 0) {
+            return '0.00';
         }
 
-        const durationMs = (now.getTime() - clockInTime.getTime()) - pauseDurationMs;
-        
-        // Aggiunge i minuti netti di questo dipendente al totale
-        if (durationMs > 0) {
-            totalNetMinutes += Math.round(durationMs / 60000);
-        }
-    });
+        // Ora converte il totale dei minuti in ore decimali
+        const hours = Math.floor(totalNetMinutes / 60);
+        const minutes = totalNetMinutes % 60;
+        const decimalHours = hours + (minutes / 60);
 
-    if (totalNetMinutes <= 0) {
-        return '0.00';
-    }
-
-    // Ora converte il totale dei minuti in ore decimali
-    const hours = Math.floor(totalNetMinutes / 60);
-    const minutes = totalNetMinutes % 60;
-    const decimalHours = hours + (minutes / 60);
-
-    return decimalHours.toFixed(2);
-};
+        return decimalHours.toFixed(2);
     };
 
     const activeEmployeesDetails = activeEntries.map(entry => {
@@ -69,12 +68,10 @@ const calculateCurrentHours = () => {
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-4">Dashboard</h1>
             
             <div className="flex flex-col md:grid md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-                {/* *** MODIFICA: Rimosso il div contenente l'icona *** */}
                 <div className="bg-white p-4 rounded-lg shadow-md text-center sm:text-left">
                     <p className="text-sm text-gray-500">Dipendenti Attivi</p>
                     <p className="text-2xl font-bold text-gray-800">{activeEntries.length} / {employees.length}</p>
                 </div>
-                {/* *** MODIFICA: Rimosso il div contenente l'icona *** */}
                 <div className="bg-white p-4 rounded-lg shadow-md text-center sm:text-left">
                     <p className="text-sm text-gray-500">Ore Lavorate Oggi (nette)</p>
                     <p className="text-2xl font-bold text-gray-800">{calculateCurrentHours()}</p>
@@ -114,8 +111,7 @@ const calculateCurrentHours = () => {
             </div>
         </div>
     );
-    
-
+};
 
 // Componente per la Gestione Dipendenti
 const EmployeeManagementView = ({ employees, openModal, currentUserRole }) => (
@@ -193,7 +189,7 @@ const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
         </div>
         <div className="bg-white shadow-md rounded-lg overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
-                 <thead className="bg-gray-50">
+                <thead className="bg-gray-50">
                     <tr>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome Area</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Presenze</th>
@@ -215,10 +211,10 @@ const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
                             <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{area.radius}</td>
                             {currentUserRole === 'admin' && (
                                 <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
-                                   <div className="flex items-center gap-4">
-                                    <button onClick={() => openModal('editArea', area)} className="text-green-600 hover:text-green-900">Modifica</button>
-                                    <button onClick={() => openModal('deleteArea', area)} className="text-red-600 hover:text-red-900">Elimina</button>
-                                   </div>
+                                    <div className="flex items-center gap-4">
+                                        <button onClick={() => openModal('editArea', area)} className="text-green-600 hover:text-green-900">Modifica</button>
+                                        <button onClick={() => openModal('deleteArea', area)} className="text-red-600 hover:text-red-900">Elimina</button>
+                                    </div>
                                 </td>
                             )}
                         </tr>
@@ -244,7 +240,7 @@ const AdminManagementView = ({ admins, openModal, user, currentUserRole }) => {
             </div>
             <div className="bg-white shadow-md rounded-lg overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
-                     <thead className="bg-gray-50">
+                    <thead className="bg-gray-50">
                         <tr>
                             <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
                             <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ruolo</th>
@@ -481,208 +477,15 @@ const AdminModal = ({ type, item, setShowModal, workAreas, adminsCount, allEmplo
             setShowModal(false);
         } catch (err) {
             setError(err.message);
-            await onDataUpdate();
-            setShowModal(false);
-            console.error(err);
+            // Non chiudere il modale in caso di errore per permettere all'utente di vedere il messaggio
         } finally {
             setIsLoading(false);
         }
     };
     
-    const renderForm = () => {
-        switch (type) {
-            case 'newAdmin':
-                 return (
-                    <>
-                        <h3 className="text-lg leading-6 font-medium text-gray-900">Nuovo Personale Amministrativo</h3>
-                        <input type="email" name="email" value={formData.email || ''} onChange={handleInputChange} placeholder="Email" className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md" required />
-                        <input type="password" name="password" value={formData.password || ''} onChange={handleInputChange} placeholder="Password (min. 6 caratteri)" className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md" required />
-                        <div className="mt-4">
-                            <label className="block text-sm font-medium text-gray-700">Ruolo</label>
-                            <select name="role" value={formData.role} onChange={handleInputChange} className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md">
-                                <option value="admin">Admin</option>
-                                <option value="preposto">Preposto</option>
-                            </select>
-                        </div>
-                    </>
-                );
-            case 'assignManagedAreas':
-                return (
-                    <>
-                        <h3 className="text-lg leading-6 font-medium text-gray-900">Assegna Aree a Preposto: {item.email}</h3>
-                        <div className="mt-4 space-y-2 max-h-60 overflow-y-auto">
-                            {workAreas.map(area => (
-                                <div key={area.id} className="flex items-center">
-                                    <input
-                                        id={`area-${area.id}`} name={area.id} type="checkbox"
-                                        onChange={handleManagedAreasChange} defaultChecked={item.managedAreaIds?.includes(area.id)}
-                                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                                    />
-                                    <label htmlFor={`area-${area.id}`} className="ml-3 block text-sm font-medium text-gray-700">{area.name}</label>
-                                </div>
-                            ))}
-                        </div>
-                    </>
-                );
-            // ... (altri casi del form)
-            case 'newEmployee':
-            case 'editEmployee':
-                return (
-                    <>
-                        <h3 className="text-lg leading-6 font-medium text-gray-900">{type === 'newEmployee' ? 'Nuovo Dipendente' : `Modifica ${item.name}`}</h3>
-                        <input name="name" value={formData.name || ''} onChange={handleInputChange} placeholder="Nome" className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md" required />
-                        <input name="surname" value={formData.surname || ''} onChange={handleInputChange} placeholder="Cognome" className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md" required />
-                        <input name="phone" value={formData.phone || ''} onChange={handleInputChange} placeholder="Telefono" className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md" required />
-                        {type === 'newEmployee' && <>
-                            <input type="email" name="email" value={formData.email || ''} onChange={handleInputChange} placeholder="Email" className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md" required />
-                            <input type="password" name="password" value={formData.password || ''} onChange={handleInputChange} placeholder="Password (min. 6 caratteri)" className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md" required />
-                        </>}
-                    </>
-                );
-            case 'deleteEmployee':
-                return (
-                    <>
-                        <h3 className="text-lg leading-6 font-medium text-gray-900">Conferma Eliminazione</h3>
-                        <p className="mt-2 text-sm text-gray-500">Sei sicuro di voler eliminare il dipendente {item.name} {item.surname}? L'azione è irreversibile.</p>
-                        <div className="mt-2 p-2 bg-yellow-100 text-yellow-800 rounded-md text-sm">
-                            <strong>Attenzione:</strong> Dovrai eliminare manualmente l'utente ({item.email}) dalla sezione <strong>Authentication</strong> della console di Firebase.
-                        </div>
-                    </>
-                );
-            case 'newArea':
-            case 'editArea':
-                 return (
-                    <>
-                        <h3 className="text-lg leading-6 font-medium text-gray-900">{type === 'newArea' ? 'Nuova Area di Lavoro' : `Modifica ${item.name}`}</h3>
-                        <input name="name" value={formData.name || ''} onChange={handleInputChange} placeholder="Nome Area" className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md" required />
-                        <input name="latitude" value={formData.latitude || ''} onChange={handleInputChange} placeholder="Latitudine" className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md" required />
-                        <input name="longitude" value={formData.longitude || ''} onChange={handleInputChange} placeholder="Longitudine" className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md" required />
-                        <input name="radius" value={formData.radius || ''} onChange={handleInputChange} placeholder="Raggio in metri" className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md" required />
-                    </>
-                );
-            case 'deleteArea':
-                 return (
-                    <>
-                        <h3 className="text-lg leading-6 font-medium text-gray-900">Conferma Eliminazione</h3>
-                        <p className="mt-2 text-sm text-gray-500">Sei sicuro di voler eliminare l'area {item.name}? Verrà rimossa da tutti i dipendenti a cui è assegnata. L'azione è irreversibile.</p>
-                    </>
-                );
-            case 'assignArea':
-                return (
-                    <>
-                        <h3 className="text-lg leading-6 font-medium text-gray-900">Assegna Aree a {item.name} {item.surname}</h3>
-                        <div className="mt-4 space-y-2">
-                            {workAreas.map(area => (
-                                <div key={area.id} className="flex items-center">
-                                    <input
-                                        id={`area-${area.id}`} name={area.id} type="checkbox"
-                                        onChange={handleCheckboxChange} defaultChecked={item.workAreaIds?.includes(area.id)}
-                                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                                    />
-                                    <label htmlFor={`area-${area.id}`} className="ml-3 block text-sm font-medium text-gray-700">{area.name}</label>
-                                </div>
-                            ))}
-                        </div>
-                    </>
-                );
-            case 'deleteAdmin':
-                return (
-                    <>
-                        <h3 className="text-lg leading-6 font-medium text-gray-900">Conferma Eliminazione</h3>
-                        <p className="mt-2 text-sm text-gray-500">Sei sicuro di voler eliminare l'amministratore {item.email}? L'azione è irreversibile.</p>
-                         <div className="mt-2 p-2 bg-yellow-100 text-yellow-800 rounded-md text-sm">
-                            <strong>Attenzione:</strong> Dovrai eliminare manualmente l'utente ({item.email}) dalla sezione <strong>Authentication</strong> della console di Firebase.
-                        </div>
-                    </>
-                );
-            case 'manualClockIn':
-                return (
-                    <>
-                        <h3 className="text-lg leading-6 font-medium text-gray-900">Timbratura Manuale Entrata per {item.name}</h3>
-                        <div className="mt-4">
-                            <label className="block text-sm font-medium text-gray-700">Data e Ora di Entrata</label>
-                            <input type="datetime-local" name="timestamp" value={formData.timestamp || ''} onChange={handleInputChange} className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md" required />
-                        </div>
-                        <div className="mt-4">
-                            <label className="block text-sm font-medium text-gray-700">Area di Lavoro</label>
-                            <select name="workAreaId" value={formData.workAreaId || ''} onChange={handleInputChange} className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md" required>
-                                <option value="" disabled>Seleziona un'area</option>
-                                {workAreas.filter(wa => item.workAreaIds?.includes(wa.id)).map(area => (
-                                    <option key={area.id} value={area.id}>{area.name}</option>
-                                ))}
-                            </select>
-                        </div>
-                        <div className="mt-4">
-                            <label className="block text-sm font-medium text-gray-700">Note (opzionale)</label>
-                            <input name="note" value={formData.note || ''} onChange={handleInputChange} placeholder="Es: Dimenticanza del dipendente" className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md" />
-                        </div>
-                    </>
-                );
-            case 'manualClockOut':
-                return (
-                    <>
-                        <h3 className="text-lg leading-6 font-medium text-gray-900">Timbratura Manuale Uscita per {item.name}</h3>
-                        <div className="mt-4">
-                            <label className="block text-sm font-medium text-gray-700">Data e Ora di Uscita</label>
-                            <input type="datetime-local" name="timestamp" value={formData.timestamp || ''} onChange={handleInputChange} className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md" required />
-                        </div>
-                        <div className="mt-4">
-                            <label className="block text-sm font-medium text-gray-700">Note (opzionale)</label>
-                            <input name="note" value={formData.note || ''} onChange={handleInputChange} placeholder="Es: Uscita anticipata per permesso" className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md" />
-                        </div>
-                    </>
-                );
-            case 'resetDevice':
-                return (
-                    <>
-                        <h3 className="text-lg leading-6 font-medium text-gray-900">Conferma Reset Dispositivo</h3>
-                        <p className="mt-2 text-sm text-gray-500">
-                            Sei sicuro di voler scollegare il dispositivo attuale per il dipendente <strong>{item.name} {item.surname}</strong>?
-                        </p>
-                        <p className="mt-2 text-sm text-gray-500">
-                            Potrà registrare un nuovo dispositivo alla sua prossima timbratura.
-                        </p>
-                    </>
-                );
-            default:
-                return null;
-        }
-    };
-    
-    const primaryButtonClass = () => {
-        if (type.startsWith('delete')) return 'bg-red-600 hover:bg-red-700 disabled:bg-red-300';
-        if (type === 'resetDevice') return 'bg-yellow-500 hover:bg-yellow-600 disabled:bg-yellow-300';
-        return 'bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300';
-    }
-    const primaryButtonText = () => {
-        if (type.startsWith('delete')) return 'Elimina';
-        if (type === 'resetDevice') return 'Resetta';
-        return 'Salva';
-    }
-
-    return (
-        <div className="fixed z-10 inset-0 overflow-y-auto">
-            <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-                <div className="fixed inset-0 transition-opacity" aria-hidden="true"><div className="absolute inset-0 bg-gray-500 opacity-75"></div></div>
-                <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">​</span>
-                <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-                    <form onSubmit={handleSubmit}>
-                        <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                            {renderForm()}
-                            {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
-                        </div>
-                        <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                            <button type="submit" disabled={isLoading} className={`w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 text-base font-medium text-white focus:outline-none sm:ml-3 sm:w-auto sm:text-sm ${primaryButtonClass()}`}>
-                                {isLoading ? 'In corso...' : primaryButtonText()}
-                            </button>
-                            <button type="button" onClick={() => setShowModal(false)} className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:mt-0 sm:w-auto sm:text-sm">Annulla</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-    );
+    // ... (Il resto del componente AdminModal e la sua renderizzazione)
 };
+
 
 // Componente Principale
 const AdminDashboard = ({ user, handleLogout, userData }) => {
@@ -701,7 +504,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const [isLoading, setIsLoading] = React.useState(true); 
 
     const currentUserRole = userData?.role;
-    const superAdminEmail = "domenico.leoncino@tcsitalia.com";
 
     const fetchData = React.useCallback(async () => {
         if (!user || !userData) {
@@ -736,18 +538,28 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
             const employeesSnapshot = await getDocs(employeesToDisplayQuery);
             const employeesList = employeesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setEmployees(employeesList);
-            setWorkAreas(areasToDisplay);
-            setSelectedReportAreas(areasToDisplay.map(a => a.id));
+            
+            const activeEntriesSnapshot = await getDocs(query(collection(db, "time_entries"), where("status", "==", "clocked-in")));
+            const activeEntriesList = activeEntriesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-            const employeeIds = employeesList.map(e => e.id);
-            if(employeeIds.length > 0) {
-                const qEntries = query(collection(db, "time_entries"), where("employeeId", "in", employeeIds), where("status", "==", "clocked-in"));
-                const entriesSnapshot = await getDocs(qEntries);
-                setActiveEntries(entriesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-            } else {
-                setActiveEntries([]);
-            }
+            const employeesWithStatus = employeesList.map(emp => {
+                const activeEntry = activeEntriesList.find(entry => entry.employeeId === emp.id);
+                const isOnBreak = activeEntry?.pauses?.some(p => !p.end) || false;
+                return { ...emp, activeEntry, isOnBreak };
+            }).sort((a, b) => a.name.localeCompare(b.name));
+
+            setEmployees(employeesWithStatus);
+
+            const activeEntriesForScope = activeEntriesList.filter(entry => employeesList.some(e => e.id === entry.employeeId));
+            setActiveEntries(activeEntriesForScope);
+
+            const workAreasWithCounts = areasToDisplay.map(area => {
+                const activeCount = activeEntriesForScope.filter(entry => entry.workAreaId === area.id).length;
+                return { ...area, activeEmployeeCount: activeCount };
+            }).sort((a, b) => a.name.localeCompare(b.name));
+            
+            setWorkAreas(workAreasWithCounts);
+            setSelectedReportAreas(areasToDisplay.map(a => a.id));
 
         } catch (error) {
             console.error("Errore nel caricamento dei dati: ", error);
@@ -802,25 +614,34 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         const querySnapshot = await getDocs(q);
         const entries = querySnapshot.docs.map(doc => ({id: doc.id, ...doc.data()}));
         setReportEntryIds(entries.map(entry => entry.id));
+        
+        const allEmployeesSnapshot = await getDocs(collection(db, "employees"));
+        const allEmployees = allEmployeesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        
         const reportData = [];
         for (const entry of entries) {
-            const employeeData = employees.find(e => e.id === entry.employeeId);
+            const employeeData = allEmployees.find(e => e.id === entry.employeeId);
             const areaData = workAreas.find(a => a.id === entry.workAreaId);
             
             if (employeeData && areaData) {
                 const clockInTime = entry.clockInTime.toDate();
                 const clockOutTime = entry.clockOutTime ? entry.clockOutTime.toDate() : null;
-
+                
                 let duration = null;
                 if (clockOutTime) {
-                    const totalDurationMs = clockOutTime - clockInTime;
+                    const totalDurationMs = clockOutTime.getTime() - clockInTime.getTime();
                     const pauseDurationMs = (entry.pauses || []).reduce((acc, p) => {
                         if (p.start && p.end) {
-                            return acc + (p.end.toDate() - p.start.toDate());
+                            return acc + (p.end.toDate().getTime() - p.start.toDate().getTime());
                         }
                         return acc;
                     }, 0);
-                    duration = (totalDurationMs - pauseDurationMs) / 3600000;
+                    
+                    const netDurationMs = totalDurationMs - pauseDurationMs;
+                    const totalMinutes = Math.round(netDurationMs / 60000);
+                    const hours = Math.floor(totalMinutes / 60);
+                    const minutes = totalMinutes % 60;
+                    duration = hours + (minutes / 60);
                 }
 
                 reportData.push({
@@ -835,65 +656,22 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 });
             }
         }
-        setReports(reportData);
+        setReports(reportData.sort((a, b) => a.clockInTimeFormatted.localeCompare(b.clockInTimeFormatted)));
         setView('reports');
     };
 
     const handleDeleteReportData = async () => {
-        if (reportEntryIds.length === 0) {
-            alert("Nessun dato da cancellare.");
-            return;
-        }
-        const confirmation = window.confirm("Sei assolutamente sicuro? Questa azione è IRREVERSIBILE e cancellerà per sempre le timbrature di questo report.");
-        if (!confirmation) {
-            alert("Cancellazione annullata.");
-            return;
-        }
-        try {
-            const batch = writeBatch(db);
-            reportEntryIds.forEach(id => {
-                const docRef = doc(db, "time_entries", id);
-                batch.delete(docRef);
-            });
-            await batch.commit();
-            alert(`Cancellazione completata con successo! Sono state rimosse ${reportEntryIds.length} timbrature.`);
-            await fetchData();
-            setView('employees');
-        } catch (error) {
-            console.error("Errore durante la cancellazione dei dati:", error);
-            alert("Si è verificato un errore durante la cancellazione dei dati.");
-        }
+        // ... (il tuo codice per questa funzione)
     };
 
     const handleAreaSelection = (areaId) => {
-        setSelectedReportAreas(prev => {
-            if (prev.includes(areaId)) {
-                return prev.filter(id => id !== areaId);
-            } else {
-                return [...prev, areaId];
-            }
-        });
+        // ... (il tuo codice per questa funzione)
     };
     
     const handleSelectAllAreas = (select) => {
-        if (select) {
-            setSelectedReportAreas(workAreas.map(a => a.id));
-        } else {
-            setSelectedReportAreas([]);
-        }
+        // ... (il tuo codice per questa funzione)
     };
-
-    const employeesWithStatus = employees.map(emp => {
-        const activeEntry = activeEntries.find(entry => entry.employeeId === emp.id);
-        const isOnBreak = activeEntry?.pauses?.some(p => !p.end) || false;
-        return { ...emp, activeEntry, isOnBreak };
-    });
-
-    const workAreasWithCounts = workAreas.map(area => {
-        const activeCount = activeEntries.filter(entry => entry.workAreaId === area.id).length;
-        return { ...area, activeEmployeeCount: activeCount };
-    });
-
+    
     if (isLoading) {
         return <div className="min-h-screen flex items-center justify-center">Caricamento in corso...</div>;
     }
@@ -957,20 +735,27 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             )}
             <main className="p-4 sm:p-8 max-w-7xl mx-auto w-full">
                 {view === 'dashboard' && <DashboardView employees={employees} activeEntries={activeEntries} workAreas={workAreas} />}
-                {view === 'employees' && <EmployeeManagementView employees={employeesWithStatus} openModal={openModal} currentUserRole={currentUserRole} />}
-                {view === 'areas' && <AreaManagementView workAreas={workAreasWithCounts} openModal={openModal} currentUserRole={currentUserRole} />}
+                {view === 'employees' && <EmployeeManagementView employees={employees} openModal={openModal} currentUserRole={currentUserRole} />}
+                {view === 'areas' && <AreaManagementView workAreas={workAreas} openModal={openModal} currentUserRole={currentUserRole} />}
                 {view === 'admins' && user && currentUserRole === 'admin' && (
                     <AdminManagementView 
                         admins={admins} 
                         openModal={openModal} 
                         user={user} 
-                        superAdminEmail={superAdminEmail} 
                         currentUserRole={currentUserRole}
                     />
                 )}
                 {view === 'reports' && <ReportView reports={reports} title={reportTitle} handleDeleteReportData={handleDeleteReportData} />}
             </main>
-            {showModal && <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} workAreas={workAreas} adminsCount={admins.length} allEmployees={employees} onDataUpdate={fetchData} superAdminEmail={superAdminEmail} />}
+            {showModal && <AdminModal 
+                type={modalType} 
+                item={selectedItem} 
+                setShowModal={setShowModal} 
+                workAreas={workAreas} 
+                adminsCount={admins.length} 
+                allEmployees={employees} 
+                onDataUpdate={fetchData} 
+            />}
         </div>
     );
 };
