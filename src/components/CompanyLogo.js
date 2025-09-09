@@ -5,7 +5,7 @@
 import React from 'react';
 
 // URL diretto e stabile del logo aziendale.
-const LOGO_URL = 'https://imgur.com/gallery/tcs-italia-srl-UyUnDnN#kUQf7Te;
+const LOGO_URL = 'https://imgur.com/gallery/tcs-italia-srl-UyUnDnN#kUQf7Te';
 const PLACEHOLDER_URL = 'https://placehold.co/200x60/cccccc/ffffff?text=Logo';
 
 const handleImageError = (e) => {
