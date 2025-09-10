@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db, auth } from '../firebase';
-import { 
-    doc, setDoc, collection, addDoc, getDocs, query, where, 
-    updateDoc, deleteDoc, writeBatch, Timestamp 
+import {
+    doc, setDoc, collection, addDoc, getDocs, query, where,
+    updateDoc, deleteDoc, writeBatch, Timestamp
 } from 'firebase/firestore';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import CompanyLogo from './CompanyLogo';
@@ -10,6 +10,7 @@ import CompanyLogo from './CompanyLogo';
 // --- SUB-COMPONENTI INTERNI ---
 
 const DashboardView = ({ employees, activeEntries, workAreas }) => {
+    // ... (Questo componente è già corretto, lo lascio invariato)
     const calculateCurrentHours = () => {
         let totalNetMinutes = 0;
         const now = new Date();
@@ -93,79 +94,79 @@ const DashboardView = ({ employees, activeEntries, workAreas }) => {
 };
 
 const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortConfig, requestSort, searchTerm, setSearchTerm }) => {
+    // ... (Questo componente è già corretto, lo lascio invariato)
     const getSortIndicator = (key) => {
         if (!sortConfig || sortConfig.key !== key) return '';
         return sortConfig.direction === 'ascending' ? ' ▲' : ' ▼';
     };
 
     return (
-    <div>
-        <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Gestione Dipendenti</h1>
-            {currentUserRole === 'admin' && <button onClick={() => openModal('newEmployee')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">Aggiungi Dipendente</button>}
-        </div>
-        
-        <div className="mb-4">
-            <input 
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Cerca dipendente per nome o cognome..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-            />
-        </div>
-
-        <div className="bg-white shadow-md rounded-lg overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                    <tr>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onClick={() => requestSort('name')}>
-                            Nome{getSortIndicator('name')}
-                        </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onClick={() => requestSort('status')}>
-                            Stato{getSortIndicator('status')}
-                        </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aree</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Azioni</th>
-                    </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                    {employees.map(emp => (
-                        <tr key={emp.id}>
-                            <td className="px-4 py-2 whitespace-nowrap">
-                                <div className="text-sm font-medium text-gray-900">{emp.name} {emp.surname}</div>
-                                <div className="text-xs text-gray-500 break-all">{emp.email}</div>
-                                {emp.deviceIds && emp.deviceIds.length > 0 && <span className="text-xs text-green-600">({emp.deviceIds.length}/2 Dispositivi)</span>}
-                            </td>
-                            <td className="px-4 py-2 whitespace-nowrap">
-                                {emp.activeEntry ? (emp.isOnBreak ? <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">In Pausa</span> : <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Al Lavoro</span>) : <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Non al Lavoro</span>}
-                            </td>
-                            <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{emp.workAreaNames?.join(', ') || 'N/A'}</td>
-                            <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
-                                <div className="flex flex-col items-start gap-1">
-                                    {emp.activeEntry ? <button onClick={() => openModal('manualClockOut', emp)} className="px-2 py-1 text-xs bg-yellow-500 text-white rounded-md hover:bg-yellow-600 w-full text-center">Timbra Uscita</button> : <button onClick={() => openModal('manualClockIn', emp)} className="px-2 py-1 text-xs bg-blue-500 text-white rounded-md hover:bg-blue-600 w-full text-center">Timbra Entrata</button>}
-                                    {currentUserRole === 'admin' && (
-                                        <>
-                                            <div className="flex gap-2 w-full justify-start mt-1">
-                                                <button onClick={() => openModal('assignArea', emp)} className="text-xs text-indigo-600 hover:text-indigo-900">Aree</button>
-                                                <button onClick={() => openModal('editEmployee', emp)} className="text-xs text-green-600 hover:text-green-900">Modifica</button>
-                                                <button onClick={() => openModal('deleteEmployee', emp)} className="text-xs text-red-600 hover:text-red-900">Elimina</button>
-                                            </div>
-                                            {emp.deviceIds && emp.deviceIds.length > 0 && <button onClick={() => openModal('resetDevice', emp)} className="text-xs text-yellow-600 hover:text-yellow-900 mt-1">Resetta Disp.</button>}
-                                        </>
-                                    )}
-                                </div>
-                            </td>
+        <div>
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
+                <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Gestione Dipendenti</h1>
+                {currentUserRole === 'admin' && <button onClick={() => openModal('newEmployee')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">Aggiungi Dipendente</button>}
+            </div>
+            <div className="mb-4">
+                <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Cerca dipendente per nome o cognome..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                />
+            </div>
+            <div className="bg-white shadow-md rounded-lg overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                        <tr>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onClick={() => requestSort('name')}>
+                                Nome{getSortIndicator('name')}
+                            </th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onClick={() => requestSort('status')}>
+                                Stato{getSortIndicator('status')}
+                            </th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aree</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Azioni</th>
                         </tr>
-                    ))}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                        {employees.map(emp => (
+                            <tr key={emp.id}>
+                                <td className="px-4 py-2 whitespace-nowrap">
+                                    <div className="text-sm font-medium text-gray-900">{emp.name} {emp.surname}</div>
+                                    <div className="text-xs text-gray-500 break-all">{emp.email}</div>
+                                    {emp.deviceIds && emp.deviceIds.length > 0 && <span className="text-xs text-green-600">({emp.deviceIds.length}/2 Dispositivi)</span>}
+                                </td>
+                                <td className="px-4 py-2 whitespace-nowrap">
+                                    {emp.activeEntry ? (emp.isOnBreak ? <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">In Pausa</span> : <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Al Lavoro</span>) : <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Non al Lavoro</span>}
+                                </td>
+                                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{emp.workAreaNames?.join(', ') || 'N/A'}</td>
+                                <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
+                                    <div className="flex flex-col items-start gap-1">
+                                        {emp.activeEntry ? <button onClick={() => openModal('manualClockOut', emp)} className="px-2 py-1 text-xs bg-yellow-500 text-white rounded-md hover:bg-yellow-600 w-full text-center">Timbra Uscita</button> : <button onClick={() => openModal('manualClockIn', emp)} className="px-2 py-1 text-xs bg-blue-500 text-white rounded-md hover:bg-blue-600 w-full text-center">Timbra Entrata</button>}
+                                        {currentUserRole === 'admin' && (
+                                            <>
+                                                <div className="flex gap-2 w-full justify-start mt-1">
+                                                    <button onClick={() => openModal('assignArea', emp)} className="text-xs text-indigo-600 hover:text-indigo-900">Aree</button>
+                                                    <button onClick={() => openModal('editEmployee', emp)} className="text-xs text-green-600 hover:text-green-900">Modifica</button>
+                                                    <button onClick={() => openModal('deleteEmployee', emp)} className="text-xs text-red-600 hover:text-red-900">Elimina</button>
+                                                </div>
+                                                {emp.deviceIds && emp.deviceIds.length > 0 && <button onClick={() => openModal('resetDevice', emp)} className="text-xs text-yellow-600 hover:text-yellow-900 mt-1">Resetta Disp.</button>}
+                                            </>
+                                        )}
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
         </div>
-    </div>
     );
 }
 
 const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
+    // ... (Questo componente è già corretto, lo lascio invariato)
     <div>
         <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Gestione Aree di Lavoro</h1>
@@ -201,6 +202,7 @@ const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
 );
 
 const AdminManagementView = ({ admins, openModal, user, superAdminEmail }) => {
+    // ... (Questo componente è già corretto, lo lascio invariato)
     const isSuperAdmin = user.email === superAdminEmail;
 
     const adminsToDisplay = admins.filter(admin => {
@@ -249,9 +251,10 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail }) => {
 };
 
 const ReportView = ({ reports, title, handleExportXml }) => {
+    // ... (Questo componente è già corretto, lo lascio invariato)
     const handleExportExcel = () => {
         if (typeof window.XLSX === 'undefined') { alert("La libreria di esportazione non è ancora stata caricata. Riprova tra un momento."); return; }
-        const dataToExport = reports.map(entry => ({'Dipendente': entry.employeeName, 'Area': entry.areaName, 'Data': entry.clockInDate, 'Entrata': entry.clockInTimeFormatted, 'Uscita': entry.clockOutTimeFormatted, 'Ore Lavorate': (entry.duration !== null) ? parseFloat(entry.duration.toFixed(2)) : "In corso", 'Note': entry.note}));
+        const dataToExport = reports.map(entry => ({ 'Dipendente': entry.employeeName, 'Area': entry.areaName, 'Data': entry.clockInDate, 'Entrata': entry.clockInTimeFormatted, 'Uscita': entry.clockOutTimeFormatted, 'Ore Lavorate': (entry.duration !== null) ? parseFloat(entry.duration.toFixed(2)) : "In corso", 'Note': entry.note }));
         const ws = window.XLSX.utils.json_to_sheet(dataToExport);
         const wb = window.XLSX.utils.book_new();
         window.XLSX.utils.book_append_sheet(wb, ws, "Report Ore");
@@ -301,23 +304,26 @@ const ReportView = ({ reports, title, handleExportXml }) => {
     );
 };
 
+// --- MODALE CORRETTO E COMPLETATO ---
 const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAdminEmail, user, allEmployees }) => {
-    const [formData, setFormData] = useState(item ? { ...item } : {});
+    const [formData, setFormData] = useState(item || {});
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const isSuperAdmin = user.email === superAdminEmail;
-    
+
     const handleInputChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+    
     const handleCheckboxChange = (e) => {
         const { name, checked } = e.target;
         const currentAreas = formData.workAreaIds || item?.workAreaIds || [];
-        if(checked) {
-            setFormData({...formData, workAreaIds: [...currentAreas, name]});
+        if (checked) {
+            setFormData({ ...formData, workAreaIds: [...currentAreas, name] });
         } else {
-            setFormData({...formData, workAreaIds: currentAreas.filter(id => id !== name)});
+            setFormData({ ...formData, workAreaIds: currentAreas.filter(id => id !== name) });
         }
     };
-     const handleManagedAreasChange = (e) => {
+
+    const handleManagedAreasChange = (e) => {
         const { name, checked } = e.target;
         const currentAreas = formData.managedAreaIds || item?.managedAreaIds || [];
         if (checked) {
@@ -334,9 +340,11 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
             now.setMilliseconds(0);
             const localDateTime = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
             setFormData({ ...item, timestamp: localDateTime, workAreaId: item?.workAreaIds?.[0] || '', note: item?.activeEntry?.note || '' });
+        } else {
+            setFormData(item ? { ...item } : {});
         }
     }, [type, item]);
-
+    
     const handleSubmit = async (e) => {
         e.preventDefault();
         if ((type === 'newEmployee' || type === 'newAdmin') && formData.password && formData.password.length < 6) { setError("La password deve essere di almeno 6 caratteri."); return; }
@@ -386,7 +394,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                     break;
                 case 'deleteAdmin':
                     if (item.email === superAdminEmail) { throw new Error("Non puoi eliminare il Super Admin."); }
-                    await deleteDoc(doc(db, "users", item.id)); 
+                    await deleteDoc(doc(db, "users", item.id));
                     break;
                 case 'assignManagedAreas':
                     const selectedManagedAreaNames = workAreas.filter(area => formData.managedAreaIds?.includes(area.id)).map(area => area.name);
@@ -399,8 +407,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                     await updateDoc(doc(db, "time_entries", item.activeEntry.id), { clockOutTime: new Date(formData.timestamp), status: 'clocked-out', note: formData.note || item.activeEntry.note || null });
                     break;
                 case 'resetDevice':
-                    const employeeRef = doc(db, "employees", item.id);
-                    await updateDoc(employeeRef, { deviceIds: [] });
+                    await updateDoc(doc(db, "employees", item.id), { deviceIds: [] });
                     break;
                 default: break;
             }
@@ -413,14 +420,138 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
             setIsLoading(false);
         }
     };
-    
-    const renderForm = () => {
-        // ... (Il JSX per tutti i tipi di modale va qui)
-        return <div>Form for {type}</div>;
+
+    const titles = {
+        newEmployee: 'Aggiungi Nuovo Dipendente',
+        editEmployee: 'Modifica Dati Dipendente',
+        deleteEmployee: 'Elimina Dipendente',
+        newArea: 'Aggiungi Nuova Area',
+        editArea: 'Modifica Area di Lavoro',
+        deleteArea: 'Elimina Area di Lavoro',
+        assignArea: `Assegna Aree a ${item?.name} ${item?.surname}`,
+        newAdmin: 'Aggiungi Personale Amministrativo',
+        deleteAdmin: 'Elimina Personale Amministrativo',
+        assignManagedAreas: `Assegna Aree a Preposto ${item?.name}`,
+        manualClockIn: `Timbra Entrata per ${item?.name} ${item?.surname}`,
+        manualClockOut: `Timbra Uscita per ${item?.name} ${item?.surname}`,
+        resetDevice: `Resetta Dispositivi di ${item?.name} ${item?.surname}`,
     };
-    
-    return ( <div className="fixed z-10 inset-0 overflow-y-auto"> ... </div> );
+
+    const renderForm = () => {
+        switch (type) {
+            case 'newEmployee':
+            case 'editEmployee':
+                return (
+                    <div className="space-y-4">
+                        <input name="name" value={formData.name || ''} onChange={handleInputChange} placeholder="Nome" required className="w-full p-2 border rounded" />
+                        <input name="surname" value={formData.surname || ''} onChange={handleInputChange} placeholder="Cognome" required className="w-full p-2 border rounded" />
+                        <input name="phone" value={formData.phone || ''} onChange={handleInputChange} placeholder="Telefono" className="w-full p-2 border rounded" />
+                        {type === 'newEmployee' && (
+                            <>
+                                <input type="email" name="email" value={formData.email || ''} onChange={handleInputChange} placeholder="Email" required className="w-full p-2 border rounded" />
+                                <input type="password" name="password" value={formData.password || ''} onChange={handleInputChange} placeholder="Password (min. 6 caratteri)" required className="w-full p-2 border rounded" />
+                            </>
+                        )}
+                    </div>
+                );
+            case 'newArea':
+            case 'editArea':
+                 return (
+                    <div className="space-y-4">
+                        <input name="name" value={formData.name || ''} onChange={handleInputChange} placeholder="Nome Area" required className="w-full p-2 border rounded" />
+                        <input type="number" step="any" name="latitude" value={formData.latitude || ''} onChange={handleInputChange} placeholder="Latitudine" required className="w-full p-2 border rounded" />
+                        <input type="number" step="any" name="longitude" value={formData.longitude || ''} onChange={handleInputChange} placeholder="Longitudine" required className="w-full p-2 border rounded" />
+                        <input type="number" name="radius" value={formData.radius || ''} onChange={handleInputChange} placeholder="Raggio (metri)" required className="w-full p-2 border rounded" />
+                    </div>
+                );
+            case 'assignArea':
+                return (
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                        {workAreas.map(area => (
+                            <div key={area.id} className="flex items-center">
+                                <input type="checkbox" id={area.id} name={area.id} checked={formData.workAreaIds?.includes(area.id) || false} onChange={handleCheckboxChange} className="h-4 w-4" />
+                                <label htmlFor={area.id} className="ml-2">{area.name}</label>
+                            </div>
+                        ))}
+                    </div>
+                );
+            case 'assignManagedAreas':
+                return (
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                        {workAreas.map(area => (
+                            <div key={area.id} className="flex items-center">
+                                <input type="checkbox" id={area.id} name={area.id} checked={formData.managedAreaIds?.includes(area.id) || false} onChange={handleManagedAreasChange} className="h-4 w-4" />
+                                <label htmlFor={area.id} className="ml-2">{area.name}</label>
+                            </div>
+                        ))}
+                    </div>
+                );
+            case 'manualClockIn':
+            case 'manualClockOut':
+                 return (
+                     <div className="space-y-4">
+                         <input type="datetime-local" name="timestamp" value={formData.timestamp || ''} onChange={handleInputChange} required className="w-full p-2 border rounded" />
+                         {type === 'manualClockIn' && (
+                             <select name="workAreaId" value={formData.workAreaId || ''} onChange={handleInputChange} required className="w-full p-2 border rounded">
+                                 <option value="">Seleziona Area</option>
+                                 {item.workAreaIds.map(areaId => {
+                                     const area = workAreas.find(a => a.id === areaId);
+                                     return area ? <option key={area.id} value={area.id}>{area.name}</option> : null;
+                                 })}
+                             </select>
+                         )}
+                         <textarea name="note" value={formData.note || ''} onChange={handleInputChange} placeholder="Note (opzionale)" className="w-full p-2 border rounded"></textarea>
+                     </div>
+                 );
+             case 'newAdmin':
+                return (
+                    <div className="space-y-4">
+                        <input name="name" value={formData.name || ''} onChange={handleInputChange} placeholder="Nome" required className="w-full p-2 border rounded" />
+                        <input name="surname" value={formData.surname || ''} onChange={handleInputChange} placeholder="Cognome" required className="w-full p-2 border rounded" />
+                        <input type="email" name="email" value={formData.email || ''} onChange={handleInputChange} placeholder="Email" required className="w-full p-2 border rounded" />
+                        <input type="password" name="password" value={formData.password || ''} onChange={handleInputChange} placeholder="Password (min. 6 caratteri)" required className="w-full p-2 border rounded" />
+                        {isSuperAdmin && (
+                             <select name="role" value={formData.role || 'preposto'} onChange={handleInputChange} required className="w-full p-2 border rounded">
+                                <option value="preposto">Preposto</option>
+                                <option value="admin">Admin</option>
+                            </select>
+                        )}
+                    </div>
+                );
+            case 'deleteEmployee': return <p>Sei sicuro di voler eliminare il dipendente <strong>{item.name} {item.surname}</strong>? L'azione è irreversibile.</p>;
+            case 'deleteArea': return <p>Sei sicuro di voler eliminare l'area <strong>{item.name}</strong>? Verrà rimossa da tutti i dipendenti a cui è assegnata.</p>;
+            case 'deleteAdmin': return <p>Sei sicuro di voler eliminare l'utente <strong>{item.name} {item.surname}</strong>?</p>;
+            case 'resetDevice': return <p>Sei sicuro di voler resettare i dispositivi per <strong>{item.name} {item.surname}</strong>? Potrà registrare 2 nuovi dispositivi.</p>;
+            default: return null;
+        }
+    };
+
+    return (
+        <div className="fixed z-50 inset-0 overflow-y-auto bg-gray-600 bg-opacity-75 flex items-center justify-center">
+            <div className="bg-white rounded-lg shadow-xl p-6 m-4 max-w-lg w-full">
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-medium text-gray-900">{titles[type]}</h3>
+                    <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
+                        <span className="text-2xl">&times;</span>
+                    </button>
+                </div>
+                <form onSubmit={handleSubmit}>
+                    <div className="mb-4">
+                        {renderForm()}
+                    </div>
+                    {error && <p className="text-sm text-red-600 mb-4">{error}</p>}
+                    <div className="flex justify-end space-x-4">
+                        <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Annulla</button>
+                        <button type="submit" disabled={isLoading} className={`px-4 py-2 text-white rounded-md ${type.includes('delete') ? 'bg-red-600 hover:bg-red-700' : 'bg-indigo-600 hover:bg-indigo-700'} disabled:bg-gray-400`}>
+                            {isLoading ? 'Caricamento...' : (type.includes('delete') ? 'Elimina' : 'Conferma')}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
 };
+
 
 // --- COMPONENTE PRINCIPALE ---
 
@@ -443,7 +574,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
         end: new Date().toISOString().split('T')[0]
     });
-    
+
     const currentUserRole = userData?.role;
     const superAdminEmail = "domenico.leoncino@tcsitalia.com";
     const isSuperAdmin = user.email === superAdminEmail;
@@ -459,13 +590,13 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             const adminsSnapshot = await getDocs(qAdmins);
             const adminUsers = adminsSnapshot.docs.map(doc => {
                 const data = doc.data();
-                const managedAreaNames = data.managedAreaIds 
+                const managedAreaNames = data.managedAreaIds
                     ? data.managedAreaIds.map(id => allAreas.find(a => a.id === id)?.name).filter(Boolean)
                     : [];
                 return { id: doc.id, ...data, managedAreaNames };
             });
             setAdmins(adminUsers);
-            
+
             let areasToDisplay = allAreas;
             let employeesToDisplayQuery;
             if (currentUserRole === 'preposto' && userData.managedAreaIds) {
@@ -478,7 +609,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
             const employeesSnapshot = await getDocs(employeesToDisplayQuery);
             const employeesList = employeesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            
+
             const activeEntriesSnapshot = await getDocs(query(collection(db, "time_entries"), where("status", "==", "clocked-in")));
             const activeEntriesList = activeEntriesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
@@ -487,7 +618,11 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 const isOnBreak = activeEntry?.pauses?.some(p => !p.end) || false;
                 return { ...emp, activeEntry, isOnBreak };
             });
-            setEmployees(employeesWithStatus);
+            
+            // Per passare tutti i dipendenti al modale in caso di cancellazione area
+            const allEmployeesSnapshot = await getDocs(query(collection(db, "employees")));
+            setEmployees(allEmployeesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+
 
             const activeEntriesForScope = activeEntriesList.filter(entry => employeesList.some(e => e.id === entry.employeeId));
             setActiveEntries(activeEntriesForScope);
@@ -496,7 +631,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 const activeCount = activeEntriesForScope.filter(entry => entry.workAreaId === area.id).length;
                 return { ...area, activeEmployeeCount: activeCount };
             }).sort((a, b) => a.name.localeCompare(b.name));
-            
+
             setWorkAreas(workAreasWithCounts);
 
         } catch (error) {
@@ -504,7 +639,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         } finally {
             setIsLoading(false);
         }
-    }, [user, userData, currentUserRole]); 
+    }, [user, userData, currentUserRole]);
 
     useEffect(() => {
         fetchData();
@@ -515,7 +650,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         setSelectedItem(item);
         setShowModal(true);
     };
-    
+
     const generateReport = async () => {
         if (!dateRange.start || !dateRange.end) {
             alert("Seleziona un intervallo di date valido.");
@@ -524,26 +659,33 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
         const startDate = new Date(dateRange.start);
         startDate.setHours(0, 0, 0, 0);
-        
+
         const endDate = new Date(dateRange.end);
         endDate.setHours(23, 59, 59, 999);
-        
+
         const title = `Report dal ${startDate.toLocaleDateString('it-IT')} al ${endDate.toLocaleDateString('it-IT')}`;
         setReportTitle(title);
 
         const q = query(
-            collection(db, "time_entries"), 
+            collection(db, "time_entries"),
             where("clockInTime", ">=", Timestamp.fromDate(startDate)),
             where("clockInTime", "<=", Timestamp.fromDate(endDate))
         );
         const querySnapshot = await getDocs(q);
-        const entries = querySnapshot.docs.map(doc => ({id: doc.id, ...doc.data()}));
-        
+        const entries = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
         const reportData = [];
+        const allEmployeesSnapshot = await getDocs(collection(db, "employees"));
+        const allEmployeesList = allEmployeesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        
+        const allAreasSnapshot = await getDocs(collection(db, "work_areas"));
+        const allAreasList = allAreasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+
         for (const entry of entries) {
-            const employeeData = employees.find(e => e.id === entry.employeeId);
-            const areaData = workAreas.find(a => a.id === entry.workAreaId);
-            
+            const employeeData = allEmployeesList.find(e => e.id === entry.employeeId);
+            const areaData = allAreasList.find(a => a.id === entry.workAreaId);
+
             if (employeeData && areaData) {
                 const clockInTime = entry.clockInTime.toDate();
                 const clockOutTime = entry.clockOutTime ? entry.clockOutTime.toDate() : null;
@@ -556,7 +698,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                         }
                         return acc;
                     }, 0);
-                    
+
                     const netDurationMs = totalDurationMs - pauseDurationMs;
                     const totalMinutes = Math.round(netDurationMs / 60000);
                     const hours = Math.floor(totalMinutes / 60);
@@ -567,7 +709,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                     id: entry.id,
                     employeeName: `${employeeData.name} ${employeeData.surname}`,
                     areaName: areaData.name,
-                    clockInDate: clockInTime.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit'}),
+                    clockInDate: clockInTime.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit' }),
                     clockInTimeFormatted: clockInTime.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
                     clockOutTimeFormatted: clockOutTime ? clockOutTime.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : 'In corso',
                     duration: duration,
@@ -591,11 +733,11 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         let sortableItems = [...employees];
         if (searchTerm) {
             const lowercasedFilter = searchTerm.toLowerCase();
-            sortableItems = sortableItems.filter(emp => 
+            sortableItems = sortableItems.filter(emp =>
                 `${emp.name} ${emp.surname}`.toLowerCase().includes(lowercasedFilter)
             );
         }
-        
+
         sortableItems.sort((a, b) => {
             if (sortConfig.key === 'name') {
                 const nameA = `${a.name} ${a.surname}`.toLowerCase();
@@ -657,7 +799,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 <div className="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-4 w-full sm:w-auto">
                     <span className="text-xs text-gray-600 text-center break-all">
                         Admin: {userData?.name && userData?.surname ? `${userData.name} ${userData.surname}` : user?.email}
-                    </span> 
+                    </span>
                     <button onClick={handleLogout} className="px-3 py-1.5 bg-red-500 text-white rounded-lg hover:bg-red-600 w-full sm:w-auto text-sm">Logout</button>
                 </div>
             </header>
@@ -681,21 +823,21 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                         <div className="flex flex-col sm:flex-row items-center gap-4">
                             <div>
                                 <label htmlFor="startDate" className="text-sm font-medium text-gray-700">Da:</label>
-                                <input 
-                                    type="date" 
+                                <input
+                                    type="date"
                                     id="startDate"
                                     value={dateRange.start}
-                                    onChange={e => setDateRange({...dateRange, start: e.target.value})}
+                                    onChange={e => setDateRange({ ...dateRange, start: e.target.value })}
                                     className="ml-2 p-1 border border-gray-300 rounded-md"
                                 />
                             </div>
                             <div>
                                 <label htmlFor="endDate" className="text-sm font-medium text-gray-700">A:</label>
-                                <input 
-                                    type="date" 
+                                <input
+                                    type="date"
                                     id="endDate"
                                     value={dateRange.end}
-                                    onChange={e => setDateRange({...dateRange, end: e.target.value})}
+                                    onChange={e => setDateRange({ ...dateRange, end: e.target.value })}
                                     className="ml-2 p-1 border border-gray-300 rounded-md"
                                 />
                             </div>
@@ -714,7 +856,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 {view === 'admins' && <AdminManagementView admins={admins} openModal={openModal} user={user} superAdminEmail={superAdminEmail} />}
                 {view === 'reports' && <ReportView reports={reports} title={reportTitle} handleExportXml={handleExportXml} />}
             </main>
-            
+
             {showModal && <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} workAreas={workAreas} onDataUpdate={fetchData} user={user} superAdminEmail={superAdminEmail} allEmployees={employees} />}
         </div>
     );
