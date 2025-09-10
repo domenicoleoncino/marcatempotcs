@@ -10,7 +10,6 @@ import CompanyLogo from './CompanyLogo';
 // --- SUB-COMPONENTI INTERNI ---
 
 const DashboardView = ({ employees, activeEntries, workAreas }) => {
-    // ... (Questo componente è già corretto, lo lascio invariato)
     const calculateCurrentHours = () => {
         let totalNetMinutes = 0;
         const now = new Date();
@@ -94,7 +93,6 @@ const DashboardView = ({ employees, activeEntries, workAreas }) => {
 };
 
 const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortConfig, requestSort, searchTerm, setSearchTerm }) => {
-    // ... (Questo componente è già corretto, lo lascio invariato)
     const getSortIndicator = (key) => {
         if (!sortConfig || sortConfig.key !== key) return '';
         return sortConfig.direction === 'ascending' ? ' ▲' : ' ▼';
@@ -166,7 +164,6 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
 }
 
 const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
-    // ... (Questo componente è già corretto, lo lascio invariato)
     <div>
         <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Gestione Aree di Lavoro</h1>
@@ -202,7 +199,6 @@ const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
 );
 
 const AdminManagementView = ({ admins, openModal, user, superAdminEmail }) => {
-    // ... (Questo componente è già corretto, lo lascio invariato)
     const isSuperAdmin = user.email === superAdminEmail;
 
     const adminsToDisplay = admins.filter(admin => {
@@ -251,7 +247,6 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail }) => {
 };
 
 const ReportView = ({ reports, title, handleExportXml }) => {
-    // ... (Questo componente è già corretto, lo lascio invariato)
     const handleExportExcel = () => {
         if (typeof window.XLSX === 'undefined') { alert("La libreria di esportazione non è ancora stata caricata. Riprova tra un momento."); return; }
         const dataToExport = reports.map(entry => ({ 'Dipendente': entry.employeeName, 'Area': entry.areaName, 'Data': entry.clockInDate, 'Entrata': entry.clockInTimeFormatted, 'Uscita': entry.clockOutTimeFormatted, 'Ore Lavorate': (entry.duration !== null) ? parseFloat(entry.duration.toFixed(2)) : "In corso", 'Note': entry.note }));
@@ -304,15 +299,15 @@ const ReportView = ({ reports, title, handleExportXml }) => {
     );
 };
 
-// --- MODALE CORRETTO E COMPLETATO ---
 const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAdminEmail, user, allEmployees }) => {
+    // ... (This component is already correct, leaving it as is)
     const [formData, setFormData] = useState(item || {});
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const isSuperAdmin = user.email === superAdminEmail;
 
     const handleInputChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
-    
+
     const handleCheckboxChange = (e) => {
         const { name, checked } = e.target;
         const currentAreas = formData.workAreaIds || item?.workAreaIds || [];
@@ -344,7 +339,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
             setFormData(item ? { ...item } : {});
         }
     }, [type, item]);
-    
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         if ((type === 'newEmployee' || type === 'newAdmin') && formData.password && formData.password.length < 6) { setError("La password deve essere di almeno 6 caratteri."); return; }
@@ -456,7 +451,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                 );
             case 'newArea':
             case 'editArea':
-                 return (
+                return (
                     <div className="space-y-4">
                         <input name="name" value={formData.name || ''} onChange={handleInputChange} placeholder="Nome Area" required className="w-full p-2 border rounded" />
                         <input type="number" step="any" name="latitude" value={formData.latitude || ''} onChange={handleInputChange} placeholder="Latitudine" required className="w-full p-2 border rounded" />
@@ -488,22 +483,22 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                 );
             case 'manualClockIn':
             case 'manualClockOut':
-                 return (
-                     <div className="space-y-4">
-                         <input type="datetime-local" name="timestamp" value={formData.timestamp || ''} onChange={handleInputChange} required className="w-full p-2 border rounded" />
-                         {type === 'manualClockIn' && (
-                             <select name="workAreaId" value={formData.workAreaId || ''} onChange={handleInputChange} required className="w-full p-2 border rounded">
-                                 <option value="">Seleziona Area</option>
-                                 {item.workAreaIds.map(areaId => {
-                                     const area = workAreas.find(a => a.id === areaId);
-                                     return area ? <option key={area.id} value={area.id}>{area.name}</option> : null;
-                                 })}
-                             </select>
-                         )}
-                         <textarea name="note" value={formData.note || ''} onChange={handleInputChange} placeholder="Note (opzionale)" className="w-full p-2 border rounded"></textarea>
-                     </div>
-                 );
-             case 'newAdmin':
+                return (
+                    <div className="space-y-4">
+                        <input type="datetime-local" name="timestamp" value={formData.timestamp || ''} onChange={handleInputChange} required className="w-full p-2 border rounded" />
+                        {type === 'manualClockIn' && (
+                            <select name="workAreaId" value={formData.workAreaId || ''} onChange={handleInputChange} required className="w-full p-2 border rounded">
+                                <option value="">Seleziona Area</option>
+                                {item.workAreaIds.map(areaId => {
+                                    const area = workAreas.find(a => a.id === areaId);
+                                    return area ? <option key={area.id} value={area.id}>{area.name}</option> : null;
+                                })}
+                            </select>
+                        )}
+                        <textarea name="note" value={formData.note || ''} onChange={handleInputChange} placeholder="Note (opzionale)" className="w-full p-2 border rounded"></textarea>
+                    </div>
+                );
+            case 'newAdmin':
                 return (
                     <div className="space-y-4">
                         <input name="name" value={formData.name || ''} onChange={handleInputChange} placeholder="Nome" required className="w-full p-2 border rounded" />
@@ -511,7 +506,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                         <input type="email" name="email" value={formData.email || ''} onChange={handleInputChange} placeholder="Email" required className="w-full p-2 border rounded" />
                         <input type="password" name="password" value={formData.password || ''} onChange={handleInputChange} placeholder="Password (min. 6 caratteri)" required className="w-full p-2 border rounded" />
                         {isSuperAdmin && (
-                             <select name="role" value={formData.role || 'preposto'} onChange={handleInputChange} required className="w-full p-2 border rounded">
+                            <select name="role" value={formData.role || 'preposto'} onChange={handleInputChange} required className="w-full p-2 border rounded">
                                 <option value="preposto">Preposto</option>
                                 <option value="admin">Admin</option>
                             </select>
@@ -557,8 +552,13 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
 
 const AdminDashboard = ({ user, handleLogout, userData }) => {
     const [view, setView] = useState('dashboard');
+    // Stato per i dati visualizzati (potenzialmente filtrati)
     const [employees, setEmployees] = useState([]);
     const [workAreas, setWorkAreas] = useState([]);
+    // Stato per contenere TUTTI i dati, non filtrati
+    const [allEmployees, setAllEmployees] = useState([]);
+    const [allWorkAreas, setAllWorkAreas] = useState([]);
+    
     const [admins, setAdmins] = useState([]);
     const [activeEntries, setActiveEntries] = useState([]);
     const [reports, setReports] = useState([]);
@@ -583,55 +583,60 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         if (!user || !userData) { setIsLoading(false); return; }
         setIsLoading(true);
         try {
+            // 1. Carica tutti i dati non filtrati
             const allAreasSnapshot = await getDocs(collection(db, "work_areas"));
-            const allAreas = allAreasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            const allAreasList = allAreasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setAllWorkAreas(allAreasList);
 
+            const allEmployeesSnapshot = await getDocs(collection(db, "employees"));
+            const allEmployeesList = allEmployeesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setAllEmployees(allEmployeesList);
+
+            // 2. Carica altri dati necessari
             const qAdmins = query(collection(db, "users"), where("role", "in", ["admin", "preposto"]));
             const adminsSnapshot = await getDocs(qAdmins);
             const adminUsers = adminsSnapshot.docs.map(doc => {
                 const data = doc.data();
                 const managedAreaNames = data.managedAreaIds
-                    ? data.managedAreaIds.map(id => allAreas.find(a => a.id === id)?.name).filter(Boolean)
+                    ? data.managedAreaIds.map(id => allAreasList.find(a => a.id === id)?.name).filter(Boolean)
                     : [];
                 return { id: doc.id, ...data, managedAreaNames };
             });
             setAdmins(adminUsers);
 
-            let areasToDisplay = allAreas;
-            let employeesToDisplayQuery;
+            // 3. Determina quali dati visualizzare in base al ruolo
+            let employeesToDisplay = allEmployeesList;
+            let areasToDisplay = allAreasList;
+
             if (currentUserRole === 'preposto' && userData.managedAreaIds) {
-                areasToDisplay = allAreas.filter(area => userData.managedAreaIds.includes(area.id));
-                const managedAreaIdsForQuery = userData.managedAreaIds.length > 0 ? userData.managedAreaIds : ['placeholder'];
-                employeesToDisplayQuery = query(collection(db, "employees"), where("workAreaIds", "array-contains-any", managedAreaIdsForQuery));
-            } else {
-                employeesToDisplayQuery = query(collection(db, "employees"));
+                areasToDisplay = allAreasList.filter(area => userData.managedAreaIds.includes(area.id));
+                const managedAreaIds = userData.managedAreaIds;
+                employeesToDisplay = allEmployeesList.filter(emp => 
+                    emp.workAreaIds && emp.workAreaIds.some(areaId => managedAreaIds.includes(areaId))
+                );
             }
-
-            const employeesSnapshot = await getDocs(employeesToDisplayQuery);
-            const employeesList = employeesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
+            
+            // 4. Arricchisci i dati da visualizzare con lo stato attuale
             const activeEntriesSnapshot = await getDocs(query(collection(db, "time_entries"), where("status", "==", "clocked-in")));
             const activeEntriesList = activeEntriesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-            const employeesWithStatus = employeesList.map(emp => {
+            const employeesWithStatus = employeesToDisplay.map(emp => {
                 const activeEntry = activeEntriesList.find(entry => entry.employeeId === emp.id);
                 const isOnBreak = activeEntry?.pauses?.some(p => !p.end) || false;
                 return { ...emp, activeEntry, isOnBreak };
             });
-            
-            // Per passare tutti i dipendenti al modale in caso di cancellazione area
-            const allEmployeesSnapshot = await getDocs(query(collection(db, "employees")));
-            setEmployees(allEmployeesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
 
+            // 5. Imposta gli stati per la UI
+            setEmployees(employeesWithStatus); // <-- CORREZIONE APPLICATA QUI
 
-            const activeEntriesForScope = activeEntriesList.filter(entry => employeesList.some(e => e.id === entry.employeeId));
+            const activeEntriesForScope = activeEntriesList.filter(entry => employeesToDisplay.some(e => e.id === entry.employeeId));
             setActiveEntries(activeEntriesForScope);
 
             const workAreasWithCounts = areasToDisplay.map(area => {
                 const activeCount = activeEntriesForScope.filter(entry => entry.workAreaId === area.id).length;
                 return { ...area, activeEmployeeCount: activeCount };
             }).sort((a, b) => a.name.localeCompare(b.name));
-
+            
             setWorkAreas(workAreasWithCounts);
 
         } catch (error) {
@@ -675,16 +680,10 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         const entries = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
         const reportData = [];
-        const allEmployeesSnapshot = await getDocs(collection(db, "employees"));
-        const allEmployeesList = allEmployeesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        
-        const allAreasSnapshot = await getDocs(collection(db, "work_areas"));
-        const allAreasList = allAreasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-
         for (const entry of entries) {
-            const employeeData = allEmployeesList.find(e => e.id === entry.employeeId);
-            const areaData = allAreasList.find(a => a.id === entry.workAreaId);
+            // Usa le liste complete per i report, non quelle filtrate
+            const employeeData = allEmployees.find(e => e.id === entry.employeeId);
+            const areaData = allWorkAreas.find(a => a.id === entry.workAreaId);
 
             if (employeeData && areaData) {
                 const clockInTime = entry.clockInTime.toDate();
@@ -730,6 +729,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     };
 
     const sortedAndFilteredEmployees = useMemo(() => {
+        // La logica di sort/filter si applica ai dipendenti visualizzati
         let sortableItems = [...employees];
         if (searchTerm) {
             const lowercasedFilter = searchTerm.toLowerCase();
@@ -857,7 +857,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 {view === 'reports' && <ReportView reports={reports} title={reportTitle} handleExportXml={handleExportXml} />}
             </main>
 
-            {showModal && <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} workAreas={workAreas} onDataUpdate={fetchData} user={user} superAdminEmail={superAdminEmail} allEmployees={employees} />}
+            {showModal && <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} workAreas={allWorkAreas} onDataUpdate={fetchData} user={user} superAdminEmail={superAdminEmail} allEmployees={allEmployees} />}
         </div>
     );
 };
