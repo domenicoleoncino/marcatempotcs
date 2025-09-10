@@ -404,8 +404,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
     };
     
     const renderForm = () => {
-        // This function should contain the JSX for all your different modal types
-        // For brevity, I'll keep it as a placeholder.
+        // ... (Il JSX per tutti i tipi di modale va qui)
         return <div>Form for {type}</div>;
     };
     
