@@ -1,202 +1,85 @@
-import React from 'react';
-import { signInWithEmailAndPassword, sendPasswordResetEmail, createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc, addDoc, collection } from 'firebase/firestore';
-import { auth, db } from '../firebase';
+import React, { useState } from 'react';
+import { auth } from '../firebase';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import CompanyLogo from './CompanyLogo';
 
 const LoginScreen = () => {
-    const [email, setEmail] = React.useState('');
-    const [password, setPassword] = React.useState('');
-    const [error, setError] = React.useState('');
-    const [successMessage, setSuccessMessage] = React.useState('');
-    const [isLoading, setIsLoading] = React.useState(false);
-    const [view, setView] = React.useState('login'); 
-    const [registerData, setRegisterData] = React.useState({
-        name: '',
-        surname: '',
-        phone: '',
-        email: '',
-        password: '',
-    });
-
-    React.useEffect(() => {
-        const loginError = sessionStorage.getItem('loginError');
-        if (loginError) {
-            setError(loginError);
-            sessionStorage.removeItem('loginError');
-        }
-    }, []);
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
 
     const handleLogin = async (e) => {
         e.preventDefault();
         setIsLoading(true);
         setError('');
-        setSuccessMessage('');
-        // *** MODIFICA: La logica di deviceLock è stata rimossa da qui ***
+
         try {
             await signInWithEmailAndPassword(auth, email, password);
+            // Il reindirizzamento verrà gestito dal componente App principale
         } catch (err) {
-            console.error("Login Error:", err);
-            if (err.code === 'auth/invalid-credential') {
-                setError('Email o password non corretta. Riprova.');
-            } else {
-                setError('Si è verificato un errore di connessione. Riprova.');
-            }
+            setError("Credenziali non valide. Riprova.");
+            console.error("Errore di login:", err);
         } finally {
             setIsLoading(false);
         }
     };
-
-    const handlePasswordReset = async (e) => {
-        e.preventDefault();
-        if (!email) {
-            setError("Per favore, inserisci la tua email.");
-            return;
-        }
-        setIsLoading(true);
-        setError('');
-        setSuccessMessage('');
-        try {
-            await sendPasswordResetEmail(auth, email);
-            setSuccessMessage(`Email di recupero inviata con successo a ${email}. Controlla la tua casella di posta.`);
-        } catch (err) {
-            console.error("Password Reset Error:", err);
-            setError("Impossibile inviare l'email. Controlla che l'indirizzo sia corretto e riprova.");
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const handleRegister = async (e) => {
-        e.preventDefault();
-        if (registerData.password.length < 6) {
-            setError("La password deve essere di almeno 6 caratteri.");
-            return;
-        }
-        setIsLoading(true);
-        setError('');
-        setSuccessMessage('');
-        try {
-            const userCredential = await createUserWithEmailAndPassword(auth, registerData.email, registerData.password);
-            const user = userCredential.user;
-            await setDoc(doc(db, "users", user.uid), {
-                email: registerData.email,
-                role: 'employee'
-            });
-            await addDoc(collection(db, "employees"), {
-                userId: user.uid,
-                name: registerData.name,
-                surname: registerData.surname,
-                phone: registerData.phone,
-                email: registerData.email,
-                workAreaIds: [],
-                workAreaNames: []
-            });
-            setSuccessMessage("Registrazione completata! Ora puoi effettuare il login.");
-            setView('login');
-        } catch (err) {
-            console.error("Registration Error:", err);
-            if (err.code === 'auth/email-already-in-use') {
-                setError("Questa email è già stata registrata.");
-            } else {
-                setError("Si è verificato un errore durante la registrazione. Riprova.");
-            }
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const handleRegisterInputChange = (e) => {
-        setRegisterData({ ...registerData, [e.target.name]: e.target.value });
-    };
-
-    const renderContent = () => {
-        const formContainer = (title, formContent, footerLink) => (
-            <div className="w-full bg-white p-4 rounded-xl shadow-lg space-y-3">
-                <div className="flex justify-center mb-1"><CompanyLogo /></div>
-                <h2 className="text-center text-lg font-bold text-gray-900">{title}</h2>
-                {formContent}
-                <div className="text-center">
-                    {footerLink}
-                </div>
-            </div>
-        );
-
-        if (view === 'reset') {
-            return formContainer(
-                'Recupera Password',
-                <>
-                    <p className="text-center text-xs text-gray-600">Inserisci la tua email per ricevere un link di recupero.</p>
-                    <form onSubmit={handlePasswordReset} className="space-y-3">
-                        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="La tua Email" required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm" />
-                        {error && <p className="text-red-500 text-xs text-center">{error}</p>}
-                        {successMessage && <p className="text-green-600 text-xs text-center">{successMessage}</p>}
-                        <button type="submit" disabled={isLoading} className="w-full py-2 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-md text-sm">
-                            {isLoading ? 'Invio...' : 'Invia Email'}
-                        </button>
-                    </form>
-                </>,
-                <button onClick={() => { setView('login'); setError(''); setSuccessMessage(''); }} className="text-xs font-medium text-indigo-600 hover:text-indigo-500">
-                    Torna al Login
-                </button>
-            );
-        }
-
-        if (view === 'register') {
-            return formContainer(
-                'Registra un nuovo account',
-                <form onSubmit={handleRegister} className="space-y-2">
-                     <input name="name" onChange={handleRegisterInputChange} placeholder="Nome" required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm" />
-                     <input name="surname" onChange={handleRegisterInputChange} placeholder="Cognome" required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm" />
-                     <input name="phone" onChange={handleRegisterInputChange} placeholder="Telefono" required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm" />
-                     <input type="email" name="email" onChange={handleRegisterInputChange} placeholder="Email" required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm" />
-                     <input type="password" name="password" onChange={handleRegisterInputChange} placeholder="Password (min. 6 caratteri)" required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm" />
-                    
-                    {error && <p className="text-red-500 text-xs text-center">{error}</p>}
-                    {successMessage && <p className="text-green-600 text-xs text-center">{successMessage}</p>}
-
-                    <button type="submit" disabled={isLoading} className="w-full py-2 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-md text-sm">
-                        {isLoading ? 'Registrazione...' : 'Registrati'}
-                    </button>
-                </form>,
-                <button onClick={() => { setView('login'); setError(''); setSuccessMessage(''); }} className="text-xs font-medium text-indigo-600 hover:text-indigo-500">
-                    Hai già un account? Accedi
-                </button>
-            );
-        }
-
-        return formContainer(
-            'Accedi al tuo account',
-            <form onSubmit={handleLogin} className="space-y-3">
-                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm" />
-                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm" />
-                
-                <div className="flex items-center justify-between text-xs">
-                    <button type="button" onClick={() => { setView('register'); setError(''); setSuccessMessage(''); }} className="font-medium text-indigo-600 hover:text-indigo-500">
-                        Non hai un account? Registrati
-                    </button>
-                    <button type="button" onClick={() => { setView('reset'); setError(''); setSuccessMessage(''); }} className="font-medium text-indigo-600 hover:text-indigo-500">
-                        Password dimenticata?
-                    </button>
-                </div>
-
-                {error && <p className="text-red-500 text-xs whitespace-pre-wrap text-center">{error}</p>}
-                {successMessage && <p className="text-green-600 text-xs text-center">{successMessage}</p>}
-
-                <button type="submit" disabled={isLoading} className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-md text-sm">
-                    {isLoading ? 'Accesso...' : 'Accedi'}
-                </button>
-            </form>
-        );
-    }
 
     return (
-        <div className="min-h-screen bg-gray-100 flex flex-col justify-center items-center p-4">
-            <div className="w-full max-w-xs mx-auto">
-                {renderContent()}
-            </div>
+        <div className="flex flex-col items-center justify-center w-full max-w-sm mx-auto">
+            <CompanyLogo />
+            
+            <form onSubmit={handleLogin} className="w-full bg-white shadow-md rounded-lg p-8 mt-6">
+                <h1 className="text-2xl font-bold text-center text-gray-800 mb-6">Accesso</h1>
+                
+                {error && (
+                    <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+                        <span className="block sm:inline">{error}</span>
+                    </div>
+                )}
+
+                <div className="mb-4">
+                    <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="email">
+                        Email
+                    </label>
+                    <input
+                        id="email"
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="iltuo@indirizzo.email"
+                        className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                        required
+                    />
+                </div>
+                
+                <div className="mb-6">
+                    <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="password">
+                        Password
+                    </label>
+                    <input
+                        id="password"
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="******************"
+                        className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 mb-3 leading-tight focus:outline-none focus:shadow-outline"
+                        required
+                    />
+                </div>
+                
+                <div className="flex items-center justify-between">
+                    <button
+                        type="submit"
+                        disabled={isLoading}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline w-full disabled:bg-gray-400"
+                    >
+                        {isLoading ? 'Accesso in corso...' : 'Accedi'}
+                    </button>
+                </div>
+            </form>
         </div>
-    )
-};
+    );
+}; // <-- È probabile che nel tuo file manchi questa parentesi graffa di chiusura
 
 export default LoginScreen;
