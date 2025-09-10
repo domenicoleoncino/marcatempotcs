@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db, auth } from '../firebase';
 import { 
     doc, setDoc, collection, addDoc, getDocs, query, where, 
-    updateDoc, deleteDoc, writeBatch, Timestamp
+    updateDoc, deleteDoc, writeBatch, Timestamp 
 } from 'firebase/firestore';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import CompanyLogo from './CompanyLogo';
@@ -162,8 +162,9 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
             </table>
         </div>
     </div>
-);
+    );
 }
+
 const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
     <div>
         <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
@@ -281,7 +282,17 @@ const ReportView = ({ reports, title, handleExportXml }) => {
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                            {reports.map((entry) => (<tr key={entry.id}><td className="px-4 py-2 whitespace-nowrap text-sm">{entry.employeeName}</td><td className="px-4 py-2 whitespace-nowrap text-sm">{entry.areaName}</td><td className="px-4 py-2 whitespace-nowrap text-sm">{entry.clockInDate}</td><td className="px-4 py-2 whitespace-nowrap text-sm">{entry.clockInTimeFormatted}</td><td className="px-4 py-2 whitespace-nowrap text-sm">{entry.clockOutTimeFormatted}</td><td className="px-4 py-2 whitespace-nowrap text-sm">{entry.duration !== null ? entry.duration.toFixed(2) : <span className="text-blue-500 font-semibold">...</span>}</td><td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{entry.note}</td></tr>))}
+                            {reports.map((entry) => (
+                                <tr key={entry.id}>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.employeeName}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.areaName}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.clockInDate}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.clockInTimeFormatted}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.clockOutTimeFormatted}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.duration !== null ? entry.duration.toFixed(2) : <span className="text-blue-500 font-semibold">...</span>}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{entry.note}</td>
+                                </tr>
+                            ))}
                         </tbody>
                     </table>
                 )}
@@ -611,6 +622,31 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         return sortableItems;
     }, [employees, searchTerm, sortConfig]);
 
+    const handleExportXml = () => {
+        let xmlString = '<?xml version="1.0" encoding="UTF-8"?>\n<Report>\n';
+        reports.forEach(entry => {
+            xmlString += '  <Timbratura>\n';
+            xmlString += `    <Dipendente>${entry.employeeName}</Dipendente>\n`;
+            xmlString += `    <Area>${entry.areaName}</Area>\n`;
+            xmlString += `    <Data>${entry.clockInDate}</Data>\n`;
+            xmlString += `    <Entrata>${entry.clockInTimeFormatted}</Entrata>\n`;
+            xmlString += `    <Uscita>${entry.clockOutTimeFormatted}</Uscita>\n`;
+            xmlString += `    <Ore>${entry.duration ? entry.duration.toFixed(2) : 'N/A'}</Ore>\n`;
+            xmlString += `    <Note>${entry.note || ''}</Note>\n`;
+            xmlString += '  </Timbratura>\n';
+        });
+        xmlString += '</Report>';
+
+        const blob = new Blob([xmlString], { type: 'application/xml' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `Report_${dateRange.start}_${dateRange.end}.xml`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
 
     if (isLoading) { return <div className="min-h-screen flex items-center justify-center">Caricamento in corso...</div>; }
 
@@ -676,7 +712,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 {view === 'employees' && <EmployeeManagementView employees={sortedAndFilteredEmployees} openModal={openModal} currentUserRole={currentUserRole} sortConfig={sortConfig} requestSort={requestSort} searchTerm={searchTerm} setSearchTerm={setSearchTerm} />}
                 {view === 'areas' && <AreaManagementView workAreas={workAreas} openModal={openModal} currentUserRole={currentUserRole} />}
                 {view === 'admins' && <AdminManagementView admins={admins} openModal={openModal} user={user} superAdminEmail={superAdminEmail} />}
-                {view === 'reports' && <ReportView reports={reports} title={reportTitle} />}
+                {view === 'reports' && <ReportView reports={reports} title={reportTitle} handleExportXml={handleExportXml} />}
             </main>
             
             {showModal && <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} workAreas={workAreas} onDataUpdate={fetchData} user={user} superAdminEmail={superAdminEmail} allEmployees={employees} />}
@@ -685,4 +721,3 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 };
 
 export default AdminDashboard;
-
