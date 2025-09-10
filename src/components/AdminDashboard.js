@@ -92,7 +92,7 @@ const DashboardView = ({ employees, activeEntries, workAreas }) => {
     );
 };
 
-const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortConfig, requestSort, searchTerm, setSearchTerm }) => {}
+const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortConfig, requestSort, searchTerm, setSearchTerm }) => {
     
     const getSortIndicator = (key) => {
         if (!sortConfig || sortConfig.key !== key) return '';
@@ -164,6 +164,7 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
         </div>
     </div>
 );
+}
 
 const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
     <div>
