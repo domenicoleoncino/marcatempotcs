@@ -291,7 +291,7 @@ const ReportView = ({ reports, title, handleExportXml }) => {
     );
 };
 
-const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAdminEmail, user }) => {
+const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAdminEmail, user, allEmployees }) => {
     const [formData, setFormData] = React.useState(item ? { ...item } : {});
     const [isLoading, setIsLoading] = React.useState(false);
     const [error, setError] = React.useState('');
@@ -339,7 +339,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
             switch (type) {
                 case 'newEmployee':
                     const userCred = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
-                    await setDoc(doc(db, "users", userCred.user.uid), { email: formData.email, role: 'employee' });
+                    await setDoc(doc(db, "users", userCred.user.uid), { email: formData.email, role: 'employee', name: formData.name, surname: formData.surname });
                     await addDoc(collection(db, "employees"), { userId: userCred.user.uid, name: formData.name, surname: formData.surname, phone: formData.phone, email: formData.email, workAreaIds: [], workAreaNames: [], deviceIds: [] });
                     break;
                 case 'editEmployee':
@@ -404,10 +404,15 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
         }
     };
     
-    const renderForm = () => { /* ... JSX per il modale ... */ };
+    const renderForm = () => {
+        // ... (Il JSX per tutti i tipi di modale va qui)
+        return <div>Form for {type}</div>;
+    };
     
     return ( <div className="fixed z-10 inset-0 overflow-y-auto"> ... </div> );
 };
+
+// --- COMPONENTE PRINCIPALE ---
 
 const AdminDashboard = ({ user, handleLogout, userData }) => {
     const [view, setView] = useState('dashboard');
@@ -422,12 +427,11 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const [selectedItem, setSelectedItem] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
 
-    // NUOVI STATI PER LE FUNZIONALITÀ AGGIUNTE
     const [searchTerm, setSearchTerm] = useState('');
     const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'ascending' });
     const [dateRange, setDateRange] = useState({
-        start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0], // Primo giorno del mese corrente
-        end: new Date().toISOString().split('T')[0] // Oggi
+        start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
+        end: new Date().toISOString().split('T')[0]
     });
     
     const currentUserRole = userData?.role;
@@ -676,7 +680,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 {view === 'reports' && <ReportView reports={reports} title={reportTitle} />}
             </main>
             
-            {showModal && <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} workAreas={workAreas} onDataUpdate={fetchData} user={user} superAdminEmail={superAdminEmail}/>}
+            {showModal && <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} workAreas={workAreas} onDataUpdate={fetchData} user={user} superAdminEmail={superAdminEmail} allEmployees={employees} />}
         </div>
     );
 };
