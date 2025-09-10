@@ -1,13 +1,20 @@
+import React from 'react'; // <-- QUESTA È LA RIGA MANCANTE
+
 /**
  * CompanyLogo.js
- * Visualizza il logo aziendale e gestisce eventuali errori di caricamento.
+ * Un componente React che visualizza il logo aziendale.
+ * Gestisce anche il caso in cui il logo non si carichi, 
+ * mostrando un'immagine sostitutiva (placeholder).
  */
-import React from 'react';
 
-// URL diretto e stabile del logo aziendale.
+// URL diretto e corretto del logo aziendale.
 const LOGO_URL = 'https://i.imgur.com/kUQf7Te.png';
 const PLACEHOLDER_URL = 'https://placehold.co/200x60/cccccc/ffffff?text=Logo';
 
+/**
+ * Gestisce l'evento di errore per il tag <img>.
+ * @param {React.SyntheticEvent<HTMLImageElement, Event>} e - L'evento di errore.
+ */
 const handleImageError = (e) => {
   e.target.onerror = null; 
   e.target.src = PLACEHOLDER_URL;
