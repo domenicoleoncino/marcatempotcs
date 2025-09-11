@@ -10,6 +10,7 @@ import CompanyLogo from './CompanyLogo';
 // --- SUB-COMPONENTI INTERNI ---
 
 const DashboardView = ({ employees, activeEntries, workAreas }) => {
+    // ... (invariato)
     const calculateCurrentHours = () => {
         let totalNetMinutes = 0;
         const now = new Date();
@@ -102,7 +103,8 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
         <div>
             <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Gestione Dipendenti</h1>
-                {currentUserRole === 'admin' && <button onClick={() => openModal('newEmployee')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">Aggiungi Dipendente</button>}
+                {/* MODIFICA: Ora anche i preposti possono aggiungere dipendenti */}
+                {(currentUserRole === 'admin' || currentUserRole === 'preposto') && <button onClick={() => openModal('newEmployee')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">Aggiungi Dipendente</button>}
             </div>
             <div className="mb-4">
                 <input
@@ -142,14 +144,16 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                 <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
                                     <div className="flex flex-col items-start gap-1">
                                         {emp.activeEntry ? <button onClick={() => openModal('manualClockOut', emp)} className="px-2 py-1 text-xs bg-yellow-500 text-white rounded-md hover:bg-yellow-600 w-full text-center">Timbra Uscita</button> : <button onClick={() => openModal('manualClockIn', emp)} className="px-2 py-1 text-xs bg-blue-500 text-white rounded-md hover:bg-blue-600 w-full text-center">Timbra Entrata</button>}
-                                        {currentUserRole === 'admin' && (
+                                        
+                                        {/* MODIFICA: Ora admin e preposti vedono i pulsanti di gestione dipendente */}
+                                        {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (
                                             <>
                                                 <div className="flex gap-2 w-full justify-start mt-1">
-                                                    <button onClick={() => openModal('assignArea', emp)} className="text-xs text-indigo-600 hover:text-indigo-900">Aree</button>
+                                                    {currentUserRole === 'admin' && <button onClick={() => openModal('assignArea', emp)} className="text-xs text-indigo-600 hover:text-indigo-900">Aree</button>}
                                                     <button onClick={() => openModal('editEmployee', emp)} className="text-xs text-green-600 hover:text-green-900">Modifica</button>
                                                     <button onClick={() => openModal('deleteEmployee', emp)} className="text-xs text-red-600 hover:text-red-900">Elimina</button>
                                                 </div>
-                                                {emp.deviceIds && emp.deviceIds.length > 0 && <button onClick={() => openModal('resetDevice', emp)} className="text-xs text-yellow-600 hover:text-yellow-900 mt-1">Resetta Disp.</button>}
+                                                {currentUserRole === 'admin' && emp.deviceIds && emp.deviceIds.length > 0 && <button onClick={() => openModal('resetDevice', emp)} className="text-xs text-yellow-600 hover:text-yellow-900 mt-1">Resetta Disp.</button>}
                                             </>
                                         )}
                                     </div>
@@ -164,6 +168,7 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
 }
 
 const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
+    // ... (invariato)
     <div>
         <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Gestione Aree di Lavoro</h1>
@@ -233,8 +238,9 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
                                 <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-500">{admin.managedAreaNames?.join(', ') || (admin.role === 'admin' ? 'Tutte' : 'Nessuna')}</td>
                                 <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
                                     <div className="flex items-center gap-3">
-                                        {isSuperAdmin && admin.role === 'preposto' && <button onClick={() => openModal('assignManagedAreas', admin)} className="text-indigo-600 hover:text-indigo-900 text-xs">Assegna Aree</button>}
-                                        {isSuperAdmin && <button onClick={() => openModal('deleteAdmin', admin)} className="text-red-600 hover:text-red-900 text-xs">Elimina</button>}
+                                        {/* MODIFICA: Ora tutti gli admin possono assegnare aree e eliminare (tranne il superadmin) */}
+                                        {currentUserRole === 'admin' && admin.role === 'preposto' && <button onClick={() => openModal('assignManagedAreas', admin)} className="text-indigo-600 hover:text-indigo-900 text-xs">Assegna Aree</button>}
+                                        {currentUserRole === 'admin' && <button onClick={() => openModal('deleteAdmin', admin)} className="text-red-600 hover:text-red-900 text-xs">Elimina</button>}
                                     </div>
                                 </td>
                             </tr>
@@ -247,6 +253,7 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
 };
 
 const ReportView = ({ reports, title, handleExportXml }) => {
+    // ... (invariato)
     const handleExportExcel = () => {
         if (typeof window.XLSX === 'undefined') { alert("La libreria di esportazione non è ancora stata caricata. Riprova tra un momento."); return; }
         const dataToExport = reports.map(entry => ({ 'Dipendente': entry.employeeName, 'Area': entry.areaName, 'Data': entry.clockInDate, 'Entrata': entry.clockInTimeFormatted, 'Uscita': entry.clockOutTimeFormatted, 'Ore Lavorate': (entry.duration !== null) ? parseFloat(entry.duration.toFixed(2)) : "In corso", 'Note': entry.note }));
@@ -299,13 +306,10 @@ const ReportView = ({ reports, title, handleExportXml }) => {
     );
 };
 
-const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAdminEmail, user, allEmployees, currentUserRole }) => {
+const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAdminEmail, user, allEmployees, currentUserRole, userData }) => {
     const [formData, setFormData] = useState(item || {});
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
-    
-    // La costante 'isSuperAdmin' che causava l'errore è stata rimossa.
-    // I controlli sui permessi ora usano 'currentUserRole' o verificano l'email direttamente.
 
     const handleInputChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
@@ -353,8 +357,25 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                 case 'newEmployee':
                     const userCred = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
                     await setDoc(doc(db, "users", userCred.user.uid), { email: formData.email, role: 'employee', name: formData.name, surname: formData.surname });
-                    await addDoc(collection(db, "employees"), { userId: userCred.user.uid, name: formData.name, surname: formData.surname, phone: formData.phone, email: formData.email, workAreaIds: [], workAreaNames: [], deviceIds: [] });
+                    
+                    // MODIFICA: Se a creare è un preposto, assegna automaticamente le sue aree
+                    let employeeData = {
+                        userId: userCred.user.uid,
+                        name: formData.name,
+                        surname: formData.surname,
+                        phone: formData.phone,
+                        email: formData.email,
+                        workAreaIds: [],
+                        workAreaNames: [],
+                        deviceIds: []
+                    };
+                    if (currentUserRole === 'preposto') {
+                        employeeData.workAreaIds = userData.managedAreaIds || [];
+                        employeeData.workAreaNames = userData.managedAreaNames || [];
+                    }
+                    await addDoc(collection(db, "employees"), employeeData);
                     break;
+                // ... (gli altri case rimangono invariati)
                 case 'editEmployee':
                     await updateDoc(doc(db, "employees", item.id), { name: formData.name, surname: formData.surname, phone: formData.phone });
                     break;
@@ -449,6 +470,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                         )}
                     </div>
                 );
+            // ... (gli altri case del renderForm rimangono invariati)
             case 'newArea':
             case 'editArea':
                 return (
@@ -551,6 +573,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
 // --- COMPONENTE PRINCIPALE ---
 
 const AdminDashboard = ({ user, handleLogout, userData }) => {
+    // ... (stati principali invariati)
     const [view, setView] = useState('dashboard');
     const [employees, setEmployees] = useState([]);
     const [workAreas, setWorkAreas] = useState([]);
@@ -847,7 +870,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 {view === 'reports' && <ReportView reports={reports} title={reportTitle} handleExportXml={handleExportXml} />}
             </main>
 
-            {showModal && <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} workAreas={allWorkAreas} onDataUpdate={fetchData} user={user} superAdminEmail={superAdminEmail} allEmployees={allEmployees} currentUserRole={currentUserRole} />}
+            {showModal && <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} workAreas={allWorkAreas} onDataUpdate={fetchData} user={user} superAdminEmail={superAdminEmail} allEmployees={allEmployees} currentUserRole={currentUserRole} userData={userData} />}
         </div>
     );
 };
