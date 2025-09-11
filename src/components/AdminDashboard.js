@@ -94,6 +94,7 @@ const DashboardView = ({ employees, activeEntries, workAreas }) => {
 };
 
 const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortConfig, requestSort, searchTerm, setSearchTerm }) => {
+    // ... (invariato)
     const getSortIndicator = (key) => {
         if (!sortConfig || sortConfig.key !== key) return '';
         return sortConfig.direction === 'ascending' ? ' ▲' : ' ▼';
@@ -103,7 +104,6 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
         <div>
             <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Gestione Dipendenti</h1>
-                {/* MODIFICA: Ora anche i preposti possono aggiungere dipendenti */}
                 {(currentUserRole === 'admin' || currentUserRole === 'preposto') && <button onClick={() => openModal('newEmployee')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">Aggiungi Dipendente</button>}
             </div>
             <div className="mb-4">
@@ -144,8 +144,6 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                 <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
                                     <div className="flex flex-col items-start gap-1">
                                         {emp.activeEntry ? <button onClick={() => openModal('manualClockOut', emp)} className="px-2 py-1 text-xs bg-yellow-500 text-white rounded-md hover:bg-yellow-600 w-full text-center">Timbra Uscita</button> : <button onClick={() => openModal('manualClockIn', emp)} className="px-2 py-1 text-xs bg-blue-500 text-white rounded-md hover:bg-blue-600 w-full text-center">Timbra Entrata</button>}
-                                        
-                                        {/* MODIFICA: Ora admin e preposti vedono i pulsanti di gestione dipendente */}
                                         {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (
                                             <>
                                                 <div className="flex gap-2 w-full justify-start mt-1">
@@ -204,6 +202,7 @@ const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
 );
 
 const AdminManagementView = ({ admins, openModal, user, superAdminEmail, currentUserRole }) => {
+    // ... (invariato)
     const isSuperAdmin = user.email === superAdminEmail;
 
     const adminsToDisplay = admins.filter(admin => {
@@ -238,7 +237,6 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
                                 <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-500">{admin.managedAreaNames?.join(', ') || (admin.role === 'admin' ? 'Tutte' : 'Nessuna')}</td>
                                 <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
                                     <div className="flex items-center gap-3">
-                                        {/* MODIFICA: Ora tutti gli admin possono assegnare aree e eliminare (tranne il superadmin) */}
                                         {currentUserRole === 'admin' && admin.role === 'preposto' && <button onClick={() => openModal('assignManagedAreas', admin)} className="text-indigo-600 hover:text-indigo-900 text-xs">Assegna Aree</button>}
                                         {currentUserRole === 'admin' && <button onClick={() => openModal('deleteAdmin', admin)} className="text-red-600 hover:text-red-900 text-xs">Elimina</button>}
                                     </div>
@@ -307,6 +305,7 @@ const ReportView = ({ reports, title, handleExportXml }) => {
 };
 
 const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAdminEmail, user, allEmployees, currentUserRole, userData }) => {
+    // ... (invariato)
     const [formData, setFormData] = useState(item || {});
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
@@ -358,7 +357,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                     const userCred = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
                     await setDoc(doc(db, "users", userCred.user.uid), { email: formData.email, role: 'employee', name: formData.name, surname: formData.surname });
                     
-                    // MODIFICA: Se a creare è un preposto, assegna automaticamente le sue aree
                     let employeeData = {
                         userId: userCred.user.uid,
                         name: formData.name,
@@ -375,7 +373,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                     }
                     await addDoc(collection(db, "employees"), employeeData);
                     break;
-                // ... (gli altri case rimangono invariati)
                 case 'editEmployee':
                     await updateDoc(doc(db, "employees", item.id), { name: formData.name, surname: formData.surname, phone: formData.phone });
                     break;
@@ -470,7 +467,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                         )}
                     </div>
                 );
-            // ... (gli altri case del renderForm rimangono invariati)
             case 'newArea':
             case 'editArea':
                 return (
@@ -573,7 +569,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
 // --- COMPONENTE PRINCIPALE ---
 
 const AdminDashboard = ({ user, handleLogout, userData }) => {
-    // ... (stati principali invariati)
+    // ... (stati e altre funzioni invariati)
     const [view, setView] = useState('dashboard');
     const [employees, setEmployees] = useState([]);
     const [workAreas, setWorkAreas] = useState([]);
@@ -594,11 +590,15 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
         end: new Date().toISOString().split('T')[0]
     });
+    // MODIFICA: Aggiunto nuovo stato per il filtro area nei report
+    const [reportAreaFilter, setReportAreaFilter] = useState('all'); 
 
     const currentUserRole = userData?.role;
     const superAdminEmail = "domenico.leoncino@tcsitalia.com";
+    // La costante isSuperAdmin è stata rimossa da qui perché non era utilizzata
 
     const fetchData = useCallback(async () => {
+        // ... (logica invariata)
         if (!user || !userData) { setIsLoading(false); return; }
         setIsLoading(true);
         try {
@@ -671,6 +671,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     };
 
     const generateReport = async () => {
+        // ... (logica quasi invariata, con aggiunta del filtro area)
         if (!dateRange.start || !dateRange.end) {
             alert("Seleziona un intervallo di date valido.");
             return;
@@ -681,15 +682,27 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
         const endDate = new Date(dateRange.end);
         endDate.setHours(23, 59, 59, 999);
-
-        const title = `Report dal ${startDate.toLocaleDateString('it-IT')} al ${endDate.toLocaleDateString('it-IT')}`;
+        
+        // MODIFICA: Aggiorna il titolo del report se un'area è selezionata
+        let title = `Report dal ${startDate.toLocaleDateString('it-IT')} al ${endDate.toLocaleDateString('it-IT')}`;
+        if (reportAreaFilter !== 'all') {
+            const selectedArea = allWorkAreas.find(area => area.id === reportAreaFilter);
+            if (selectedArea) {
+                title = `Report per area "${selectedArea.name}" - dal ${startDate.toLocaleDateString('it-IT')} al ${endDate.toLocaleDateString('it-IT')}`;
+            }
+        }
         setReportTitle(title);
-
-        const q = query(
-            collection(db, "time_entries"),
+        
+        // MODIFICA: Aggiunge dinamicamente il filtro per area alla query
+        const queryConstraints = [
             where("clockInTime", ">=", Timestamp.fromDate(startDate)),
             where("clockInTime", "<=", Timestamp.fromDate(endDate))
-        );
+        ];
+        if (reportAreaFilter !== 'all') {
+            queryConstraints.push(where("workAreaId", "==", reportAreaFilter));
+        }
+
+        const q = query(collection(db, "time_entries"), ...queryConstraints);
         const querySnapshot = await getDocs(q);
         const entries = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
@@ -734,6 +747,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     };
 
     const requestSort = (key) => {
+        // ... (invariato)
         let direction = 'ascending';
         if (sortConfig.key === key && sortConfig.direction === 'ascending') {
             direction = 'descending';
@@ -742,6 +756,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     };
 
     const sortedAndFilteredEmployees = useMemo(() => {
+        // ... (invariato)
         let sortableItems = [...employees];
         if (searchTerm) {
             const lowercasedFilter = searchTerm.toLowerCase();
@@ -777,6 +792,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     }, [employees, searchTerm, sortConfig]);
 
     const handleExportXml = () => {
+        // ... (invariato)
         let xmlString = '<?xml version="1.0" encoding="UTF-8"?>\n<Report>\n';
         reports.forEach(entry => {
             xmlString += '  <Timbratura>\n';
@@ -832,7 +848,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 <div className="bg-gray-50 border-b border-gray-200 p-4">
                     <div className="max-w-7xl mx-auto w-full">
                         <h3 className="text-lg font-medium text-gray-900 mb-2">Genera Report Personalizzato</h3>
-                        <div className="flex flex-col sm:flex-row items-center gap-4">
+                        <div className="flex flex-col sm:flex-row items-center gap-4 flex-wrap">
                             <div>
                                 <label htmlFor="startDate" className="text-sm font-medium text-gray-700">Da:</label>
                                 <input
@@ -852,6 +868,21 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                                     onChange={e => setDateRange({ ...dateRange, end: e.target.value })}
                                     className="ml-2 p-1 border border-gray-300 rounded-md"
                                 />
+                            </div>
+                            {/* MODIFICA: Aggiunto il menu a tendina per filtrare per area */}
+                            <div>
+                                <label htmlFor="areaFilter" className="text-sm font-medium text-gray-700">Area:</label>
+                                <select 
+                                    id="areaFilter"
+                                    value={reportAreaFilter}
+                                    onChange={e => setReportAreaFilter(e.target.value)}
+                                    className="ml-2 p-1 border border-gray-300 rounded-md"
+                                >
+                                    <option value="all">Tutte le Aree</option>
+                                    {allWorkAreas.map(area => (
+                                        <option key={area.id} value={area.id}>{area.name}</option>
+                                    ))}
+                                </select>
                             </div>
                             <button onClick={generateReport} className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm">
                                 Genera Report
