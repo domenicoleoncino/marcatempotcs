@@ -198,19 +198,21 @@ const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
     </div>
 );
 
-const AdminManagementView = ({ admins, openModal, user, superAdminEmail }) => {
+const AdminManagementView = ({ admins, openModal, user, superAdminEmail, currentUserRole }) => {
     const isSuperAdmin = user.email === superAdminEmail;
 
     const adminsToDisplay = admins.filter(admin => {
-        if (isSuperAdmin) return admin.id !== user.uid;
-        return admin.id !== user.uid && admin.email !== superAdminEmail;
+        // Chiunque può vedere la lista, ma il superadmin non è mai mostrato agli altri.
+        if (isSuperAdmin) return admin.id !== user.uid; // Il superadmin vede tutti tranne se stesso
+        return admin.id !== user.uid && admin.email !== superAdminEmail; // Gli altri admin non vedono il superadmin e se stessi
     });
 
     return (
         <div>
             <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Gestione Personale Amministrativo</h1>
-                <button onClick={() => openModal('newAdmin')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">Aggiungi Personale</button>
+                {/* Tutti gli admin possono aggiungere nuovo personale */}
+                {currentUserRole === 'admin' && <button onClick={() => openModal('newAdmin')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">Aggiungi Personale</button>}
             </div>
             <div className="bg-white shadow-md rounded-lg overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
@@ -233,6 +235,7 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail }) => {
                                 <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-500">{admin.managedAreaNames?.join(', ') || (admin.role === 'admin' ? 'Tutte' : 'Nessuna')}</td>
                                 <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
                                     <div className="flex items-center gap-3">
+                                        {/* Solo il superadmin può assegnare aree e eliminare altri admin */}
                                         {isSuperAdmin && admin.role === 'preposto' && <button onClick={() => openModal('assignManagedAreas', admin)} className="text-indigo-600 hover:text-indigo-900 text-xs">Assegna Aree</button>}
                                         {isSuperAdmin && <button onClick={() => openModal('deleteAdmin', admin)} className="text-red-600 hover:text-red-900 text-xs">Elimina</button>}
                                     </div>
@@ -299,8 +302,7 @@ const ReportView = ({ reports, title, handleExportXml }) => {
     );
 };
 
-const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAdminEmail, user, allEmployees }) => {
-    // ... (This component is already correct, leaving it as is)
+const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAdminEmail, user, allEmployees, currentUserRole }) => {
     const [formData, setFormData] = useState(item || {});
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
@@ -344,7 +346,9 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
         e.preventDefault();
         if ((type === 'newEmployee' || type === 'newAdmin') && formData.password && formData.password.length < 6) { setError("La password deve essere di almeno 6 caratteri."); return; }
         if (type === 'deleteAdmin' && item.id === user.uid) { setError("Non puoi eliminare te stesso."); return; }
-        if (type === 'newAdmin' && !isSuperAdmin) { formData.role = 'preposto'; }
+        
+        // La logica che forzava il ruolo a 'preposto' è stata rimossa.
+        // if (type === 'newAdmin' && !isSuperAdmin) { formData.role = 'preposto'; }
 
         setIsLoading(true);
         setError('');
@@ -385,7 +389,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                     break;
                 case 'newAdmin':
                     const adminCred = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
-                    await setDoc(doc(db, "users", adminCred.user.uid), { name: formData.name, surname: formData.surname, email: formData.email, role: formData.role, managedAreaIds: formData.role === 'preposto' ? [] : null, managedAreaNames: formData.role === 'preposto' ? [] : null });
+                    await setDoc(doc(db, "users", adminCred.user.uid), { name: formData.name, surname: formData.surname, email: formData.email, role: formData.role || 'preposto', managedAreaIds: (formData.role || 'preposto') === 'preposto' ? [] : null, managedAreaNames: (formData.role || 'preposto') === 'preposto' ? [] : null });
                     break;
                 case 'deleteAdmin':
                     if (item.email === superAdminEmail) { throw new Error("Non puoi eliminare il Super Admin."); }
@@ -505,7 +509,8 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                         <input name="surname" value={formData.surname || ''} onChange={handleInputChange} placeholder="Cognome" required className="w-full p-2 border rounded" />
                         <input type="email" name="email" value={formData.email || ''} onChange={handleInputChange} placeholder="Email" required className="w-full p-2 border rounded" />
                         <input type="password" name="password" value={formData.password || ''} onChange={handleInputChange} placeholder="Password (min. 6 caratteri)" required className="w-full p-2 border rounded" />
-                        {isSuperAdmin && (
+                        {/* Modifica qui: Ora tutti gli admin possono vedere il selettore del ruolo */}
+                        {currentUserRole === 'admin' && (
                             <select name="role" value={formData.role || 'preposto'} onChange={handleInputChange} required className="w-full p-2 border rounded">
                                 <option value="preposto">Preposto</option>
                                 <option value="admin">Admin</option>
@@ -552,13 +557,10 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
 
 const AdminDashboard = ({ user, handleLogout, userData }) => {
     const [view, setView] = useState('dashboard');
-    // Stato per i dati visualizzati (potenzialmente filtrati)
     const [employees, setEmployees] = useState([]);
     const [workAreas, setWorkAreas] = useState([]);
-    // Stato per contenere TUTTI i dati, non filtrati
     const [allEmployees, setAllEmployees] = useState([]);
     const [allWorkAreas, setAllWorkAreas] = useState([]);
-    
     const [admins, setAdmins] = useState([]);
     const [activeEntries, setActiveEntries] = useState([]);
     const [reports, setReports] = useState([]);
@@ -583,7 +585,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         if (!user || !userData) { setIsLoading(false); return; }
         setIsLoading(true);
         try {
-            // 1. Carica tutti i dati non filtrati
             const allAreasSnapshot = await getDocs(collection(db, "work_areas"));
             const allAreasList = allAreasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             setAllWorkAreas(allAreasList);
@@ -592,7 +593,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             const allEmployeesList = allEmployeesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             setAllEmployees(allEmployeesList);
 
-            // 2. Carica altri dati necessari
             const qAdmins = query(collection(db, "users"), where("role", "in", ["admin", "preposto"]));
             const adminsSnapshot = await getDocs(qAdmins);
             const adminUsers = adminsSnapshot.docs.map(doc => {
@@ -604,19 +604,17 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             });
             setAdmins(adminUsers);
 
-            // 3. Determina quali dati visualizzare in base al ruolo
             let employeesToDisplay = allEmployeesList;
             let areasToDisplay = allAreasList;
 
             if (currentUserRole === 'preposto' && userData.managedAreaIds) {
                 areasToDisplay = allAreasList.filter(area => userData.managedAreaIds.includes(area.id));
                 const managedAreaIds = userData.managedAreaIds;
-                employeesToDisplay = allEmployeesList.filter(emp => 
+                employeesToDisplay = allEmployeesList.filter(emp =>
                     emp.workAreaIds && emp.workAreaIds.some(areaId => managedAreaIds.includes(areaId))
                 );
             }
-            
-            // 4. Arricchisci i dati da visualizzare con lo stato attuale
+
             const activeEntriesSnapshot = await getDocs(query(collection(db, "time_entries"), where("status", "==", "clocked-in")));
             const activeEntriesList = activeEntriesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
@@ -626,8 +624,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 return { ...emp, activeEntry, isOnBreak };
             });
 
-            // 5. Imposta gli stati per la UI
-            setEmployees(employeesWithStatus); // <-- CORREZIONE APPLICATA QUI
+            setEmployees(employeesWithStatus);
 
             const activeEntriesForScope = activeEntriesList.filter(entry => employeesToDisplay.some(e => e.id === entry.employeeId));
             setActiveEntries(activeEntriesForScope);
@@ -636,7 +633,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 const activeCount = activeEntriesForScope.filter(entry => entry.workAreaId === area.id).length;
                 return { ...area, activeEmployeeCount: activeCount };
             }).sort((a, b) => a.name.localeCompare(b.name));
-            
+
             setWorkAreas(workAreasWithCounts);
 
         } catch (error) {
@@ -681,7 +678,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
         const reportData = [];
         for (const entry of entries) {
-            // Usa le liste complete per i report, non quelle filtrate
             const employeeData = allEmployees.find(e => e.id === entry.employeeId);
             const areaData = allWorkAreas.find(a => a.id === entry.workAreaId);
 
@@ -729,7 +725,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     };
 
     const sortedAndFilteredEmployees = useMemo(() => {
-        // La logica di sort/filter si applica ai dipendenti visualizzati
         let sortableItems = [...employees];
         if (searchTerm) {
             const lowercasedFilter = searchTerm.toLowerCase();
@@ -810,7 +805,8 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                             <button onClick={() => setView('dashboard')} className={`py-2 sm:py-4 px-1 sm:border-b-2 text-sm font-medium ${view === 'dashboard' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Dashboard</button>
                             <button onClick={() => setView('employees')} className={`py-2 sm:py-4 px-1 sm:border-b-2 text-sm font-medium ${view === 'employees' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Dipendenti</button>
                             <button onClick={() => setView('areas')} className={`py-2 sm:py-4 px-1 sm:border-b-2 text-sm font-medium ${view === 'areas' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Aree</button>
-                            {isSuperAdmin && <button onClick={() => setView('admins')} className={`py-2 sm:py-4 px-1 sm:border-b-2 text-sm font-medium ${view === 'admins' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Admin</button>}
+                            {/* Modifica qui: Ora tutti gli admin possono vedere la sezione Gestione Admin */}
+                            {currentUserRole === 'admin' && <button onClick={() => setView('admins')} className={`py-2 sm:py-4 px-1 sm:border-b-2 text-sm font-medium ${view === 'admins' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Admin</button>}
                         </div>
                     </div>
                 </div>
@@ -853,11 +849,11 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 {view === 'dashboard' && <DashboardView employees={employees} activeEntries={activeEntries} workAreas={workAreas} />}
                 {view === 'employees' && <EmployeeManagementView employees={sortedAndFilteredEmployees} openModal={openModal} currentUserRole={currentUserRole} sortConfig={sortConfig} requestSort={requestSort} searchTerm={searchTerm} setSearchTerm={setSearchTerm} />}
                 {view === 'areas' && <AreaManagementView workAreas={workAreas} openModal={openModal} currentUserRole={currentUserRole} />}
-                {view === 'admins' && <AdminManagementView admins={admins} openModal={openModal} user={user} superAdminEmail={superAdminEmail} />}
+                {view === 'admins' && <AdminManagementView admins={admins} openModal={openModal} user={user} superAdminEmail={superAdminEmail} currentUserRole={currentUserRole} />}
                 {view === 'reports' && <ReportView reports={reports} title={reportTitle} handleExportXml={handleExportXml} />}
             </main>
 
-            {showModal && <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} workAreas={allWorkAreas} onDataUpdate={fetchData} user={user} superAdminEmail={superAdminEmail} allEmployees={allEmployees} />}
+            {showModal && <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} workAreas={allWorkAreas} onDataUpdate={fetchData} user={user} superAdminEmail={superAdminEmail} allEmployees={allEmployees} currentUserRole={currentUserRole} />}
         </div>
     );
 };
