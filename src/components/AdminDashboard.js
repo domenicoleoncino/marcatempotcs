@@ -202,16 +202,14 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
     const isSuperAdmin = user.email === superAdminEmail;
 
     const adminsToDisplay = admins.filter(admin => {
-        // Chiunque può vedere la lista, ma il superadmin non è mai mostrato agli altri.
-        if (isSuperAdmin) return admin.id !== user.uid; // Il superadmin vede tutti tranne se stesso
-        return admin.id !== user.uid && admin.email !== superAdminEmail; // Gli altri admin non vedono il superadmin e se stessi
+        if (isSuperAdmin) return admin.id !== user.uid;
+        return admin.id !== user.uid && admin.email !== superAdminEmail;
     });
 
     return (
         <div>
             <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Gestione Personale Amministrativo</h1>
-                {/* Tutti gli admin possono aggiungere nuovo personale */}
                 {currentUserRole === 'admin' && <button onClick={() => openModal('newAdmin')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">Aggiungi Personale</button>}
             </div>
             <div className="bg-white shadow-md rounded-lg overflow-x-auto">
@@ -235,7 +233,6 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
                                 <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-500">{admin.managedAreaNames?.join(', ') || (admin.role === 'admin' ? 'Tutte' : 'Nessuna')}</td>
                                 <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
                                     <div className="flex items-center gap-3">
-                                        {/* Solo il superadmin può assegnare aree e eliminare altri admin */}
                                         {isSuperAdmin && admin.role === 'preposto' && <button onClick={() => openModal('assignManagedAreas', admin)} className="text-indigo-600 hover:text-indigo-900 text-xs">Assegna Aree</button>}
                                         {isSuperAdmin && <button onClick={() => openModal('deleteAdmin', admin)} className="text-red-600 hover:text-red-900 text-xs">Elimina</button>}
                                     </div>
@@ -306,7 +303,9 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
     const [formData, setFormData] = useState(item || {});
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
-    const isSuperAdmin = user.email === superAdminEmail;
+    
+    // La costante 'isSuperAdmin' che causava l'errore è stata rimossa.
+    // I controlli sui permessi ora usano 'currentUserRole' o verificano l'email direttamente.
 
     const handleInputChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
@@ -346,9 +345,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
         e.preventDefault();
         if ((type === 'newEmployee' || type === 'newAdmin') && formData.password && formData.password.length < 6) { setError("La password deve essere di almeno 6 caratteri."); return; }
         if (type === 'deleteAdmin' && item.id === user.uid) { setError("Non puoi eliminare te stesso."); return; }
-        
-        // La logica che forzava il ruolo a 'preposto' è stata rimossa.
-        // if (type === 'newAdmin' && !isSuperAdmin) { formData.role = 'preposto'; }
 
         setIsLoading(true);
         setError('');
@@ -509,7 +505,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                         <input name="surname" value={formData.surname || ''} onChange={handleInputChange} placeholder="Cognome" required className="w-full p-2 border rounded" />
                         <input type="email" name="email" value={formData.email || ''} onChange={handleInputChange} placeholder="Email" required className="w-full p-2 border rounded" />
                         <input type="password" name="password" value={formData.password || ''} onChange={handleInputChange} placeholder="Password (min. 6 caratteri)" required className="w-full p-2 border rounded" />
-                        {/* Modifica qui: Ora tutti gli admin possono vedere il selettore del ruolo */}
                         {currentUserRole === 'admin' && (
                             <select name="role" value={formData.role || 'preposto'} onChange={handleInputChange} required className="w-full p-2 border rounded">
                                 <option value="preposto">Preposto</option>
@@ -805,7 +800,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                             <button onClick={() => setView('dashboard')} className={`py-2 sm:py-4 px-1 sm:border-b-2 text-sm font-medium ${view === 'dashboard' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Dashboard</button>
                             <button onClick={() => setView('employees')} className={`py-2 sm:py-4 px-1 sm:border-b-2 text-sm font-medium ${view === 'employees' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Dipendenti</button>
                             <button onClick={() => setView('areas')} className={`py-2 sm:py-4 px-1 sm:border-b-2 text-sm font-medium ${view === 'areas' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Aree</button>
-                            {/* Modifica qui: Ora tutti gli admin possono vedere la sezione Gestione Admin */}
                             {currentUserRole === 'admin' && <button onClick={() => setView('admins')} className={`py-2 sm:py-4 px-1 sm:border-b-2 text-sm font-medium ${view === 'admins' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Admin</button>}
                         </div>
                     </div>
