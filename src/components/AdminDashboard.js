@@ -597,7 +597,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
     const currentUserRole = userData?.role;
     const superAdminEmail = "domenico.leoncino@tcsitalia.com";
-    const isSuperAdmin = user.email === superAdminEmail;
 
     const fetchData = useCallback(async () => {
         if (!user || !userData) { setIsLoading(false); return; }
