@@ -743,7 +743,21 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             }
         }
         setReports(reportData);
-        setView('reports');
+        setView('reports');        // ...existing code...
+       <nav className="bg-white border-b border-gray-200">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    {/* MODIFICA APPLICATA QUI SOTTO */}
+                    <div className="flex justify-center">
+                        <div className="flex flex-col sm:flex-row sm:space-x-8">
+                            <button onClick={() => setView('dashboard')} className={`py-2 sm:py-4 px-1 sm:border-b-2 text-sm font-medium ${view === 'dashboard' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Dashboard</button>
+                            <button onClick={() => setView('employees')} className={`py-2 sm:py-4 px-1 sm:border-b-2 text-sm font-medium ${view === 'employees' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Dipendenti</button>
+                            <button onClick={() => setView('areas')} className={`py-2 sm:py-4 px-1 sm:border-b-2 text-sm font-medium ${view === 'areas' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Aree</button>
+                            {currentUserRole === 'admin' && <button onClick={() => setView('admins')} className={`py-2 sm:py-4 px-1 sm:border-b-2 text-sm font-medium ${view === 'admins' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Admin</button>}
+                        </div>
+                    </div>
+                </div>
+            </nav>
+        // ...existing code...
     };
 
     const requestSort = (key) => {
