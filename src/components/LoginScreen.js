@@ -1,16 +1,15 @@
 import React, { useState } from 'react';
-// MODIFICA: Aggiunto 'sendPasswordResetEmail' per il recupero password
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '../firebase';
 import CompanyLogo from './CompanyLogo';
-import { useNavigate } from 'react-router-dom';
+// 'useNavigate' è stato rimosso da qui
 
 const Login = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const navigate = useNavigate();
+    // la costante 'navigate' è stata rimossa da qui
 
     const handleLogin = async (e) => {
         e.preventDefault();
@@ -28,7 +27,6 @@ const Login = () => {
         }
     };
 
-    // MODIFICA: Nuova funzione per il recupero password
     const handlePasswordReset = async () => {
         if (!email) {
             setError('Per favore, inserisci la tua email prima di richiedere il recupero.');
@@ -37,16 +35,11 @@ const Login = () => {
         try {
             await sendPasswordResetEmail(auth, email);
             alert('Email di recupero inviata! Controlla la tua casella di posta.');
-            setError(''); // Pulisce eventuali errori precedenti
+            setError('');
         } catch (err) {
             setError('Impossibile inviare l\'email. Verifica che l\'indirizzo sia corretto.');
         }
     };
-
-    // MODIFICA: La funzione 'handleRegister' è stata rimossa
-    // const handleRegister = () => {
-    //     navigate('/register');
-    // };
 
     return (
         <div className="min-h-screen flex flex-col justify-center items-center bg-gray-50 p-4">
@@ -83,7 +76,6 @@ const Login = () => {
                         />
                     </div>
                     
-                    {/* MODIFICA: Aggiunto link per password dimenticata */}
                     <div className="text-right">
                         <button type="button" onClick={handlePasswordReset} className="text-sm text-blue-600 hover:underline focus:outline-none">
                             Password dimenticata?
@@ -102,9 +94,6 @@ const Login = () => {
                         </button>
                     </div>
                 </form>
-
-                {/* MODIFICA: Il pulsante 'Registrati' è stato rimosso da qui */}
-
             </div>
         </div>
     );
