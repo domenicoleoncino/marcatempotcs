@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+// MODIFICA: Aggiunto 'sendPasswordResetEmail' per il recupero password
+import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '../firebase';
 import CompanyLogo from './CompanyLogo';
 import { useNavigate } from 'react-router-dom';
@@ -17,7 +18,6 @@ const Login = () => {
         setError('');
         try {
             await signInWithEmailAndPassword(auth, email, password);
-            // Il reindirizzamento verrà gestito dal listener onAuthStateChanged nell'App principale
         } catch (err) {
             if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found') {
                 setError('Email o password non corretta. Riprova.');
@@ -28,17 +28,29 @@ const Login = () => {
         }
     };
 
-    const handleRegister = () => {
-        navigate('/register');
+    // MODIFICA: Nuova funzione per il recupero password
+    const handlePasswordReset = async () => {
+        if (!email) {
+            setError('Per favore, inserisci la tua email prima di richiedere il recupero.');
+            return;
+        }
+        try {
+            await sendPasswordResetEmail(auth, email);
+            alert('Email di recupero inviata! Controlla la tua casella di posta.');
+            setError(''); // Pulisce eventuali errori precedenti
+        } catch (err) {
+            setError('Impossibile inviare l\'email. Verifica che l\'indirizzo sia corretto.');
+        }
     };
 
-    return (
-        // CONTENITORE PRINCIPALE CHE CENTRA TUTTO
-        <div className="min-h-screen flex flex-col justify-center items-center bg-gray-50 p-4">
-            
-            {/* CARD BIANCA CHE CONTIENE IL FORM */}
-            <div className="w-full max-w-sm bg-white p-8 rounded-lg shadow-md">
+    // MODIFICA: La funzione 'handleRegister' è stata rimossa
+    // const handleRegister = () => {
+    //     navigate('/register');
+    // };
 
+    return (
+        <div className="min-h-screen flex flex-col justify-center items-center bg-gray-50 p-4">
+            <div className="w-full max-w-sm bg-white p-8 rounded-lg shadow-md">
                 <div className="mb-6 text-center">
                     <CompanyLogo />
                     <h2 className="mt-4 text-2xl font-bold text-gray-800">Accesso</h2>
@@ -70,6 +82,13 @@ const Login = () => {
                             className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
                         />
                     </div>
+                    
+                    {/* MODIFICA: Aggiunto link per password dimenticata */}
+                    <div className="text-right">
+                        <button type="button" onClick={handlePasswordReset} className="text-sm text-blue-600 hover:underline focus:outline-none">
+                            Password dimenticata?
+                        </button>
+                    </div>
 
                     {error && <p className="text-sm text-red-600 text-center">{error}</p>}
 
@@ -84,11 +103,7 @@ const Login = () => {
                     </div>
                 </form>
 
-                <div className="mt-6 text-center">
-                    <button onClick={handleRegister} className="text-sm text-blue-600 hover:underline">
-                        Non hai un account? Registrati
-                    </button>
-                </div>
+                {/* MODIFICA: Il pulsante 'Registrati' è stato rimosso da qui */}
 
             </div>
         </div>
