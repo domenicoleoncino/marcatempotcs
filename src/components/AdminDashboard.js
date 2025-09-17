@@ -355,7 +355,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
             switch (type) {
                 case 'newEmployee':
                     const userCred = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
-                    await setDoc(doc(db, "users", userCred.user.uid), { email: formData.email, role: 'employee', name: formData.name, surname: formData.surname });
+                    await setDoc(doc(db, "users", userCred.user.uid), { email: formData.email, role: 'employee', name: formData.name, surname: formData.surname, requiresPasswordChange: true });
                     
                     let employeeData = {
                         userId: userCred.user.uid,
@@ -403,9 +403,9 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                     break;
                 case 'newAdmin':
                     const adminCred = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
-                    await setDoc(doc(db, "users", adminCred.user.uid), { name: formData.name, surname: formData.surname, email: formData.email, role: formData.role || 'preposto', managedAreaIds: (formData.role || 'preposto') === 'preposto' ? [] : null, managedAreaNames: (formData.role || 'preposto') === 'preposto' ? [] : null });
+                    await setDoc(doc(db, "users", adminCred.user.uid), { name: formData.name, surname: formData.surname, email: formData.email, role: formData.role || 'preposto', managedAreaIds: (formData.role || 'preposto') === 'preposto' ? [] : null, managedAreaNames: (formData.role || 'preposto') === 'preposto' ? [] : null, requiresPasswordChange: true });
                     break;
-                case 'deleteAdmin':
+                case 'deleteAdmin'
                     if (item.email === superAdminEmail) { throw new Error("Non puoi eliminare il Super Admin."); }
                     await deleteDoc(doc(db, "users", item.id));
                     break;

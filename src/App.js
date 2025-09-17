@@ -5,6 +5,8 @@ import { doc, getDoc } from 'firebase/firestore';
 import LoginScreen from './components/LoginScreen';
 import AdminDashboard from './components/AdminDashboard';
 import EmployeeDashboard from './components/EmployeeDashboard';
+// MODIFICA: Import del nuovo componente per il cambio password
+import ChangePassword from './components/ChangePassword';
 
 function App() {
     const [user, setUser] = useState(null);
@@ -20,24 +22,21 @@ function App() {
                 if (userDocSnap.exists()) {
                     const fetchedUserData = userDocSnap.data();
 
-                    // *** NUOVA LOGICA DI CONTROLLO DISPOSITIVO BASATA SUL RUOLO ***
+                    // Logica di controllo dispositivo (invariata)
                     if (fetchedUserData.role === 'employee') {
                         const deviceLock = localStorage.getItem('deviceLock');
                         if (deviceLock) {
                             const lockData = JSON.parse(deviceLock);
                             if (lockData.email !== authenticatedUser.email) {
-                                // Dispositivo bloccato da un altro dipendente, logout forzato
                                 sessionStorage.setItem('loginError', 'Accesso bloccato. Questo dispositivo è registrato per un altro utente.');
                                 await signOut(auth);
                                 setIsLoading(false);
-                                return; // Interrompe l'esecuzione per evitare di impostare l'utente
+                                return;
                             }
                         } else {
-                            // Primo login di un dipendente su questo dispositivo, imposta il blocco
                             localStorage.setItem('deviceLock', JSON.stringify({ email: authenticatedUser.email }));
                         }
                     } else if (fetchedUserData.role === 'admin' || fetchedUserData.role === 'preposto') {
-                        // Gli admin e i preposti non bloccano il dispositivo, anzi, lo sbloccano
                         localStorage.removeItem('deviceLock');
                     }
 
@@ -56,10 +55,16 @@ function App() {
 
         return () => unsubscribe();
     }, []);
+    
+    // MODIFICA: Funzione per gestire l'avvenuto cambio password
+    const handlePasswordChanged = () => {
+        // Aggiorna lo stato locale per rimuovere la schermata di cambio password
+        // senza dover ricaricare la pagina o effettuare un nuovo login.
+        setUserData(prevUserData => ({ ...prevUserData, requiresPasswordChange: false }));
+    };
 
     const handleLogout = async () => {
         try {
-            // Rimuove il blocco del dispositivo solo se l'utente che fa logout è un dipendente
             if (userData && userData.role === 'employee') {
                 localStorage.removeItem('deviceLock');
             }
@@ -80,10 +85,16 @@ function App() {
     }
     
     if (user && userData) {
+        // MODIFICA: Controllo prioritario per forzare il cambio password
+        if (userData.requiresPasswordChange) {
+            return <ChangePassword onPasswordChanged={handlePasswordChanged} />;
+        }
+
+        // Se il cambio password non è richiesto, mostra la dashboard corretta
         if (userData.role === 'admin' || userData.role === 'preposto') {
             return <AdminDashboard user={user} userData={userData} handleLogout={handleLogout} />;
         } else if (userData.role === 'employee') {
-            return <EmployeeDashboard user={user} handleLogout={handleLogout} />;
+            return <EmployeeDashboard user={user} userData={userData} handleLogout={handleLogout} />;
         }
     }
     
