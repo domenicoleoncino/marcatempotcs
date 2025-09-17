@@ -5,69 +5,77 @@ import { doc, getDoc } from 'firebase/firestore';
 import LoginScreen from './components/LoginScreen';
 import AdminDashboard from './components/AdminDashboard';
 import EmployeeDashboard from './components/EmployeeDashboard';
-// MODIFICA: Import del nuovo componente per il cambio password
 import ChangePassword from './components/ChangePassword';
+
+// NUOVO: Componente per la schermata di blocco
+const AppBlockedScreen = () => (
+    <div className="min-h-screen flex flex-col justify-center items-center bg-gray-100 p-4 text-center">
+        <h1 className="text-2xl font-bold text-red-600 mb-4">Servizio momentaneamente non disponibile</h1>
+        <p className="text-gray-700">L'applicazione è in fase di manutenzione. Si prega di riprovare più tardi.</p>
+    </div>
+);
 
 function App() {
     const [user, setUser] = useState(null);
     const [userData, setUserData] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
 
+    // NUOVO STATO: Per controllare se l'app è attiva
+    const [isAppActive, setIsAppActive] = useState(false);
+
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (authenticatedUser) => {
-            if (authenticatedUser) {
-                const userDocRef = doc(db, 'users', authenticatedUser.uid);
-                const userDocSnap = await getDoc(userDocRef);
+        // MODIFICA: La funzione ora è asincrona per controllare lo stato prima di tutto
+        const checkAppStatusAndAuth = async () => {
+            try {
+                // 1. Controlla lo stato dell'applicazione dal flag su Firestore
+                const configDocRef = doc(db, 'app_config', 'status');
+                const configDocSnap = await getDoc(configDocRef);
 
-                if (userDocSnap.exists()) {
-                    const fetchedUserData = userDocSnap.data();
-
-                    // Logica di controllo dispositivo (invariata)
-                    if (fetchedUserData.role === 'employee') {
-                        const deviceLock = localStorage.getItem('deviceLock');
-                        if (deviceLock) {
-                            const lockData = JSON.parse(deviceLock);
-                            if (lockData.email !== authenticatedUser.email) {
-                                sessionStorage.setItem('loginError', 'Accesso bloccato. Questo dispositivo è registrato per un altro utente.');
-                                await signOut(auth);
-                                setIsLoading(false);
-                                return;
-                            }
-                        } else {
-                            localStorage.setItem('deviceLock', JSON.stringify({ email: authenticatedUser.email }));
-                        }
-                    } else if (fetchedUserData.role === 'admin' || fetchedUserData.role === 'preposto') {
-                        localStorage.removeItem('deviceLock');
-                    }
-
-                    setUserData(fetchedUserData);
-                    setUser(authenticatedUser);
+                if (configDocSnap.exists() && configDocSnap.data().isAttiva === true) {
+                    setIsAppActive(true); // App attiva, procedi con l'autenticazione
                 } else {
-                    setUserData({ role: 'unknown' });
-                    setUser(authenticatedUser);
+                    setIsAppActive(false); // App bloccata
+                    setIsLoading(false); // Fine del caricamento, mostra la schermata di blocco
+                    return; // Interrompe l'esecuzione
                 }
-            } else {
-                setUser(null);
-                setUserData(null);
+            } catch (error) {
+                console.error("Errore nel controllo dello stato dell'app:", error);
+                setIsAppActive(false); // Blocco di sicurezza in caso di errore
+                setIsLoading(false);
+                return;
             }
-            setIsLoading(false);
-        });
 
-        return () => unsubscribe();
+            // 2. Se l'app è attiva, imposta il listener di autenticazione (codice precedente)
+            const unsubscribe = onAuthStateChanged(auth, async (authenticatedUser) => {
+                if (authenticatedUser) {
+                    const userDocRef = doc(db, 'users', authenticatedUser.uid);
+                    const userDocSnap = await getDoc(userDocRef);
+                    if (userDocSnap.exists()) {
+                        setUserData(userDocSnap.data());
+                        setUser(authenticatedUser);
+                    } else {
+                        // Gestisce il caso in cui l'utente auth esiste ma non ha un documento in 'users'
+                        await signOut(auth);
+                    }
+                } else {
+                    setUser(null);
+                    setUserData(null);
+                }
+                setIsLoading(false);
+            });
+
+            return () => unsubscribe();
+        };
+
+        checkAppStatusAndAuth();
     }, []);
     
-    // MODIFICA: Funzione per gestire l'avvenuto cambio password
     const handlePasswordChanged = () => {
-        // Aggiorna lo stato locale per rimuovere la schermata di cambio password
-        // senza dover ricaricare la pagina o effettuare un nuovo login.
         setUserData(prevUserData => ({ ...prevUserData, requiresPasswordChange: false }));
     };
 
     const handleLogout = async () => {
         try {
-            if (userData && userData.role === 'employee') {
-                localStorage.removeItem('deviceLock');
-            }
             await signOut(auth);
             setUser(null);
             setUserData(null);
@@ -84,13 +92,15 @@ function App() {
         );
     }
     
+    // NUOVO CONTROLLO: Se l'app non è attiva, mostra la schermata di blocco
+    if (!isAppActive) {
+        return <AppBlockedScreen />;
+    }
+
     if (user && userData) {
-        // MODIFICA: Controllo prioritario per forzare il cambio password
         if (userData.requiresPasswordChange) {
             return <ChangePassword onPasswordChanged={handlePasswordChanged} />;
         }
-
-        // Se il cambio password non è richiesto, mostra la dashboard corretta
         if (userData.role === 'admin' || userData.role === 'preposto') {
             return <AdminDashboard user={user} userData={userData} handleLogout={handleLogout} />;
         } else if (userData.role === 'employee') {
@@ -98,13 +108,7 @@ function App() {
         }
     }
     
-    return (
-        <div className="min-h-screen bg-gray-100 flex flex-col justify-center items-center p-4">
-            <div className="w-full max-w-sm mx-auto">
-                <LoginScreen />
-            </div>
-        </div>
-    );
+    return <LoginScreen />;
 }
 
 export default App;
