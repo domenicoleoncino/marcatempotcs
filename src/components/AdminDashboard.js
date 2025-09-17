@@ -10,7 +10,6 @@ import CompanyLogo from './CompanyLogo';
 // --- SUB-COMPONENTI INTERNI ---
 
 const DashboardView = ({ employees, activeEntries, workAreas }) => {
-    // ... (invariato)
     const calculateCurrentHours = () => {
         let totalNetMinutes = 0;
         const now = new Date();
@@ -94,7 +93,6 @@ const DashboardView = ({ employees, activeEntries, workAreas }) => {
 };
 
 const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortConfig, requestSort, searchTerm, setSearchTerm }) => {
-    // ... (invariato)
     const getSortIndicator = (key) => {
         if (!sortConfig || sortConfig.key !== key) return '';
         return sortConfig.direction === 'ascending' ? ' ▲' : ' ▼';
@@ -166,7 +164,6 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
 }
 
 const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
-    // ... (invariato)
     <div>
         <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Gestione Aree di Lavoro</h1>
@@ -202,7 +199,6 @@ const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
 );
 
 const AdminManagementView = ({ admins, openModal, user, superAdminEmail, currentUserRole }) => {
-    // ... (invariato)
     const isSuperAdmin = user.email === superAdminEmail;
 
     const adminsToDisplay = admins.filter(admin => {
@@ -251,7 +247,6 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
 };
 
 const ReportView = ({ reports, title, handleExportXml }) => {
-    // ... (invariato)
     const handleExportExcel = () => {
         if (typeof window.XLSX === 'undefined') { alert("La libreria di esportazione non è ancora stata caricata. Riprova tra un momento."); return; }
         const dataToExport = reports.map(entry => ({ 'Dipendente': entry.employeeName, 'Area': entry.areaName, 'Data': entry.clockInDate, 'Entrata': entry.clockInTimeFormatted, 'Uscita': entry.clockOutTimeFormatted, 'Ore Lavorate': (entry.duration !== null) ? parseFloat(entry.duration.toFixed(2)) : "In corso", 'Note': entry.note }));
@@ -570,7 +565,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
 // --- COMPONENTE PRINCIPALE ---
 
 const AdminDashboard = ({ user, handleLogout, userData }) => {
-    // ... (invariato)
     const [view, setView] = useState('dashboard');
     const [employees, setEmployees] = useState([]);
     const [workAreas, setWorkAreas] = useState([]);
@@ -596,7 +590,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const superAdminEmail = "domenico.leoncino@tcsitalia.com";
 
     const fetchData = useCallback(async () => {
-        // ... (invariato)
         if (!user || !userData) { setIsLoading(false); return; }
         setIsLoading(true);
         try {
@@ -669,7 +662,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     };
 
     const generateReport = async () => {
-        // ... (invariato)
         if (!dateRange.start || !dateRange.end) {
             alert("Seleziona un intervallo di date valido.");
             return;
@@ -746,7 +738,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     };
 
     const requestSort = (key) => {
-        // ... (invariato)
         let direction = 'ascending';
         if (sortConfig.key === key && sortConfig.direction === 'ascending') {
             direction = 'descending';
@@ -755,7 +746,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     };
 
     const sortedAndFilteredEmployees = useMemo(() => {
-        // ... (invariato)
         let sortableItems = [...employees];
         if (searchTerm) {
             const lowercasedFilter = searchTerm.toLowerCase();
@@ -791,7 +781,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     }, [employees, searchTerm, sortConfig]);
 
     const handleExportXml = () => {
-        // ... (invariato)
         let xmlString = '<?xml version="1.0" encoding="UTF-8"?>\n<Report>\n';
         reports.forEach(entry => {
             xmlString += '  <Timbratura>\n';
@@ -830,7 +819,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                     <button onClick={handleLogout} className="px-3 py-1.5 bg-red-500 text-white rounded-lg hover:bg-red-600 w-full sm:w-auto text-sm">Logout</button>
                 </div>
             </header>
-            {/* MODIFICA: Layout della navigazione per mobile */}
             <nav className="bg-white border-b border-gray-200">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex justify-center">
@@ -891,7 +879,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 </div>
             )}
 
-            {/* MODIFICA: Layout del contenuto principale per mobile */}
             <main className="p-4 sm:p-8 max-w-7xl mx-auto w-full text-center sm:text-left">
                 {view === 'dashboard' && <DashboardView employees={employees} activeEntries={activeEntries} workAreas={workAreas} />}
                 {view === 'employees' && <EmployeeManagementView employees={sortedAndFilteredEmployees} openModal={openModal} currentUserRole={currentUserRole} sortConfig={sortConfig} requestSort={requestSort} searchTerm={searchTerm} setSearchTerm={setSearchTerm} />}
