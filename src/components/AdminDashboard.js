@@ -405,7 +405,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                     const adminCred = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
                     await setDoc(doc(db, "users", adminCred.user.uid), { name: formData.name, surname: formData.surname, email: formData.email, role: formData.role || 'preposto', managedAreaIds: (formData.role || 'preposto') === 'preposto' ? [] : null, managedAreaNames: (formData.role || 'preposto') === 'preposto' ? [] : null, requiresPasswordChange: true });
                     break;
-                case 'deleteAdmin'
+                case 'deleteAdmin':
                     if (item.email === superAdminEmail) { throw new Error("Non puoi eliminare il Super Admin."); }
                     await deleteDoc(doc(db, "users", item.id));
                     break;
