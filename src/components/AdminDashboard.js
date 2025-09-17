@@ -451,6 +451,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
     };
 
     const renderForm = () => {
+        // ... (invariato)
         switch (type) {
             case 'newEmployee':
             case 'editEmployee':
@@ -569,7 +570,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
 // --- COMPONENTE PRINCIPALE ---
 
 const AdminDashboard = ({ user, handleLogout, userData }) => {
-    // ... (stati e altre funzioni invariati)
+    // ... (invariato)
     const [view, setView] = useState('dashboard');
     const [employees, setEmployees] = useState([]);
     const [workAreas, setWorkAreas] = useState([]);
@@ -583,22 +584,19 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const [modalType, setModalType] = useState('');
     const [selectedItem, setSelectedItem] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
-
     const [searchTerm, setSearchTerm] = useState('');
     const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'ascending' });
     const [dateRange, setDateRange] = useState({
         start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
         end: new Date().toISOString().split('T')[0]
     });
-    // MODIFICA: Aggiunto nuovo stato per il filtro area nei report
     const [reportAreaFilter, setReportAreaFilter] = useState('all'); 
 
     const currentUserRole = userData?.role;
     const superAdminEmail = "domenico.leoncino@tcsitalia.com";
-    // La costante isSuperAdmin è stata rimossa da qui perché non era utilizzata
 
     const fetchData = useCallback(async () => {
-        // ... (logica invariata)
+        // ... (invariato)
         if (!user || !userData) { setIsLoading(false); return; }
         setIsLoading(true);
         try {
@@ -671,7 +669,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     };
 
     const generateReport = async () => {
-        // ... (logica quasi invariata, con aggiunta del filtro area)
+        // ... (invariato)
         if (!dateRange.start || !dateRange.end) {
             alert("Seleziona un intervallo di date valido.");
             return;
@@ -683,17 +681,18 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         const endDate = new Date(dateRange.end);
         endDate.setHours(23, 59, 59, 999);
         
-        // MODIFICA: Aggiorna il titolo del report se un'area è selezionata
-        let title = `Report dal ${startDate.toLocaleDateString('it-IT')} al ${endDate.toLocaleDateString('it-IT')}`;
+        const formattedStartDate = startDate.toLocaleDateString('it-IT');
+        const formattedEndDate = endDate.toLocaleDateString('it-IT');
+        let title = `Report | ${formattedStartDate} - ${formattedEndDate}`;
+
         if (reportAreaFilter !== 'all') {
             const selectedArea = allWorkAreas.find(area => area.id === reportAreaFilter);
             if (selectedArea) {
-                title = `Report per area "${selectedArea.name}" - dal ${startDate.toLocaleDateString('it-IT')} al ${endDate.toLocaleDateString('it-IT')}`;
+                title = `Report Area: ${selectedArea.name} | ${formattedStartDate} - ${formattedEndDate}`;
             }
         }
         setReportTitle(title);
         
-        // MODIFICA: Aggiunge dinamicamente il filtro per area alla query
         const queryConstraints = [
             where("clockInTime", ">=", Timestamp.fromDate(startDate)),
             where("clockInTime", "<=", Timestamp.fromDate(endDate))
@@ -743,21 +742,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             }
         }
         setReports(reportData);
-        setView('reports');        // ...existing code...
-       <nav className="bg-white border-b border-gray-200">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    {/* MODIFICA APPLICATA QUI SOTTO */}
-                    <div className="flex justify-center">
-                        <div className="flex flex-col sm:flex-row sm:space-x-8">
-                            <button onClick={() => setView('dashboard')} className={`py-2 sm:py-4 px-1 sm:border-b-2 text-sm font-medium ${view === 'dashboard' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Dashboard</button>
-                            <button onClick={() => setView('employees')} className={`py-2 sm:py-4 px-1 sm:border-b-2 text-sm font-medium ${view === 'employees' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Dipendenti</button>
-                            <button onClick={() => setView('areas')} className={`py-2 sm:py-4 px-1 sm:border-b-2 text-sm font-medium ${view === 'areas' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Aree</button>
-                            {currentUserRole === 'admin' && <button onClick={() => setView('admins')} className={`py-2 sm:py-4 px-1 sm:border-b-2 text-sm font-medium ${view === 'admins' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Admin</button>}
-                        </div>
-                    </div>
-                </div>
-            </nav>
-        // ...existing code...
+        setView('reports');
     };
 
     const requestSort = (key) => {
@@ -845,14 +830,15 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                     <button onClick={handleLogout} className="px-3 py-1.5 bg-red-500 text-white rounded-lg hover:bg-red-600 w-full sm:w-auto text-sm">Logout</button>
                 </div>
             </header>
+            {/* MODIFICA: Layout della navigazione per mobile */}
             <nav className="bg-white border-b border-gray-200">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex justify-center sm:justify-start">
-                        <div className="flex flex-col sm:flex-row sm:space-x-8">
-                            <button onClick={() => setView('dashboard')} className={`py-2 sm:py-4 px-1 sm:border-b-2 text-sm font-medium ${view === 'dashboard' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Dashboard</button>
-                            <button onClick={() => setView('employees')} className={`py-2 sm:py-4 px-1 sm:border-b-2 text-sm font-medium ${view === 'employees' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Dipendenti</button>
-                            <button onClick={() => setView('areas')} className={`py-2 sm:py-4 px-1 sm:border-b-2 text-sm font-medium ${view === 'areas' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Aree</button>
-                            {currentUserRole === 'admin' && <button onClick={() => setView('admins')} className={`py-2 sm:py-4 px-1 sm:border-b-2 text-sm font-medium ${view === 'admins' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Admin</button>}
+                    <div className="flex justify-center">
+                        <div className="flex flex-wrap justify-center py-2 sm:space-x-4">
+                            <button onClick={() => setView('dashboard')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'dashboard' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Dashboard</button>
+                            <button onClick={() => setView('employees')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'employees' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Dipendenti</button>
+                            <button onClick={() => setView('areas')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'areas' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Aree</button>
+                            {currentUserRole === 'admin' && <button onClick={() => setView('admins')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'admins' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Admin</button>}
                         </div>
                     </div>
                 </div>
@@ -861,8 +847,8 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             {view !== 'reports' && (
                 <div className="bg-gray-50 border-b border-gray-200 p-4">
                     <div className="max-w-7xl mx-auto w-full">
-                        <h3 className="text-lg font-medium text-gray-900 mb-2">Genera Report Personalizzato</h3>
-                        <div className="flex flex-col sm:flex-row items-center gap-4 flex-wrap">
+                        <h3 className="text-lg font-medium text-gray-900 mb-2 text-center sm:text-left">Genera Report Personalizzato</h3>
+                        <div className="flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-4 flex-wrap">
                             <div>
                                 <label htmlFor="startDate" className="text-sm font-medium text-gray-700">Da:</label>
                                 <input
@@ -883,7 +869,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                                     className="ml-2 p-1 border border-gray-300 rounded-md"
                                 />
                             </div>
-                            {/* MODIFICA: Aggiunto il menu a tendina per filtrare per area */}
                             <div>
                                 <label htmlFor="areaFilter" className="text-sm font-medium text-gray-700">Area:</label>
                                 <select 
@@ -906,7 +891,8 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 </div>
             )}
 
-            <main className="p-4 sm:p-8 max-w-7xl mx-auto w-full">
+            {/* MODIFICA: Layout del contenuto principale per mobile */}
+            <main className="p-4 sm:p-8 max-w-7xl mx-auto w-full text-center sm:text-left">
                 {view === 'dashboard' && <DashboardView employees={employees} activeEntries={activeEntries} workAreas={workAreas} />}
                 {view === 'employees' && <EmployeeManagementView employees={sortedAndFilteredEmployees} openModal={openModal} currentUserRole={currentUserRole} sortConfig={sortConfig} requestSort={requestSort} searchTerm={searchTerm} setSearchTerm={setSearchTerm} />}
                 {view === 'areas' && <AreaManagementView workAreas={workAreas} openModal={openModal} currentUserRole={currentUserRole} />}
