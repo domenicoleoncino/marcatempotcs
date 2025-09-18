@@ -1,13 +1,11 @@
-// functions/index.js
-
 const functions = require("firebase-functions");
-const admin = require("");
+const admin = require("firebase-admin");
 
 admin.initializeApp();
 
 // Questa è la nostra nuova funzione per creare utenti
 exports.createNewUser = functions.https.onCall(async (data, context) => {
-  // Controlla che a chiamare la funzione sia un admin autenticato
+  // Controlla che a chiamare la funzione sia un admin o preposto autenticato
   if (!context.auth) {
     throw new functions.https.HttpsError(
       "unauthenticated",
