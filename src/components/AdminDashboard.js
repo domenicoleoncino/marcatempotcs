@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db, auth } from '../firebase';
 import {
-    doc, setDoc, collection, addDoc, getDocs, query, where,
+    doc,  collection, addDoc, getDocs, query, where,
     updateDoc, deleteDoc, writeBatch, Timestamp
 } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
