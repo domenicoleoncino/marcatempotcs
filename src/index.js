@@ -1,8 +1,6 @@
 // functions/index.js
 
 const functions = require("firebase/functions");
-const admin = require("firebase-admin ");
-
 admin.initializeApp();
 
 // Questa è la nostra nuova funzione per creare utenti
