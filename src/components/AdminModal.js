@@ -1,9 +1,9 @@
-// SOSTITUISCI IL TUO ATTUALE AdminModal CON QUESTO
-const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAdminEmail, user, allEmployees, currentUserRole }) => {
+// Sostituisci il tuo vecchio AdminModal con questo in AdminDashboard.js
+
+const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAdminEmail, user, allEmployees, currentUserRole, userData }) => {
     const [formData, setFormData] = useState(item || {});
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
-    // 'isSuperAdmin' è stata rimossa da qui
 
     const handleInputChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
@@ -41,79 +41,108 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if ((type === 'newEmployee' || type === 'newAdmin') && formData.password && formData.password.length < 6) { setError("La password deve essere di almeno 6 caratteri."); return; }
-        if (type === 'deleteAdmin' && item.id === user.uid) { setError("Non puoi eliminare te stesso."); return; }
+        if ((type === 'newEmployee' || type === 'newAdmin') && (!formData.password || formData.password.length < 6)) {
+            setError("La password deve essere di almeno 6 caratteri.");
+            return;
+        }
+        if (type === 'deleteAdmin' && item.id === user.uid) {
+            setError("Non puoi eliminare te stesso.");
+            return;
+        }
 
         setIsLoading(true);
         setError('');
+
         try {
-            switch (type) {
-                case 'newEmployee':
-                    const userCred = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
-                    await setDoc(doc(db, "users", userCred.user.uid), { email: formData.email, role: 'employee', name: formData.name, surname: formData.surname });
-                    await addDoc(collection(db, "employees"), { userId: userCred.user.uid, name: formData.name, surname: formData.surname, phone: formData.phone, email: formData.email, workAreaIds: [], workAreaNames: [], deviceIds: [] });
-                    break;
-                case 'editEmployee':
-                    await updateDoc(doc(db, "employees", item.id), { name: formData.name, surname: formData.surname, phone: formData.phone });
-                    break;
-                case 'deleteEmployee':
-                    await deleteDoc(doc(db, "employees", item.id));
-                    break;
-                case 'newArea':
-                    await addDoc(collection(db, "work_areas"), { name: formData.name, latitude: parseFloat(formData.latitude), longitude: parseFloat(formData.longitude), radius: parseInt(formData.radius, 10) });
-                    break;
-                case 'editArea':
-                    await updateDoc(doc(db, "work_areas", item.id), { name: formData.name, latitude: parseFloat(formData.latitude), longitude: parseFloat(formData.longitude), radius: parseInt(formData.radius, 10) });
-                    break;
-                case 'deleteArea':
-                    const batchDeleteArea = writeBatch(db);
-                    const employeesToUpdate = allEmployees.filter(emp => emp.workAreaIds?.includes(item.id));
-                    employeesToUpdate.forEach(emp => {
-                        const empRef = doc(db, "employees", emp.id);
-                        const updatedAreaIds = emp.workAreaIds.filter(id => id !== item.id);
-                        const updatedAreaNames = emp.workAreaNames.filter(name => name !== item.name);
-                        batchDeleteArea.update(empRef, { workAreaIds: updatedAreaIds, workAreaNames: updatedAreaNames });
-                    });
-                    await batchDeleteArea.commit();
-                    await deleteDoc(doc(db, "work_areas", item.id));
-                    break;
-                case 'assignArea':
-                    const selectedAreaNames = workAreas.filter(area => formData.workAreaIds?.includes(area.id)).map(area => area.name);
-                    await updateDoc(doc(db, "employees", item.id), { workAreaIds: formData.workAreaIds || [], workAreaNames: selectedAreaNames });
-                    break;
-                case 'newAdmin':
-                    const adminCred = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
-                    await setDoc(doc(db, "users", adminCred.user.uid), { name: formData.name, surname: formData.surname, email: formData.email, role: formData.role || 'preposto', managedAreaIds: (formData.role || 'preposto') === 'preposto' ? [] : null, managedAreaNames: (formData.role || 'preposto') === 'preposto' ? [] : null });
-                    break;
-                case 'deleteAdmin':
-                    if (item.email === superAdminEmail) { throw new Error("Non puoi eliminare il Super Admin."); }
-                    await deleteDoc(doc(db, "users", item.id));
-                    break;
-                case 'assignManagedAreas':
-                    const selectedManagedAreaNames = workAreas.filter(area => formData.managedAreaIds?.includes(area.id)).map(area => area.name);
-                    await updateDoc(doc(db, "users", item.id), { managedAreaIds: formData.managedAreaIds || [], managedAreaNames: selectedManagedAreaNames });
-                    break;
-                case 'manualClockIn':
-                    await addDoc(collection(db, "time_entries"), { employeeId: item.id, workAreaId: formData.workAreaId, clockInTime: new Date(formData.timestamp), clockOutTime: null, status: 'clocked-in', note: formData.note || null, pauses: [] });
-                    break;
-                case 'manualClockOut':
-                    await updateDoc(doc(db, "time_entries", item.activeEntry.id), { clockOutTime: new Date(formData.timestamp), status: 'clocked-out', note: formData.note || item.activeEntry.note || null });
-                    break;
-                case 'resetDevice':
-                    await updateDoc(doc(db, "employees", item.id), { deviceIds: [] });
-                    break;
-                default: break;
+            // MODIFICA: La logica di creazione utente è stata spostata qui
+            if (type === 'newEmployee' || type === 'newAdmin') {
+                const functions = getFunctions();
+                const createNewUser = httpsCallable(functions, 'createNewUser');
+
+                const newUserPayload = {
+                    email: formData.email.toLowerCase().trim(),
+                    password: formData.password,
+                    name: formData.name,
+                    surname: formData.surname,
+                    phone: formData.phone || "",
+                    role: type === 'newEmployee' ? 'employee' : (formData.role || 'preposto'),
+                };
+
+                // Se a creare è un preposto, passa le sue aree gestite
+                if (currentUserRole === 'preposto' && type === 'newEmployee') {
+                    newUserPayload.managedAreaIds = userData.managedAreaIds || [];
+                    newUserPayload.managedAreaNames = userData.managedAreaNames || [];
+                }
+
+                await createNewUser(newUserPayload);
+
+            } else {
+                 // La logica per tutte le altre azioni rimane qui
+                switch (type) {
+                    case 'editEmployee':
+                        await updateDoc(doc(db, "employees", item.id), { name: formData.name, surname: formData.surname, phone: formData.phone });
+                        break;
+                    case 'deleteEmployee':
+                        await deleteDoc(doc(db, "employees", item.id));
+                        break;
+                    case 'newArea':
+                        await addDoc(collection(db, "work_areas"), { name: formData.name, latitude: parseFloat(formData.latitude), longitude: parseFloat(formData.longitude), radius: parseInt(formData.radius, 10) });
+                        break;
+                    case 'editArea':
+                        await updateDoc(doc(db, "work_areas", item.id), { name: formData.name, latitude: parseFloat(formData.latitude), longitude: parseFloat(formData.longitude), radius: parseInt(formData.radius, 10) });
+                        break;
+                    case 'deleteArea':
+                        const batchDeleteArea = writeBatch(db);
+                        const employeesToUpdate = allEmployees.filter(emp => emp.workAreaIds?.includes(item.id));
+                        employeesToUpdate.forEach(emp => {
+                            const empRef = doc(db, "employees", emp.id);
+                            const updatedAreaIds = emp.workAreaIds.filter(id => id !== item.id);
+                            const updatedAreaNames = emp.workAreaNames.filter(name => name !== item.name);
+                            batchDeleteArea.update(empRef, { workAreaIds: updatedAreaIds, workAreaNames: updatedAreaNames });
+                        });
+                        await batchDeleteArea.commit();
+                        await deleteDoc(doc(db, "work_areas", item.id));
+                        break;
+                    case 'assignArea':
+                        const selectedAreaNames = workAreas.filter(area => formData.workAreaIds?.includes(area.id)).map(area => area.name);
+                        await updateDoc(doc(db, "employees", item.id), { workAreaIds: formData.workAreaIds || [], workAreaNames: selectedAreaNames });
+                        break;
+                    case 'deleteAdmin':
+                        if (item.email === superAdminEmail) { throw new Error("Non puoi eliminare il Super Admin."); }
+                        // NOTA: La cancellazione di un utente admin richiede privilegi elevati.
+                        // Sarebbe meglio gestirla con una Cloud Function in futuro per sicurezza.
+                        // Per ora, lasciamo la logica client-side se le regole lo permettono.
+                        // Se non funziona, dovremo creare una function anche per questo.
+                        await deleteDoc(doc(db, "users", item.id));
+                        break;
+                    case 'assignManagedAreas':
+                        const selectedManagedAreaNames = workAreas.filter(area => formData.managedAreaIds?.includes(area.id)).map(area => area.name);
+                        await updateDoc(doc(db, "users", item.id), { managedAreaIds: formData.managedAreaIds || [], managedAreaNames: selectedManagedAreaNames });
+                        break;
+                    case 'manualClockIn':
+                        await addDoc(collection(db, "time_entries"), { employeeId: item.id, workAreaId: formData.workAreaId, clockInTime: new Date(formData.timestamp), clockOutTime: null, status: 'clocked-in', note: formData.note || null, pauses: [] });
+                        break;
+                    case 'manualClockOut':
+                        await updateDoc(doc(db, "time_entries", item.activeEntry.id), { clockOutTime: new Date(formData.timestamp), status: 'clocked-out', note: formData.note || item.activeEntry.note || null });
+                        break;
+                    case 'resetDevice':
+                        await updateDoc(doc(db, "employees", item.id), { deviceIds: [] });
+                        break;
+                    default: break;
+                }
             }
+
             await onDataUpdate();
             setShowModal(false);
         } catch (err) {
             setError(err.message);
-            console.error(err);
+            console.error("Errore nell'handleSubmit:", err);
         } finally {
             setIsLoading(false);
         }
     };
-
+    
+    // Il resto del componente (titles, renderForm, JSX) rimane invariato...
     const titles = {
         newEmployee: 'Aggiungi Nuovo Dipendente',
         editEmployee: 'Modifica Dati Dipendente',
@@ -133,18 +162,28 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
     const renderForm = () => {
         switch (type) {
             case 'newEmployee':
+            case 'newAdmin': // Unito per evitare duplicazione
+                return (
+                    <div className="space-y-4">
+                        <input name="name" value={formData.name || ''} onChange={handleInputChange} placeholder="Nome" required className="w-full p-2 border rounded" />
+                        <input name="surname" value={formData.surname || ''} onChange={handleInputChange} placeholder="Cognome" required className="w-full p-2 border rounded" />
+                        <input type="email" name="email" value={formData.email || ''} onChange={handleInputChange} placeholder="Email" required className="w-full p-2 border rounded" />
+                        <input type="password" name="password" value={formData.password || ''} onChange={handleInputChange} placeholder="Password (min. 6 caratteri)" required className="w-full p-2 border rounded" />
+                        {type === 'newEmployee' && <input name="phone" value={formData.phone || ''} onChange={handleInputChange} placeholder="Telefono (opzionale)" className="w-full p-2 border rounded" />}
+                        {type === 'newAdmin' && currentUserRole === 'admin' && (
+                            <select name="role" value={formData.role || 'preposto'} onChange={handleInputChange} required className="w-full p-2 border rounded">
+                                <option value="preposto">Preposto</option>
+                                <option value="admin">Admin</option>
+                            </select>
+                        )}
+                    </div>
+                );
             case 'editEmployee':
                 return (
                     <div className="space-y-4">
                         <input name="name" value={formData.name || ''} onChange={handleInputChange} placeholder="Nome" required className="w-full p-2 border rounded" />
                         <input name="surname" value={formData.surname || ''} onChange={handleInputChange} placeholder="Cognome" required className="w-full p-2 border rounded" />
                         <input name="phone" value={formData.phone || ''} onChange={handleInputChange} placeholder="Telefono" className="w-full p-2 border rounded" />
-                        {type === 'newEmployee' && (
-                            <>
-                                <input type="email" name="email" value={formData.email || ''} onChange={handleInputChange} placeholder="Email" required className="w-full p-2 border rounded" />
-                                <input type="password" name="password" value={formData.password || ''} onChange={handleInputChange} placeholder="Password (min. 6 caratteri)" required className="w-full p-2 border rounded" />
-                            </>
-                        )}
                     </div>
                 );
             case 'newArea':
@@ -194,21 +233,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                             </select>
                         )}
                         <textarea name="note" value={formData.note || ''} onChange={handleInputChange} placeholder="Note (opzionale)" className="w-full p-2 border rounded"></textarea>
-                    </div>
-                );
-            case 'newAdmin':
-                return (
-                    <div className="space-y-4">
-                        <input name="name" value={formData.name || ''} onChange={handleInputChange} placeholder="Nome" required className="w-full p-2 border rounded" />
-                        <input name="surname" value={formData.surname || ''} onChange={handleInputChange} placeholder="Cognome" required className="w-full p-2 border rounded" />
-                        <input type="email" name="email" value={formData.email || ''} onChange={handleInputChange} placeholder="Email" required className="w-full p-2 border rounded" />
-                        <input type="password" name="password" value={formData.password || ''} onChange={handleInputChange} placeholder="Password (min. 6 caratteri)" required className="w-full p-2 border rounded" />
-                        {currentUserRole === 'admin' && (
-                            <select name="role" value={formData.role || 'preposto'} onChange={handleInputChange} required className="w-full p-2 border rounded">
-                                <option value="preposto">Preposto</option>
-                                <option value="admin">Admin</option>
-                            </select>
-                        )}
                     </div>
                 );
             case 'deleteEmployee': return <p>Sei sicuro di voler eliminare il dipendente <strong>{item.name} {item.surname}</strong>? L'azione è irreversibile.</p>;

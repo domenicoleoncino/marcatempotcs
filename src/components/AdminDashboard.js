@@ -6,6 +6,7 @@ import {
 } from 'firebase/firestore';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import CompanyLogo from './CompanyLogo';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 
 // --- SUB-COMPONENTI INTERNI ---
 
