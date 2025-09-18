@@ -11,16 +11,17 @@
     />
     <link rel="apple-touch-icon" href="%PUBLIC_URL%/icon-192x192.png" />
     
-    <!-- LINK AL MANIFEST -->
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
 
     <title>Marcatempo TCS</title>
+
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+
   </head>
   <body>
     <noscript>Devi abilitare JavaScript per eseguire questa app.</noscript>
     <div id="root"></div>
     
-    <!-- SCRIPT PER IL SERVICE WORKER -->
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
