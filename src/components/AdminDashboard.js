@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { db, auth } from '../firebase';
+import { db } from '../firebase';
 import {
     doc,  collection, addDoc, getDocs, query, where,
     updateDoc, deleteDoc, writeBatch, Timestamp
