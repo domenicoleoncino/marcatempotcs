@@ -10,7 +10,7 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 
 // --- SUB-COMPONENTI INTERNI ---
 
-const DashboardView = ({ employees, activeEntries, workAreas }) => {
+function DashboardView({ employees, activeEntries, workAreas }) {
     const calculateCurrentHours = () => {
         let totalNetMinutes = 0;
         const now = new Date();
@@ -91,7 +91,7 @@ const DashboardView = ({ employees, activeEntries, workAreas }) => {
             </div>
         </div>
     );
-};
+}
 
 const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortConfig, requestSort, searchTerm, setSearchTerm }) => {
     const getSortIndicator = (key) => {
