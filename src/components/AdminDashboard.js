@@ -841,16 +841,15 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 </div>
             </nav>
 
-           {view !== 'reports' && (
+{view !== 'reports' && (
                 <div className="bg-gray-50 border-b border-gray-200 p-4">
                     <div className="max-w-7xl mx-auto w-full">
                         <h3 className="text-lg font-medium text-gray-900 mb-4 text-center sm:text-left">Genera Report Personalizzato</h3>
                         
-                        {/* MODIFICA: Contenitore principale cambiato in 'flex-col' con 'gap' */}
                         <div className="flex flex-col gap-3 md:flex-row md:items-baseline md:flex-wrap md:gap-4">
                             
-                            {/* Ogni filtro ora è in un suo div 'flex' per allineare etichetta e campo */}
                             <div className="flex items-center justify-between md:justify-start">
+                                {/* MODIFICA: Aggiunta larghezza fissa w-28 */}
                                 <label htmlFor="startDate" className="w-28 text-sm font-medium text-gray-700 text-left">Da:</label>
                                 <input
                                     type="date"
@@ -862,6 +861,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                             </div>
                             
                             <div className="flex items-center justify-between md:justify-start">
+                                {/* MODIFICA: Aggiunta larghezza fissa w-28 */}
                                 <label htmlFor="endDate" className="w-28 text-sm font-medium text-gray-700 text-left">A:</label>
                                 <input
                                     type="date"
@@ -873,6 +873,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                             </div>
                             
                             <div className="flex items-center justify-between md:justify-start">
+                                {/* MODIFICA: Aggiunta larghezza fissa w-28 */}
                                 <label htmlFor="areaFilter" className="w-28 text-sm font-medium text-gray-700 text-left">Area:</label>
                                 <select 
                                     id="areaFilter"
@@ -888,6 +889,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                             </div>
                             
                             <div className="flex items-center justify-between md:justify-start">
+                                {/* MODIFICA: Aggiunta larghezza fissa w-28 */}
                                 <label htmlFor="employeeFilter" className="w-28 text-sm font-medium text-gray-700 text-left">Dipendente:</label>
                                 <select 
                                     id="employeeFilter"
@@ -902,7 +904,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                                 </select>
                             </div>
 
-                            <button onClick={generateReport} className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm w-full md:w-auto">
+                            <button onClick={generateReport} className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm w-full md:w-auto md:ml-28">
                                 Genera Report
                             </button>
                         </div>
