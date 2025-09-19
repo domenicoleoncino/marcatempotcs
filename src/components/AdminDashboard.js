@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { db } from '../firebase';
+import { db, auth } from '../firebase';
 import {
-    doc,  collection, addDoc, getDocs, query, where,
+    doc, collection, addDoc, getDocs, query, where,
     updateDoc, deleteDoc, writeBatch, Timestamp
 } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
@@ -161,7 +161,7 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
             </div>
         </div>
     );
-}
+};
 
 const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
     <div>
@@ -583,7 +583,8 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
         end: new Date().toISOString().split('T')[0]
     });
-    const [reportAreaFilter, setReportAreaFilter] = useState('all'); 
+    const [reportAreaFilter, setReportAreaFilter] = useState('all');
+    const [reportEmployeeFilter, setReportEmployeeFilter] = useState('all');
 
     const currentUserRole = userData?.role;
     const superAdminEmail = "domenico.leoncino@tcsitalia.com";
@@ -674,14 +675,20 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         
         const formattedStartDate = startDate.toLocaleDateString('it-IT');
         const formattedEndDate = endDate.toLocaleDateString('it-IT');
-        let title = `Report | ${formattedStartDate} - ${formattedEndDate}`;
-
+        let titleParts = [];
+        
+        if (reportEmployeeFilter !== 'all') {
+            const selectedEmployee = allEmployees.find(emp => emp.id === reportEmployeeFilter);
+            if (selectedEmployee) titleParts.push(`per ${selectedEmployee.name} ${selectedEmployee.surname}`);
+        }
+        
         if (reportAreaFilter !== 'all') {
             const selectedArea = allWorkAreas.find(area => area.id === reportAreaFilter);
-            if (selectedArea) {
-                title = `Report Area: ${selectedArea.name} | ${formattedStartDate} - ${formattedEndDate}`;
-            }
+            if (selectedArea) titleParts.push(`in area "${selectedArea.name}"`);
         }
+        
+        const titlePrefix = titleParts.length > 0 ? `Report ${titleParts.join(' ')}` : 'Report';
+        const title = `${titlePrefix} | ${formattedStartDate} - ${formattedEndDate}`;
         setReportTitle(title);
         
         const queryConstraints = [
@@ -690,6 +697,9 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         ];
         if (reportAreaFilter !== 'all') {
             queryConstraints.push(where("workAreaId", "==", reportAreaFilter));
+        }
+        if (reportEmployeeFilter !== 'all') {
+            queryConstraints.push(where("employeeId", "==", reportEmployeeFilter));
         }
 
         const q = query(collection(db, "time_entries"), ...queryConstraints);
@@ -732,7 +742,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 });
             }
         }
-        setReports(reportData);
+        setReports(reportData.sort((a,b) => a.employeeName.localeCompare(b.employeeName)));
         setView('reports');
     };
 
@@ -867,6 +877,20 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                                     <option value="all">Tutte le Aree</option>
                                     {allWorkAreas.map(area => (
                                         <option key={area.id} value={area.id}>{area.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label htmlFor="employeeFilter" className="text-sm font-medium text-gray-700">Dipendente:</label>
+                                <select 
+                                    id="employeeFilter"
+                                    value={reportEmployeeFilter}
+                                    onChange={e => setReportEmployeeFilter(e.target.value)}
+                                    className="ml-2 p-1 border border-gray-300 rounded-md"
+                                >
+                                    <option value="all">Tutti i Dipendenti</option>
+                                    {allEmployees.sort((a,b) => `${a.name} ${a.surname}`.localeCompare(`${b.name} ${b.surname}`)).map(emp => (
+                                        <option key={emp.id} value={emp.id}>{emp.name} {emp.surname}</option>
                                     ))}
                                 </select>
                             </div>
