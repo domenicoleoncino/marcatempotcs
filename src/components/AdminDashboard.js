@@ -885,4 +885,39 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                             </div>
                             
                             <div className="flex items-center justify-between md:justify-start">
-                                <label htmlFor="employeeFilter" className="w-28 text
+                                <label htmlFor="employeeFilter" className="w-28 text-sm font-medium text-gray-700 text-left">Dipendente:</label>
+                                <select 
+                                    id="employeeFilter"
+                                    value={reportEmployeeFilter}
+                                    onChange={e => setReportEmployeeFilter(e.target.value)}
+                                    className="p-1 border border-gray-300 rounded-md w-full"
+                                >
+                                    <option value="all">Tutti i Dipendenti</option>
+                                    {allEmployees.sort((a,b) => `${a.name} ${a.surname}`.localeCompare(`${b.name} ${b.surname}`)).map(emp => (
+                                        <option key={emp.id} value={emp.id}>{emp.name} {emp.surname}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <button onClick={generateReport} className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm w-full md:w-auto md:ml-28">
+                                Genera Report
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <main className="p-4 sm:p-8 max-w-7xl mx-auto w-full text-center sm:text-left">
+                {view === 'dashboard' && <DashboardView employees={employees} activeEntries={activeEntries} workAreas={workAreas} />}
+                {view === 'employees' && <EmployeeManagementView employees={sortedAndFilteredEmployees} openModal={openModal} currentUserRole={currentUserRole} sortConfig={sortConfig} requestSort={requestSort} searchTerm={searchTerm} setSearchTerm={setSearchTerm} />}
+                {view === 'areas' && <AreaManagementView workAreas={workAreas} openModal={openModal} currentUserRole={currentUserRole} />}
+                {view === 'admins' && <AdminManagementView admins={admins} openModal={openModal} user={user} superAdminEmail={superAdminEmail} currentUserRole={currentUserRole} />}
+                {view === 'reports' && <ReportView reports={reports} title={reportTitle} handleExportXml={handleExportXml} />}
+            </main>
+
+            {showModal && <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} workAreas={allWorkAreas} onDataUpdate={fetchData} user={user} superAdminEmail={superAdminEmail} allEmployees={allEmployees} currentUserRole={currentUserRole} userData={userData} />}
+        </div>
+    );
+};
+
+export default AdminDashboard;
