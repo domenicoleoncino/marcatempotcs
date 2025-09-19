@@ -841,38 +841,44 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 </div>
             </nav>
 
-            {view !== 'reports' && (
+           {view !== 'reports' && (
                 <div className="bg-gray-50 border-b border-gray-200 p-4">
                     <div className="max-w-7xl mx-auto w-full">
-                        <h3 className="text-lg font-medium text-gray-900 mb-2 text-center sm:text-left">Genera Report Personalizzato</h3>
-                        <div className="flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-4 flex-wrap">
-                            <div>
-                                <label htmlFor="startDate" className="text-sm font-medium text-gray-700">Da:</label>
+                        <h3 className="text-lg font-medium text-gray-900 mb-4 text-center sm:text-left">Genera Report Personalizzato</h3>
+                        
+                        {/* MODIFICA: Contenitore principale cambiato in 'flex-col' con 'gap' */}
+                        <div className="flex flex-col gap-3 md:flex-row md:items-baseline md:flex-wrap md:gap-4">
+                            
+                            {/* Ogni filtro ora è in un suo div 'flex' per allineare etichetta e campo */}
+                            <div className="flex items-center justify-between md:justify-start">
+                                <label htmlFor="startDate" className="w-28 text-sm font-medium text-gray-700 text-left">Da:</label>
                                 <input
                                     type="date"
                                     id="startDate"
                                     value={dateRange.start}
                                     onChange={e => setDateRange({ ...dateRange, start: e.target.value })}
-                                    className="ml-2 p-1 border border-gray-300 rounded-md"
+                                    className="p-1 border border-gray-300 rounded-md w-full"
                                 />
                             </div>
-                            <div>
-                                <label htmlFor="endDate" className="text-sm font-medium text-gray-700">A:</label>
+                            
+                            <div className="flex items-center justify-between md:justify-start">
+                                <label htmlFor="endDate" className="w-28 text-sm font-medium text-gray-700 text-left">A:</label>
                                 <input
                                     type="date"
                                     id="endDate"
                                     value={dateRange.end}
                                     onChange={e => setDateRange({ ...dateRange, end: e.target.value })}
-                                    className="ml-2 p-1 border border-gray-300 rounded-md"
+                                    className="p-1 border border-gray-300 rounded-md w-full"
                                 />
                             </div>
-                            <div>
-                                <label htmlFor="areaFilter" className="text-sm font-medium text-gray-700">Area:</label>
+                            
+                            <div className="flex items-center justify-between md:justify-start">
+                                <label htmlFor="areaFilter" className="w-28 text-sm font-medium text-gray-700 text-left">Area:</label>
                                 <select 
                                     id="areaFilter"
                                     value={reportAreaFilter}
                                     onChange={e => setReportAreaFilter(e.target.value)}
-                                    className="ml-2 p-1 border border-gray-300 rounded-md"
+                                    className="p-1 border border-gray-300 rounded-md w-full"
                                 >
                                     <option value="all">Tutte le Aree</option>
                                     {allWorkAreas.map(area => (
@@ -880,13 +886,14 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                                     ))}
                                 </select>
                             </div>
-                            <div>
-                                <label htmlFor="employeeFilter" className="text-sm font-medium text-gray-700">Dipendente:</label>
+                            
+                            <div className="flex items-center justify-between md:justify-start">
+                                <label htmlFor="employeeFilter" className="w-28 text-sm font-medium text-gray-700 text-left">Dipendente:</label>
                                 <select 
                                     id="employeeFilter"
                                     value={reportEmployeeFilter}
                                     onChange={e => setReportEmployeeFilter(e.target.value)}
-                                    className="ml-2 p-1 border border-gray-300 rounded-md"
+                                    className="p-1 border border-gray-300 rounded-md w-full"
                                 >
                                     <option value="all">Tutti i Dipendenti</option>
                                     {allEmployees.sort((a,b) => `${a.name} ${a.surname}`.localeCompare(`${b.name} ${b.surname}`)).map(emp => (
@@ -894,7 +901,8 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                                     ))}
                                 </select>
                             </div>
-                            <button onClick={generateReport} className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm">
+
+                            <button onClick={generateReport} className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm w-full md:w-auto">
                                 Genera Report
                             </button>
                         </div>
