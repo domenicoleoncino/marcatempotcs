@@ -338,7 +338,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
         }
     }, [type, item]);
 
-    const handleSubmit = async (e) => {
+const handleSubmit = async (e) => {
         e.preventDefault();
         if ((type === 'newEmployee' || type === 'newAdmin') && (!formData.password || formData.password.length < 6)) {
             setError("La password deve essere di almeno 6 caratteri.");
@@ -354,7 +354,9 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
 
         try {
             if (type === 'newEmployee' || type === 'newAdmin') {
-                const functions = getFunctions();
+                // MODIFICA: Forziamo l'aggiornamento del token e specifichiamo la regione
+                await user.getIdToken(true); 
+                const functions = getFunctions(undefined, 'us-central1');
                 const createNewUser = httpsCallable(functions, 'createNewUser');
 
                 const newUserPayload = {
@@ -374,6 +376,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                 await createNewUser(newUserPayload);
 
             } else {
+                // Il resto della logica rimane invariato
                 switch (type) {
                     case 'editEmployee':
                         await updateDoc(doc(db, "employees", item.id), { name: formData.name, surname: formData.surname, phone: formData.phone });
