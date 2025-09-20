@@ -7,7 +7,7 @@ import AdminDashboard from './components/AdminDashboard';
 import EmployeeDashboard from './components/EmployeeDashboard';
 import ChangePassword from './components/ChangePassword';
 
-// NUOVO: Componente per la schermata di blocco
+// Componente per la schermata di blocco
 const AppBlockedScreen = () => (
     <div className="min-h-screen flex flex-col justify-center items-center bg-gray-100 p-4 text-center">
         <h1 className="text-2xl font-bold text-red-600 mb-4">Servizio momentaneamente non disponibile</h1>
@@ -19,33 +19,68 @@ function App() {
     const [user, setUser] = useState(null);
     const [userData, setUserData] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
-
-    // NUOVO STATO: Per controllare se l'app è attiva
     const [isAppActive, setIsAppActive] = useState(false);
 
+    // Funzione di logout
+    const handleLogout = async () => {
+        try {
+            await signOut(auth);
+            setUser(null);
+            setUserData(null);
+        } catch (error) {
+            console.error("Errore durante il logout:", error);
+        }
+    };
+    
+    // MODIFICA: Aggiunto useEffect per il timer di inattività
     useEffect(() => {
-        // MODIFICA: La funzione ora è asincrona per controllare lo stato prima di tutto
+        let logoutTimer;
+
+        const resetTimer = () => {
+            clearTimeout(logoutTimer);
+            logoutTimer = setTimeout(() => {
+                // Esegue il logout se il timer scade
+                console.log("Logout per inattività.");
+                handleLogout();
+            }, 600000); // 10 minuti in millisecondi
+        };
+
+        const events = ['mousedown', 'mousemove', 'keypress', 'touchstart'];
+
+        // Se c'è un utente loggato, avvia il monitoraggio dell'attività
+        if (user) {
+            resetTimer(); // Avvia il timer al login
+            events.forEach(event => window.addEventListener(event, resetTimer));
+        }
+
+        // Funzione di pulizia: rimuove il timer e gli ascoltatori quando l'utente fa logout
+        return () => {
+            clearTimeout(logoutTimer);
+            events.forEach(event => window.removeEventListener(event, resetTimer));
+        };
+    }, [user]); // Questo useEffect dipende dallo stato 'user'
+
+
+    useEffect(() => {
         const checkAppStatusAndAuth = async () => {
             try {
-                // 1. Controlla lo stato dell'applicazione dal flag su Firestore
                 const configDocRef = doc(db, 'app_config', 'status');
                 const configDocSnap = await getDoc(configDocRef);
 
                 if (configDocSnap.exists() && configDocSnap.data().isAttiva === true) {
-                    setIsAppActive(true); // App attiva, procedi con l'autenticazione
+                    setIsAppActive(true);
                 } else {
-                    setIsAppActive(false); // App bloccata
-                    setIsLoading(false); // Fine del caricamento, mostra la schermata di blocco
-                    return; // Interrompe l'esecuzione
+                    setIsAppActive(false);
+                    setIsLoading(false);
+                    return;
                 }
             } catch (error) {
                 console.error("Errore nel controllo dello stato dell'app:", error);
-                setIsAppActive(false); // Blocco di sicurezza in caso di errore
+                setIsAppActive(false);
                 setIsLoading(false);
                 return;
             }
 
-            // 2. Se l'app è attiva, imposta il listener di autenticazione (codice precedente)
             const unsubscribe = onAuthStateChanged(auth, async (authenticatedUser) => {
                 if (authenticatedUser) {
                     const userDocRef = doc(db, 'users', authenticatedUser.uid);
@@ -54,7 +89,6 @@ function App() {
                         setUserData(userDocSnap.data());
                         setUser(authenticatedUser);
                     } else {
-                        // Gestisce il caso in cui l'utente auth esiste ma non ha un documento in 'users'
                         await signOut(auth);
                     }
                 } else {
@@ -74,16 +108,6 @@ function App() {
         setUserData(prevUserData => ({ ...prevUserData, requiresPasswordChange: false }));
     };
 
-    const handleLogout = async () => {
-        try {
-            await signOut(auth);
-            setUser(null);
-            setUserData(null);
-        } catch (error) {
-            console.error("Errore durante il logout:", error);
-        }
-    };
-
     if (isLoading) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-100">
@@ -92,7 +116,6 @@ function App() {
         );
     }
     
-    // NUOVO CONTROLLO: Se l'app non è attiva, mostra la schermata di blocco
     if (!isAppActive) {
         return <AppBlockedScreen />;
     }
@@ -104,6 +127,7 @@ function App() {
         if (userData.role === 'admin' || userData.role === 'preposto') {
             return <AdminDashboard user={user} userData={userData} handleLogout={handleLogout} />;
         } else if (userData.role === 'employee') {
+            // NOTA: Passa userData anche a EmployeeDashboard se ti serve lì
             return <EmployeeDashboard user={user} userData={userData} handleLogout={handleLogout} />;
         }
     }
