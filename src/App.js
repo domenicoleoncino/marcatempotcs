@@ -42,7 +42,7 @@ function App() {
                 // Esegue il logout se il timer scade
                 console.log("Logout per inattività.");
                 handleLogout();
-            }, 5000); // 5 minuti in millisecondi
+            }, 10000); // 10 minuti in millisecondi
         };
 
         const events = ['mousedown', 'mousemove', 'keypress', 'touchstart'];

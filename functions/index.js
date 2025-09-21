@@ -3,9 +3,12 @@ const admin = require("firebase-admin");
 
 admin.initializeApp();
 
-// Questa è la nostra nuova funzione per creare utenti
 exports.createNewUser = functions.https.onCall(async (data, context) => {
-  // Controlla che a chiamare la funzione sia un admin o preposto autenticato
+  
+  // MODIFICA: Aggiungiamo i log per il debug
+  console.log("Dati ricevuti:", JSON.stringify(data));
+  console.log("Contesto di autenticazione:", JSON.stringify(context.auth));
+
   if (!context.auth) {
     throw new functions.https.HttpsError(
       "unauthenticated",
@@ -26,14 +29,12 @@ exports.createNewUser = functions.https.onCall(async (data, context) => {
   const { email, password, name, surname, phone, role, managedAreaIds, managedAreaNames } = data;
 
   try {
-    // 1. Crea l'utente in Firebase Authentication
     const userRecord = await admin.auth().createUser({
       email: email,
       password: password,
       displayName: `${name} ${surname}`,
     });
 
-    // 2. Crea il documento corrispondente in Firestore/users
     await admin.firestore().collection("users").doc(userRecord.uid).set({
         name: name,
         surname: surname,
@@ -44,7 +45,6 @@ exports.createNewUser = functions.https.onCall(async (data, context) => {
         managedAreaNames: managedAreaNames || null,
     });
 
-    // 3. Se è un dipendente, crea anche il documento in Firestore/employees
     if (role === "employee") {
         await admin.firestore().collection("employees").add({
             userId: userRecord.uid,
@@ -52,7 +52,7 @@ exports.createNewUser = functions.https.onCall(async (data, context) => {
             surname: surname,
             phone: phone || "",
             email: email,
-            workAreaIds: managedAreaIds || [], // Se creato da preposto, eredita le sue aree
+            workAreaIds: managedAreaIds || [],
             workAreaNames: managedAreaNames || [],
             deviceIds: []
         });
