@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
@@ -21,8 +21,7 @@ function App() {
     const [isLoading, setIsLoading] = useState(true);
     const [isAppActive, setIsAppActive] = useState(false);
 
-    // Funzione di logout
-    const handleLogout = async () => {
+    const handleLogout = useCallback(async () => {
         try {
             await signOut(auth);
             setUser(null);
@@ -30,35 +29,42 @@ function App() {
         } catch (error) {
             console.error("Errore durante il logout:", error);
         }
-    };
+    }, []);
     
-    // MODIFICA: Aggiunto useEffect per il timer di inattività
+    // MODIFICA: Logica del timer di inattività migliorata
     useEffect(() => {
         let logoutTimer;
 
         const resetTimer = () => {
             clearTimeout(logoutTimer);
             logoutTimer = setTimeout(() => {
-                // Esegue il logout se il timer scade
-                console.log("Logout per inattività.");
-                handleLogout();
-            }, 10000); // 10 minuti in millisecondi
+                if (auth.currentUser) { // Controlla se l'utente è ancora loggato prima di agire
+                    console.log("Logout per inattività.");
+                    handleLogout();
+                }
+            }, 600000); // 10 minuti
         };
 
-        const events = ['mousedown', 'mousemove', 'keypress', 'touchstart'];
+        const events = ['mousedown', 'mousemove', 'keypress', 'touchstart', 'scroll'];
 
-        // Se c'è un utente loggato, avvia il monitoraggio dell'attività
-        if (user) {
-            resetTimer(); // Avvia il timer al login
+        const setupActivityListeners = () => {
             events.forEach(event => window.addEventListener(event, resetTimer));
-        }
+            resetTimer();
+        };
 
-        // Funzione di pulizia: rimuove il timer e gli ascoltatori quando l'utente fa logout
-        return () => {
+        const cleanupActivityListeners = () => {
             clearTimeout(logoutTimer);
             events.forEach(event => window.removeEventListener(event, resetTimer));
         };
-    }, [user]); // Questo useEffect dipende dallo stato 'user'
+
+        // Il monitoraggio si attiva solo quando c'è un utente
+        if (user) {
+            setupActivityListeners();
+        }
+
+        // Funzione di pulizia
+        return cleanupActivityListeners;
+    }, [user, handleLogout]);
 
 
     useEffect(() => {
@@ -127,7 +133,6 @@ function App() {
         if (userData.role === 'admin' || userData.role === 'preposto') {
             return <AdminDashboard user={user} userData={userData} handleLogout={handleLogout} />;
         } else if (userData.role === 'employee') {
-            // NOTA: Passa userData anche a EmployeeDashboard se ti serve lì
             return <EmployeeDashboard user={user} userData={userData} handleLogout={handleLogout} />;
         }
     }
