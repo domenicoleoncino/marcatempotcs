@@ -1,31 +1,32 @@
-const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 
 admin.initializeApp();
 
-exports.createNewUser = onCall(async (request) => {
+exports.createNewUser = functions.https.onCall(async (data, context) => {
   
-  console.log("Dati ricevuti:", JSON.stringify(request.data));
-  console.log("Contesto di autenticazione:", JSON.stringify(request.auth));
+  // MODIFICA: Queste righe stamperanno i dati nei log di Firebase
+  console.log("Dati ricevuti dalla chiamata:", JSON.stringify(data));
+  console.log("Contesto di autenticazione ricevuto:", JSON.stringify(context.auth));
 
-  if (!request.auth) {
-    throw new HttpsError(
+  if (!context.auth) {
+    throw new functions.https.HttpsError(
       "unauthenticated",
       "Devi essere autenticato per creare un utente."
     );
   }
   
-  const callingUserDoc = await admin.firestore().collection("users").doc(request.auth.uid).get();
+  const callingUserDoc = await admin.firestore().collection("users").doc(context.auth.uid).get();
   const callingUserData = callingUserDoc.data();
 
   if (callingUserData.role !== "admin" && callingUserData.role !== "preposto") {
-    throw new HttpsError(
+     throw new functions.https.HttpsError(
       "permission-denied",
       "Non hai i permessi per creare un utente."
     );
   }
 
-  const { email, password, name, surname, phone, role, managedAreaIds, managedAreaNames } = request.data;
+  const { email, password, name, surname, phone, role, managedAreaIds, managedAreaNames } = data;
 
   try {
     const userRecord = await admin.auth().createUser({
@@ -61,6 +62,6 @@ exports.createNewUser = onCall(async (request) => {
 
   } catch (error) {
     console.error("Errore durante la creazione dell'utente:", error);
-    throw new HttpsError("internal", error.message);
+    throw new functions.https.HttpsError("internal", error.message);
   }
 });
