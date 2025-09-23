@@ -8,6 +8,34 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import CompanyLogo from './CompanyLogo';
 
+// Funzione per arrotondare l'orario per DIFETTO al multiplo di 10 minuti
+const roundTimeDownTo10Minutes = (date) => {
+  const roundedDate = new Date(date.getTime());
+  const minutes = roundedDate.getMinutes();
+  const remainder = minutes % 10;
+  roundedDate.setMinutes(minutes - remainder);
+  roundedDate.setSeconds(0);
+  roundedDate.setMilliseconds(0);
+  return roundedDate;
+};
+
+// Funzione per arrotondare l'orario per ECCESSO al multiplo di 10 minuti
+const roundTimeUpTo10Minutes = (date) => {
+  const roundedDate = new Date(date.getTime());
+  const minutes = roundedDate.getMinutes();
+  const seconds = roundedDate.getSeconds();
+  const milliseconds = roundedDate.getMilliseconds();
+  if (minutes % 10 === 0 && seconds === 0 && milliseconds === 0) {
+    return roundedDate;
+  }
+  const remainder = minutes % 10;
+  const minutesToAdd = 10 - remainder;
+  roundedDate.setMinutes(roundedDate.getMinutes() + minutesToAdd);
+  roundedDate.setSeconds(0);
+  roundedDate.setMilliseconds(0);
+  return roundedDate;
+};
+
 // Funzione per calcolare la distanza tra due punti geografici (Haversine formula)
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
     const R = 6371e3; // metres
@@ -249,7 +277,17 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
                     await updateDoc(employeeRef, { deviceIds: arrayUnion(deviceId) });
                 }
                 
-                await addDoc(collection(db, "time_entries"), { employeeId: employeeData.id, workAreaId: areaId, clockInTime: new Date(), clockOutTime: null, status: 'clocked-in', pauses: [] });
+                const clockInTimeRounded = roundTimeUpTo10Minutes(new Date());
+
+                await addDoc(collection(db, "time_entries"), { 
+                    employeeId: employeeData.id, 
+                    workAreaId: areaId, 
+                    clockInTime: clockInTimeRounded,
+                    clockOutTime: null, 
+                    status: 'clocked-in', 
+                    pauses: [] 
+                });
+
                 setStatusMessage({ type: 'success', text: 'Timbratura di entrata registrata!' });
                 fetchEmployeeData();
             } catch (error) {
@@ -276,7 +314,12 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
                 }
             }
             
-            batch.update(entryRef, { clockOutTime: new Date(), status: 'clocked-out' });
+            const clockOutTimeRounded = roundTimeDownTo10Minutes(new Date());
+
+            batch.update(entryRef, { 
+                clockOutTime: clockOutTimeRounded, 
+                status: 'clocked-out' 
+            });
             await batch.commit();
             setStatusMessage({ type: 'success', text: 'Timbratura di uscita registrata!' });
             fetchEmployeeData();

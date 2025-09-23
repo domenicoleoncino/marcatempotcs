@@ -7,6 +7,34 @@ import {
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import CompanyLogo from './CompanyLogo';
 
+// Funzione per arrotondare l'orario per DIFETTO al multiplo di 10 minuti
+const roundTimeDownTo10Minutes = (date) => {
+  const roundedDate = new Date(date.getTime());
+  const minutes = roundedDate.getMinutes();
+  const remainder = minutes % 10;
+  roundedDate.setMinutes(minutes - remainder);
+  roundedDate.setSeconds(0);
+  roundedDate.setMilliseconds(0);
+  return roundedDate;
+};
+
+// Funzione per arrotondare l'orario per ECCESSO al multiplo di 10 minuti
+const roundTimeUpTo10Minutes = (date) => {
+  const roundedDate = new Date(date.getTime());
+  const minutes = roundedDate.getMinutes();
+  const seconds = roundedDate.getSeconds();
+  const milliseconds = roundedDate.getMilliseconds();
+  if (minutes % 10 === 0 && seconds === 0 && milliseconds === 0) {
+    return roundedDate;
+  }
+  const remainder = minutes % 10;
+  const minutesToAdd = 10 - remainder;
+  roundedDate.setMinutes(roundedDate.getMinutes() + minutesToAdd);
+  roundedDate.setSeconds(0);
+  roundedDate.setMilliseconds(0);
+  return roundedDate;
+};
+
 
 // --- SUB-COMPONENTI INTERNI ---
 
@@ -433,10 +461,22 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                         await updateDoc(doc(db, "users", item.id), { managedAreaIds: formData.managedAreaIds || [], managedAreaNames: selectedManagedAreaNames });
                         break;
                     case 'manualClockIn':
-                        await addDoc(collection(db, "time_entries"), { employeeId: item.id, workAreaId: formData.workAreaId, clockInTime: new Date(formData.timestamp), clockOutTime: null, status: 'clocked-in', note: formData.note || null, pauses: [] });
+                        await addDoc(collection(db, "time_entries"), { 
+                            employeeId: item.id, 
+                            workAreaId: formData.workAreaId, 
+                            clockInTime: roundTimeUpTo10Minutes(new Date(formData.timestamp)), 
+                            clockOutTime: null, 
+                            status: 'clocked-in', 
+                            note: formData.note || null, 
+                            pauses: [] 
+                        });
                         break;
                     case 'manualClockOut':
-                        await updateDoc(doc(db, "time_entries", item.activeEntry.id), { clockOutTime: new Date(formData.timestamp), status: 'clocked-out', note: formData.note || item.activeEntry.note || null });
+                        await updateDoc(doc(db, "time_entries", item.activeEntry.id), { 
+                            clockOutTime: roundTimeDownTo10Minutes(new Date(formData.timestamp)), 
+                            status: 'clocked-out', 
+                            note: formData.note || item.activeEntry.note || null 
+                        });
                         break;
                     case 'resetDevice':
                         await updateDoc(doc(db, "employees", item.id), { deviceIds: [] });
