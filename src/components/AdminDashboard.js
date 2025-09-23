@@ -180,7 +180,7 @@ const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Longitudine</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Raggio (m)</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pausa (min)</th>
-                        {currentUserRole === 'admin' && <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Azioni</th>}
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Azioni</th>
                     </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -192,7 +192,12 @@ const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
                             <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{area.longitude}</td>
                             <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{area.radius}</td>
                             <td className="px-4 py-2 whitespace-nowrap text-sm font-bold text-gray-700">{area.pauseDuration || 0}</td>
-                            {currentUserRole === 'admin' && <td className="px-4 py-2 whitespace-nowrap text-sm font-medium"><div className="flex items-center gap-4"><button onClick={() => openModal('editArea', area)} className="text-green-600 hover:text-green-900">Modifica</button><button onClick={() => openModal('deleteArea', area)} className="text-red-600 hover:text-red-900">Elimina</button></div></td>}
+                            <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
+                                <div className="flex items-center gap-4">
+                                    {(currentUserRole === 'admin' || currentUserRole === 'preposto') && <button onClick={() => openModal('editArea', area)} className="text-green-600 hover:text-green-900">Modifica</button>}
+                                    {currentUserRole === 'admin' && <button onClick={() => openModal('deleteArea', area)} className="text-red-600 hover:text-red-900">Elimina</button>}
+                                </div>
+                            </td>
                         </tr>
                     ))}
                 </tbody>
@@ -853,7 +858,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 <CompanyLogo />
                 <div className="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-4 w-full sm:w-auto">
                     <span className="text-xs text-gray-600 text-center break-all">
-                        Admin: {userData?.name && userData?.surname ? `${userData.name} ${userData.surname}` : user?.email}
+                        {currentUserRole === 'admin' ? 'Admin' : 'Preposto'}: {userData?.name && userData?.surname ? `${userData.name} ${userData.surname}` : user?.email}
                     </span>
                     <button onClick={handleLogout} className="px-3 py-1.5 bg-red-500 text-white rounded-lg hover:bg-red-600 w-full sm:w-auto text-sm">Logout</button>
                 </div>
