@@ -13,7 +13,7 @@
     "cors": "^2.8.5",
     "firebase": "^10.14.1",
     "firebase-functions": "^6.4.0",
-    "jspdf": "^3.0.2",
+    "jspdf": "^3.0.3",
     "jspdf-autotable": "^5.0.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

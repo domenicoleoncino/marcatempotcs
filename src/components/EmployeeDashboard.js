@@ -227,25 +227,43 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
             alert("Nessun dato da esportare per il mese selezionato.");
             return;
         }
-        const doc = new jsPDF();
-        doc.setFontSize(18);
-        doc.text(`Report Mensile - ${selectedMonth}`, 14, 22);
-        doc.setFontSize(11);
-        doc.text(`Dipendente: ${employeeData.name} ${employeeData.surname}`, 14, 30);
-        const tableColumn = ["Data", "Area", "Entrata", "Uscita", "Ore"];
-        const tableRows = [];
-        let totalHours = 0;
-        filteredTimestamps.forEach(entry => {
-            const entryData = [entry.date, entry.areaName, entry.clockIn, entry.clockOut, entry.duration];
-            tableRows.push(entryData);
-            totalHours += parseFloat(entry.duration);
-        });
-        doc.autoTable({ head: [tableColumn], body: tableRows, startY: 35 });
-        const finalY = doc.lastAutoTable.finalY;
-        doc.setFontSize(12);
-        doc.text(`Totale Ore Lavorate: ${totalHours.toFixed(2)}`, 14, finalY + 10);
-        const fileName = `Report_${selectedMonth.replace(' ', '_')}_${employeeData.surname}.pdf`;
-        doc.save(fileName);
+
+        try {
+            const doc = new jsPDF();
+            doc.setFontSize(18);
+            doc.text(`Report Mensile - ${selectedMonth}`, 14, 22);
+            doc.setFontSize(11);
+            doc.text(`Dipendente: ${employeeData.name} ${employeeData.surname}`, 14, 30);
+            
+            const tableColumn = ["Data", "Area", "Entrata", "Uscita", "Ore"];
+            const tableRows = [];
+            let totalHours = 0;
+            
+            filteredTimestamps.forEach(entry => {
+                const entryData = [
+                    entry.date, 
+                    entry.areaName, 
+                    entry.clockIn, 
+                    entry.clockOut, 
+                    entry.duration
+                ];
+                tableRows.push(entryData);
+                totalHours += parseFloat(entry.duration) || 0;
+            });
+            
+            doc.autoTable({ head: [tableColumn], body: tableRows, startY: 35 });
+            
+            const finalY = doc.lastAutoTable.finalY;
+            doc.setFontSize(12);
+            doc.text(`Totale Ore Lavorate: ${totalHours.toFixed(2)}`, 14, finalY + 10);
+            
+            const fileName = `Report_${selectedMonth.replace(/ /g, '_')}_${employeeData.surname}.pdf`;
+            doc.save(fileName);
+
+        } catch (error) {
+            console.error("Errore durante la creazione del PDF:", error);
+            alert("Si è verificato un errore durante la creazione del PDF. Controlla la console del browser per i dettagli.");
+        }
     };
 
     const handleClockIn = async (areaId) => {
