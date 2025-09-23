@@ -1,6 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { db } from '../firebase';
-import { collection, query, where, orderBy, getDocs, addDoc, updateDoc, doc, arrayUnion, Timestamp, writeBatch } from 'firebase/firestore';
+import { 
+    collection, query, where, orderBy, getDocs, addDoc, updateDoc, doc, 
+    arrayUnion, Timestamp, writeBatch, 
+    // Importazione aggiunta per leggere la configurazione
+    getDoc 
+} from 'firebase/firestore';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import CompanyLogo from './CompanyLogo';
@@ -42,6 +47,11 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
     const [selectedMonth, setSelectedMonth] = useState('');
     const [availableMonths, setAvailableMonths] = useState([]);
 
+    // --- NUOVI STATI PER LA GESTIONE PAUSA ---
+    const [configPausa, setConfigPausa] = useState(null); // Durata pausa dall'admin (es. '30')
+    const [pausaRegistrata, setPausaRegistrata] = useState(false); // Per disabilitare il pulsante dopo l'uso
+
+    // Questo stato rimane per compatibilità con la logica di uscita automatica dalla pausa
     const isOnBreak = activeEntry?.pauses?.some(p => !p.end) || false;
 
     const getCurrentLocation = () => {
@@ -68,6 +78,15 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
         if (!user) { setIsLoading(false); return; }
         
         try {
+            // --- CARICA LA CONFIGURAZIONE DELLA PAUSA ---
+            const configDocRef = doc(db, 'settings', 'pausaConfig');
+            const configSnap = await getDoc(configDocRef);
+            if (configSnap.exists()) {
+                setConfigPausa(configSnap.data().durata);
+            } else {
+                setConfigPausa('0'); // Default a '0' se non esiste la configurazione
+            }
+
             const qEmployee = query(collection(db, "employees"), where("userId", "==", user.uid));
             const employeeSnapshot = await getDocs(qEmployee);
 
@@ -75,9 +94,8 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
                 const data = { id: employeeSnapshot.docs[0].id, ...employeeSnapshot.docs[0].data() };
                 setEmployeeData(data);
 
-                // NUOVA LOGICA PER MAX 2 DISPOSITIVI
                 const deviceId = getDeviceId();
-                const deviceIds = data.deviceIds || []; // Ora è un array
+                const deviceIds = data.deviceIds || [];
                 
                 if (deviceIds.includes(deviceId)) {
                     setIsDeviceOk(true);
@@ -97,7 +115,16 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
 
                 const qActiveEntry = query(collection(db, "time_entries"), where("employeeId", "==", data.id), where("status", "==", "clocked-in"));
                 const activeEntrySnapshot = await getDocs(qActiveEntry);
-                setActiveEntry(activeEntrySnapshot.empty ? null : { id: activeEntrySnapshot.docs[0].id, ...activeEntrySnapshot.docs[0].data() });
+                const activeEntryData = activeEntrySnapshot.empty ? null : { id: activeEntrySnapshot.docs[0].id, ...activeEntrySnapshot.docs[0].data() };
+                setActiveEntry(activeEntryData);
+                
+                // Controlla se una pausa fissa è già stata registrata per la timbratura attiva
+                if (activeEntryData && activeEntryData.pauses) {
+                    const hasFixedPause = activeEntryData.pauses.some(p => p.isFixed === true);
+                    setPausaRegistrata(hasFixedPause);
+                } else {
+                    setPausaRegistrata(false);
+                }
 
                 const qPastEntries = query(collection(db, "time_entries"), where("employeeId", "==", data.id), where("status", "==", "clocked-out"), orderBy("clockInTime", "desc"));
                 const pastEntriesSnapshot = await getDocs(qPastEntries);
@@ -267,34 +294,36 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
         }
     };
 
-    const handleStartPause = async () => {
-        if (!isDeviceOk || !activeEntry) return;
-        try {
-            const entryRef = doc(db, "time_entries", activeEntry.id);
-            await updateDoc(entryRef, { pauses: arrayUnion({ start: Timestamp.now(), end: null }) });
-            setStatusMessage({ type: 'success', text: 'Pausa iniziata.' });
-            fetchEmployeeData();
-        } catch (error) {
-            console.error("Errore durante l'inizio della pausa:", error);
-            setStatusMessage({ type: 'error', text: "Errore durante l'inizio della pausa." });
-        }
-    };
+    // --- NUOVA FUNZIONE PER REGISTRARE LA PAUSA FISSA ---
+    const registraPausaFissa = async () => {
+        if (!isDeviceOk || !activeEntry || !configPausa || pausaRegistrata) return;
 
-    const handleEndPause = async () => {
-        if (!isDeviceOk || !activeEntry) return;
-        const currentPauses = activeEntry.pauses || [];
-        const openPauseIndex = currentPauses.findIndex(p => !p.end);
-        if (openPauseIndex > -1) {
-            currentPauses[openPauseIndex].end = Timestamp.now();
-            try {
-                const entryRef = doc(db, "time_entries", activeEntry.id);
-                await updateDoc(entryRef, { pauses: currentPauses });
-                setStatusMessage({ type: 'success', text: 'Pausa terminata.' });
-                fetchEmployeeData();
-            } catch (error) {
-                console.error("Errore durante la fine della pausa:", error);
-                setStatusMessage({ type: 'error', text: "Errore durante la fine della pausa." });
-            }
+        const durataMinuti = parseInt(configPausa, 10);
+        if (durataMinuti === 0) return;
+
+        setStatusMessage({ type: 'info', text: 'Registrazione della pausa in corso...' });
+
+        try {
+            const oraInizio = Timestamp.now();
+            const oraFine = Timestamp.fromMillis(oraInizio.toMillis() + durataMinuti * 60000);
+
+            const pausaDaAggiungere = {
+                start: oraInizio,
+                end: oraFine,
+                isFixed: true, // Flag per identificarla come pausa fissa e non manuale
+                duration: durataMinuti
+            };
+
+            const entryRef = doc(db, "time_entries", activeEntry.id);
+            await updateDoc(entryRef, {
+                pauses: arrayUnion(pausaDaAggiungere)
+            });
+            
+            setStatusMessage({ type: 'success', text: `Pausa di ${durataMinuti} minuti registrata!` });
+            await fetchEmployeeData(); // Ricarica i dati per aggiornare lo stato e l'UI
+        } catch (error) {
+            console.error("Errore nella registrazione della pausa fissa:", error);
+            setStatusMessage({ type: 'error', text: "Si è verificato un errore durante la registrazione della pausa." });
         }
     };
     
@@ -333,7 +362,18 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
                             <p className={`text-xl font-bold ${isOnBreak ? 'text-yellow-600' : 'text-green-600'}`}>{isOnBreak ? 'IN PAUSA' : 'Timbratura ATTIVA'}</p>
                             <p className="text-gray-700 mt-2">Area: {workAreas.find(area => area.id === activeEntry.workAreaId)?.name || 'Sconosciuta'}</p>
                             <div className="mt-4 flex flex-col gap-3">
-                                {!isOnBreak ? <button onClick={handleStartPause} disabled={!isDeviceOk} className="px-6 py-3 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 text-lg font-medium disabled:bg-gray-400">INIZIA PAUSA</button> : <button onClick={handleEndPause} disabled={!isDeviceOk} className="px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 text-lg font-medium disabled:bg-gray-400">FINE PAUSA</button>}
+                                
+                                {/* --- BOTTONE PAUSA DINAMICO --- */}
+                                {configPausa && configPausa !== '0' && (
+                                    <button 
+                                        onClick={registraPausaFissa} 
+                                        disabled={!isDeviceOk || pausaRegistrata || isOnBreak} 
+                                        className="px-6 py-3 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 text-lg font-medium disabled:bg-gray-400 disabled:cursor-not-allowed"
+                                    >
+                                        {pausaRegistrata ? `PAUSA DI ${configPausa} MIN REGISTRATA` : `INIZIA PAUSA ${configPausa} MIN`}
+                                    </button>
+                                )}
+                                
                                 <button onClick={handleClockOut} disabled={!isDeviceOk} className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 text-lg font-medium disabled:bg-gray-400">TIMBRA USCITA</button>
                             </div>
                         </>

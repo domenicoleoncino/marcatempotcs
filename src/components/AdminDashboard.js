@@ -2,10 +2,13 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db } from '../firebase';
 import {
     doc, collection, addDoc, getDocs, query, where,
-    updateDoc, deleteDoc, writeBatch, Timestamp
+    updateDoc, deleteDoc, writeBatch, Timestamp,
+    // Importazioni per la gestione delle impostazioni
+    getDoc, setDoc
 } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import CompanyLogo from './CompanyLogo';
+
 
 // --- SUB-COMPONENTI INTERNI ---
 
@@ -299,6 +302,78 @@ const ReportView = ({ reports, title, handleExportXml }) => {
     );
 };
 
+const PauseSettingsView = () => {
+    const [durataPausa, setDurataPausa] = useState('0');
+    const [messaggio, setMessaggio] = useState('');
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchConfig = async () => {
+            const configDocRef = doc(db, 'settings', 'pausaConfig');
+            try {
+                const docSnap = await getDoc(configDocRef);
+                if (docSnap.exists()) {
+                    setDurataPausa(docSnap.data().durata);
+                }
+            } catch (error) {
+                console.error("Errore nel caricare la configurazione della pausa:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchConfig();
+    }, []);
+
+    const handleSalvaConfig = async (e) => {
+        e.preventDefault();
+        setMessaggio('Salvataggio in corso...');
+        const configDocRef = doc(db, 'settings', 'pausaConfig');
+        try {
+            await setDoc(configDocRef, { durata: durataPausa });
+            setMessaggio(`Impostazione salvata con successo: Pausa da ${durataPausa} minuti.`);
+        } catch (error) {
+            console.error("Errore nel salvataggio:", error);
+            setMessaggio("Si è verificato un errore durante il salvataggio.");
+        }
+    };
+
+    if (isLoading) {
+        return <p>Caricamento impostazioni...</p>;
+    }
+
+    return (
+        <div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-6">Impostazioni Generali</h1>
+            <div className="bg-white p-6 rounded-lg shadow-md">
+                <form onSubmit={handleSalvaConfig}>
+                    <h2 className="text-xl font-bold text-gray-800 mb-4">Configurazione Pausa Dipendenti</h2>
+                    <p className="text-sm text-gray-600 mb-4">Seleziona la durata della pausa predefinita che i dipendenti potranno registrare. Se imposti "0 Minuti", la funzionalità di pausa sarà disabilitata.</p>
+                    <div className="space-y-3">
+                        <div>
+                            <input type="radio" id="pausa0" name="durataPausa" value="0" checked={durataPausa === '0'} onChange={(e) => setDurataPausa(e.target.value)} />
+                            <label htmlFor="pausa0" className="ml-2">Nessuna Pausa (0 Minuti)</label>
+                        </div>
+                        <div>
+                            <input type="radio" id="pausa30" name="durataPausa" value="30" checked={durataPausa === '30'} onChange={(e) => setDurataPausa(e.target.value)} />
+                            <label htmlFor="pausa30" className="ml-2">Pausa da 30 Minuti</label>
+                        </div>
+                        <div>
+                            <input type="radio" id="pausa60" name="durataPausa" value="60" checked={durataPausa === '60'} onChange={(e) => setDurataPausa(e.target.value)} />
+                            <label htmlFor="pausa60" className="ml-2">Pausa da 60 Minuti</label>
+                        </div>
+                    </div>
+                    <div className="mt-6">
+                        <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm">
+                            Salva Impostazioni Pausa
+                        </button>
+                    </div>
+                </form>
+                {messaggio && <p className={`mt-4 text-sm ${messaggio.includes('Errore') ? 'text-red-600' : 'text-green-700'}`}>{messaggio}</p>}
+            </div>
+        </div>
+    );
+};
+
 const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAdminEmail, user, allEmployees, currentUserRole, userData }) => {
     const [formData, setFormData] = useState(item || {});
     const [isLoading, setIsLoading] = useState(false);
@@ -338,7 +413,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
         }
     }, [type, item]);
 
-const handleSubmit = async (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
         if ((type === 'newEmployee' || type === 'newAdmin') && (!formData.password || formData.password.length < 6)) {
             setError("La password deve essere di almeno 6 caratteri.");
@@ -354,7 +429,6 @@ const handleSubmit = async (e) => {
 
         try {
             if (type === 'newEmployee' || type === 'newAdmin') {
-                // MODIFICA: Forziamo l'aggiornamento del token e specifichiamo la regione
                 await user.getIdToken(true); 
                 const functions = getFunctions(undefined, 'us-central1');
                 const createNewUser = httpsCallable(functions, 'createNewUser');
@@ -376,7 +450,6 @@ const handleSubmit = async (e) => {
                 await createNewUser(newUserPayload);
 
             } else {
-                // Il resto della logica rimane invariato
                 switch (type) {
                     case 'editEmployee':
                         await updateDoc(doc(db, "employees", item.id), { name: formData.name, surname: formData.surname, phone: formData.phone });
@@ -839,6 +912,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                             <button onClick={() => setView('employees')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'employees' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Dipendenti</button>
                             <button onClick={() => setView('areas')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'areas' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Aree</button>
                             {currentUserRole === 'admin' && <button onClick={() => setView('admins')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'admins' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Admin</button>}
+                            {currentUserRole === 'admin' && <button onClick={() => setView('settings')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'settings' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Impostazioni</button>}
                         </div>
                     </div>
                 </div>
@@ -916,6 +990,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 {view === 'areas' && <AreaManagementView workAreas={workAreas} openModal={openModal} currentUserRole={currentUserRole} />}
                 {view === 'admins' && <AdminManagementView admins={admins} openModal={openModal} user={user} superAdminEmail={superAdminEmail} currentUserRole={currentUserRole} />}
                 {view === 'reports' && <ReportView reports={reports} title={reportTitle} handleExportXml={handleExportXml} />}
+                {view === 'settings' && <PauseSettingsView />}
             </main>
 
             {showModal && <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} workAreas={allWorkAreas} onDataUpdate={fetchData} user={user} superAdminEmail={superAdminEmail} allEmployees={allEmployees} currentUserRole={currentUserRole} userData={userData} />}
