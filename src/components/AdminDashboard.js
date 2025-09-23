@@ -854,13 +854,16 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
     return (
         <div className="min-h-screen bg-gray-100">
-            <header className="bg-white shadow-md p-2 sm:p-4 flex flex-col sm:flex-row justify-between sm:items-center gap-2">
-                <CompanyLogo />
-                <div className="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-4 w-full sm:w-auto">
-                    <span className="text-xs text-gray-600 text-center break-all">
-                        {currentUserRole === 'admin' ? 'Admin' : 'Preposto'}: {userData?.name && userData?.surname ? `${userData.name} ${userData.surname}` : user?.email}
-                    </span>
-                    <button onClick={handleLogout} className="px-3 py-1.5 bg-red-500 text-white rounded-lg hover:bg-red-600 w-full sm:w-auto text-sm">Logout</button>
+            <header className="bg-white shadow-md">
+                <div className="max-w-7xl mx-auto py-3 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+                    <CompanyLogo />
+                    <div className="flex items-center space-x-4">
+                        <span className="text-sm text-gray-600 text-right">
+                            {currentUserRole === 'admin' ? 'Admin' : 'Preposto'}:<br/>
+                            <span className="font-medium">{userData?.name && userData?.surname ? `${userData.name} ${userData.surname}` : user?.email}</span>
+                        </span>
+                        <button onClick={handleLogout} className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 text-sm">Logout</button>
+                    </div>
                 </div>
             </header>
             <nav className="bg-white border-b border-gray-200">
@@ -876,12 +879,11 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 </div>
             </nav>
 
-            {view !== 'reports' && (
-                <div className="bg-gray-50 border-b border-gray-200 p-4">
-                    <div className="max-w-7xl mx-auto w-full">
+            <div className="max-w-7xl mx-auto w-full p-4 sm:p-6 lg:p-8">
+                {view !== 'reports' && (
+                    <div className="bg-white shadow-md rounded-lg p-4 mb-6">
                         <h3 className="text-lg font-medium text-gray-900 mb-4 text-center sm:text-left">Genera Report Personalizzato</h3>
                         <div className="flex flex-col gap-3 md:flex-row md:items-baseline md:flex-wrap md:gap-4">
-                            
                             <div className="flex items-center justify-between md:justify-start">
                                 <label htmlFor="startDate" className="w-28 text-sm font-medium text-gray-700 text-left">Da:</label>
                                 <input
@@ -892,7 +894,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                                     className="p-1 border border-gray-300 rounded-md w-full"
                                 />
                             </div>
-                            
                             <div className="flex items-center justify-between md:justify-start">
                                 <label htmlFor="endDate" className="w-28 text-sm font-medium text-gray-700 text-left">A:</label>
                                 <input
@@ -903,7 +904,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                                     className="p-1 border border-gray-300 rounded-md w-full"
                                 />
                             </div>
-                            
                             <div className="flex items-center justify-between md:justify-start">
                                 <label htmlFor="areaFilter" className="w-28 text-sm font-medium text-gray-700 text-left">Area:</label>
                                 <select 
@@ -918,7 +918,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                                     ))}
                                 </select>
                             </div>
-                            
                             <div className="flex items-center justify-between md:justify-start">
                                 <label htmlFor="employeeFilter" className="w-28 text-sm font-medium text-gray-700 text-left">Dipendente:</label>
                                 <select 
@@ -933,22 +932,21 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                                     ))}
                                 </select>
                             </div>
-
-                            <button onClick={generateReport} className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm w-full md:w-auto md:ml-28">
+                            <button onClick={generateReport} className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm w-full md:w-auto md:ml-auto">
                                 Genera Report
                             </button>
                         </div>
                     </div>
-                </div>
-            )}
+                )}
 
-            <main className="p-4 sm:p-8 max-w-7xl mx-auto w-full text-center sm:text-left">
-                {view === 'dashboard' && <DashboardView employees={employees} activeEntries={activeEntries} workAreas={workAreas} />}
-                {view === 'employees' && <EmployeeManagementView employees={sortedAndFilteredEmployees} openModal={openModal} currentUserRole={currentUserRole} sortConfig={sortConfig} requestSort={requestSort} searchTerm={searchTerm} setSearchTerm={setSearchTerm} />}
-                {view === 'areas' && <AreaManagementView workAreas={workAreas} openModal={openModal} currentUserRole={currentUserRole} />}
-                {view === 'admins' && <AdminManagementView admins={admins} openModal={openModal} user={user} superAdminEmail={superAdminEmail} currentUserRole={currentUserRole} />}
-                {view === 'reports' && <ReportView reports={reports} title={reportTitle} handleExportXml={handleExportXml} />}
-            </main>
+                <main>
+                    {view === 'dashboard' && <DashboardView employees={employees} activeEntries={activeEntries} workAreas={workAreas} />}
+                    {view === 'employees' && <EmployeeManagementView employees={sortedAndFilteredEmployees} openModal={openModal} currentUserRole={currentUserRole} sortConfig={sortConfig} requestSort={requestSort} searchTerm={searchTerm} setSearchTerm={setSearchTerm} />}
+                    {view === 'areas' && <AreaManagementView workAreas={workAreas} openModal={openModal} currentUserRole={currentUserRole} />}
+                    {view === 'admins' && <AdminManagementView admins={admins} openModal={openModal} user={user} superAdminEmail={superAdminEmail} currentUserRole={currentUserRole} />}
+                    {view === 'reports' && <ReportView reports={reports} title={reportTitle} handleExportXml={handleExportXml} />}
+                </main>
+            </div>
 
             {showModal && <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} workAreas={allWorkAreas} onDataUpdate={fetchData} user={user} superAdminEmail={superAdminEmail} allEmployees={allEmployees} currentUserRole={currentUserRole} userData={userData} />}
         </div>
