@@ -2,9 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db } from '../firebase';
 import {
     doc, collection, addDoc, getDocs, query, where,
-    updateDoc, deleteDoc, writeBatch, Timestamp,
-    // Importazioni per la gestione delle impostazioni
-    getDoc, setDoc
+    updateDoc, deleteDoc, writeBatch, Timestamp
 } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import CompanyLogo from './CompanyLogo';
@@ -181,6 +179,7 @@ const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Latitudine</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Longitudine</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Raggio (m)</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pausa (min)</th>
                         {currentUserRole === 'admin' && <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Azioni</th>}
                     </tr>
                 </thead>
@@ -192,6 +191,7 @@ const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
                             <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{area.latitude}</td>
                             <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{area.longitude}</td>
                             <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{area.radius}</td>
+                            <td className="px-4 py-2 whitespace-nowrap text-sm font-bold text-gray-700">{area.pauseDuration || 0}</td>
                             {currentUserRole === 'admin' && <td className="px-4 py-2 whitespace-nowrap text-sm font-medium"><div className="flex items-center gap-4"><button onClick={() => openModal('editArea', area)} className="text-green-600 hover:text-green-900">Modifica</button><button onClick={() => openModal('deleteArea', area)} className="text-red-600 hover:text-red-900">Elimina</button></div></td>}
                         </tr>
                     ))}
@@ -302,78 +302,6 @@ const ReportView = ({ reports, title, handleExportXml }) => {
     );
 };
 
-const PauseSettingsView = () => {
-    const [durataPausa, setDurataPausa] = useState('0');
-    const [messaggio, setMessaggio] = useState('');
-    const [isLoading, setIsLoading] = useState(true);
-
-    useEffect(() => {
-        const fetchConfig = async () => {
-            const configDocRef = doc(db, 'settings', 'pausaConfig');
-            try {
-                const docSnap = await getDoc(configDocRef);
-                if (docSnap.exists()) {
-                    setDurataPausa(docSnap.data().durata);
-                }
-            } catch (error) {
-                console.error("Errore nel caricare la configurazione della pausa:", error);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-        fetchConfig();
-    }, []);
-
-    const handleSalvaConfig = async (e) => {
-        e.preventDefault();
-        setMessaggio('Salvataggio in corso...');
-        const configDocRef = doc(db, 'settings', 'pausaConfig');
-        try {
-            await setDoc(configDocRef, { durata: durataPausa });
-            setMessaggio(`Impostazione salvata con successo: Pausa da ${durataPausa} minuti.`);
-        } catch (error) {
-            console.error("Errore nel salvataggio:", error);
-            setMessaggio("Si è verificato un errore durante il salvataggio.");
-        }
-    };
-
-    if (isLoading) {
-        return <p>Caricamento impostazioni...</p>;
-    }
-
-    return (
-        <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-6">Impostazioni Generali</h1>
-            <div className="bg-white p-6 rounded-lg shadow-md">
-                <form onSubmit={handleSalvaConfig}>
-                    <h2 className="text-xl font-bold text-gray-800 mb-4">Configurazione Pausa Dipendenti</h2>
-                    <p className="text-sm text-gray-600 mb-4">Seleziona la durata della pausa predefinita che i dipendenti potranno registrare. Se imposti "0 Minuti", la funzionalità di pausa sarà disabilitata.</p>
-                    <div className="space-y-3">
-                        <div>
-                            <input type="radio" id="pausa0" name="durataPausa" value="0" checked={durataPausa === '0'} onChange={(e) => setDurataPausa(e.target.value)} />
-                            <label htmlFor="pausa0" className="ml-2">Nessuna Pausa (0 Minuti)</label>
-                        </div>
-                        <div>
-                            <input type="radio" id="pausa30" name="durataPausa" value="30" checked={durataPausa === '30'} onChange={(e) => setDurataPausa(e.target.value)} />
-                            <label htmlFor="pausa30" className="ml-2">Pausa da 30 Minuti</label>
-                        </div>
-                        <div>
-                            <input type="radio" id="pausa60" name="durataPausa" value="60" checked={durataPausa === '60'} onChange={(e) => setDurataPausa(e.target.value)} />
-                            <label htmlFor="pausa60" className="ml-2">Pausa da 60 Minuti</label>
-                        </div>
-                    </div>
-                    <div className="mt-6">
-                        <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm">
-                            Salva Impostazioni Pausa
-                        </button>
-                    </div>
-                </form>
-                {messaggio && <p className={`mt-4 text-sm ${messaggio.includes('Errore') ? 'text-red-600' : 'text-green-700'}`}>{messaggio}</p>}
-            </div>
-        </div>
-    );
-};
-
 const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAdminEmail, user, allEmployees, currentUserRole, userData }) => {
     const [formData, setFormData] = useState(item || {});
     const [isLoading, setIsLoading] = useState(false);
@@ -458,10 +386,22 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                         await deleteDoc(doc(db, "employees", item.id));
                         break;
                     case 'newArea':
-                        await addDoc(collection(db, "work_areas"), { name: formData.name, latitude: parseFloat(formData.latitude), longitude: parseFloat(formData.longitude), radius: parseInt(formData.radius, 10) });
+                        await addDoc(collection(db, "work_areas"), { 
+                            name: formData.name, 
+                            latitude: parseFloat(formData.latitude), 
+                            longitude: parseFloat(formData.longitude), 
+                            radius: parseInt(formData.radius, 10),
+                            pauseDuration: parseInt(formData.pauseDuration || 0, 10)
+                        });
                         break;
                     case 'editArea':
-                        await updateDoc(doc(db, "work_areas", item.id), { name: formData.name, latitude: parseFloat(formData.latitude), longitude: parseFloat(formData.longitude), radius: parseInt(formData.radius, 10) });
+                        await updateDoc(doc(db, "work_areas", item.id), { 
+                            name: formData.name, 
+                            latitude: parseFloat(formData.latitude), 
+                            longitude: parseFloat(formData.longitude), 
+                            radius: parseInt(formData.radius, 10),
+                            pauseDuration: parseInt(formData.pauseDuration || 0, 10)
+                        });
                         break;
                     case 'deleteArea':
                         const batchDeleteArea = writeBatch(db);
@@ -561,6 +501,20 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                         <input type="number" step="any" name="latitude" value={formData.latitude || ''} onChange={handleInputChange} placeholder="Latitudine" required className="w-full p-2 border rounded" />
                         <input type="number" step="any" name="longitude" value={formData.longitude || ''} onChange={handleInputChange} placeholder="Longitudine" required className="w-full p-2 border rounded" />
                         <input type="number" name="radius" value={formData.radius || ''} onChange={handleInputChange} placeholder="Raggio (metri)" required className="w-full p-2 border rounded" />
+                        <div>
+                            <label htmlFor="pauseDuration" className="block text-sm font-medium text-gray-700">Durata Pausa</label>
+                            <select 
+                                name="pauseDuration" 
+                                id="pauseDuration"
+                                value={formData.pauseDuration || '0'} 
+                                onChange={handleInputChange}
+                                className="w-full p-2 border rounded bg-white"
+                            >
+                                <option value="0">0 Minuti (Disabilitata)</option>
+                                <option value="30">30 Minuti</option>
+                                <option value="60">60 Minuti</option>
+                            </select>
+                        </div>
                     </div>
                 );
             case 'assignArea':
@@ -912,7 +866,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                             <button onClick={() => setView('employees')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'employees' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Dipendenti</button>
                             <button onClick={() => setView('areas')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'areas' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Aree</button>
                             {currentUserRole === 'admin' && <button onClick={() => setView('admins')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'admins' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Admin</button>}
-                            {currentUserRole === 'admin' && <button onClick={() => setView('settings')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'settings' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Impostazioni</button>}
                         </div>
                     </div>
                 </div>
@@ -990,7 +943,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 {view === 'areas' && <AreaManagementView workAreas={workAreas} openModal={openModal} currentUserRole={currentUserRole} />}
                 {view === 'admins' && <AdminManagementView admins={admins} openModal={openModal} user={user} superAdminEmail={superAdminEmail} currentUserRole={currentUserRole} />}
                 {view === 'reports' && <ReportView reports={reports} title={reportTitle} handleExportXml={handleExportXml} />}
-                {view === 'settings' && <PauseSettingsView />}
             </main>
 
             {showModal && <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} workAreas={allWorkAreas} onDataUpdate={fetchData} user={user} superAdminEmail={superAdminEmail} allEmployees={allEmployees} currentUserRole={currentUserRole} userData={userData} />}

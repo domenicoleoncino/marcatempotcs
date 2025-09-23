@@ -2,9 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { db } from '../firebase';
 import { 
     collection, query, where, orderBy, getDocs, addDoc, updateDoc, doc, 
-    arrayUnion, Timestamp, writeBatch, 
-    // Importazione aggiunta per leggere la configurazione
-    getDoc 
+    arrayUnion, Timestamp, writeBatch
 } from 'firebase/firestore';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -47,11 +45,11 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
     const [selectedMonth, setSelectedMonth] = useState('');
     const [availableMonths, setAvailableMonths] = useState([]);
 
-    // --- NUOVI STATI PER LA GESTIONE PAUSA ---
-    const [configPausa, setConfigPausa] = useState(null); // Durata pausa dall'admin (es. '30')
-    const [pausaRegistrata, setPausaRegistrata] = useState(false); // Per disabilitare il pulsante dopo l'uso
+    // Stati per la gestione della pausa
+    const [configPausa, setConfigPausa] = useState(null);
+    const [pausaRegistrata, setPausaRegistrata] = useState(false);
 
-    // Questo stato rimane per compatibilità con la logica di uscita automatica dalla pausa
+    // Stato per la compatibilità con la vecchia logica di pausa manuale (se presente)
     const isOnBreak = activeEntry?.pauses?.some(p => !p.end) || false;
 
     const getCurrentLocation = () => {
@@ -78,15 +76,6 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
         if (!user) { setIsLoading(false); return; }
         
         try {
-            // --- CARICA LA CONFIGURAZIONE DELLA PAUSA ---
-            const configDocRef = doc(db, 'settings', 'pausaConfig');
-            const configSnap = await getDoc(configDocRef);
-            if (configSnap.exists()) {
-                setConfigPausa(configSnap.data().durata);
-            } else {
-                setConfigPausa('0'); // Default a '0' se non esiste la configurazione
-            }
-
             const qEmployee = query(collection(db, "employees"), where("userId", "==", user.uid));
             const employeeSnapshot = await getDocs(qEmployee);
 
@@ -118,11 +107,14 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
                 const activeEntryData = activeEntrySnapshot.empty ? null : { id: activeEntrySnapshot.docs[0].id, ...activeEntrySnapshot.docs[0].data() };
                 setActiveEntry(activeEntryData);
                 
-                // Controlla se una pausa fissa è già stata registrata per la timbratura attiva
-                if (activeEntryData && activeEntryData.pauses) {
-                    const hasFixedPause = activeEntryData.pauses.some(p => p.isFixed === true);
+                if (activeEntryData) {
+                    const currentArea = allAreas.find(area => area.id === activeEntryData.workAreaId);
+                    setConfigPausa(currentArea?.pauseDuration?.toString() || '0');
+                    
+                    const hasFixedPause = activeEntryData.pauses?.some(p => p.isFixed === true);
                     setPausaRegistrata(hasFixedPause);
                 } else {
+                    setConfigPausa(null);
                     setPausaRegistrata(false);
                 }
 
@@ -294,7 +286,6 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
         }
     };
 
-    // --- NUOVA FUNZIONE PER REGISTRARE LA PAUSA FISSA ---
     const registraPausaFissa = async () => {
         if (!isDeviceOk || !activeEntry || !configPausa || pausaRegistrata) return;
 
@@ -310,7 +301,7 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
             const pausaDaAggiungere = {
                 start: oraInizio,
                 end: oraFine,
-                isFixed: true, // Flag per identificarla come pausa fissa e non manuale
+                isFixed: true, 
                 duration: durataMinuti
             };
 
@@ -320,7 +311,7 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
             });
             
             setStatusMessage({ type: 'success', text: `Pausa di ${durataMinuti} minuti registrata!` });
-            await fetchEmployeeData(); // Ricarica i dati per aggiornare lo stato e l'UI
+            await fetchEmployeeData();
         } catch (error) {
             console.error("Errore nella registrazione della pausa fissa:", error);
             setStatusMessage({ type: 'error', text: "Si è verificato un errore durante la registrazione della pausa." });
@@ -363,7 +354,6 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
                             <p className="text-gray-700 mt-2">Area: {workAreas.find(area => area.id === activeEntry.workAreaId)?.name || 'Sconosciuta'}</p>
                             <div className="mt-4 flex flex-col gap-3">
                                 
-                                {/* --- BOTTONE PAUSA DINAMICO --- */}
                                 {configPausa && configPausa !== '0' && (
                                     <button 
                                         onClick={registraPausaFissa} 
