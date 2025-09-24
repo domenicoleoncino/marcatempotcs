@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { db } from '../firebase';
 import { 
     collection, query, where, orderBy, getDocs, addDoc, updateDoc, doc, 
-    arrayUnion, Timestamp, writeBatch
+    arrayUnion, Timestamp, writeBatch, documentId
 } from 'firebase/firestore';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -107,77 +107,82 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
             const qEmployee = query(collection(db, "employees"), where("userId", "==", user.uid));
             const employeeSnapshot = await getDocs(qEmployee);
 
-            if (!employeeSnapshot.empty) {
-                const data = { id: employeeSnapshot.docs[0].id, ...employeeSnapshot.docs[0].data() };
-                setEmployeeData(data);
-
-                const deviceId = getDeviceId();
-                const deviceIds = data.deviceIds || [];
-                
-                if (deviceIds.includes(deviceId)) {
-                    setIsDeviceOk(true);
-                } else if (deviceIds.length < 2) {
-                    setIsDeviceOk(true);
-                    setStatusMessage({ type: 'info', text: 'Questo nuovo dispositivo verrà registrato alla prossima timbratura.' });
-                } else {
-                    setIsDeviceOk(false);
-                    setStatusMessage({ type: 'error', text: "Limite di 2 dispositivi raggiunto. Contatta un amministratore." });
-                }
-
-                const allAreasSnapshot = await getDocs(collection(db, "work_areas"));
-                const allAreas = allAreasSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-                
-                const assignedAreas = data.workAreaIds?.length > 0 ? allAreas.filter(area => data.workAreaIds.includes(area.id)) : [];
-                setWorkAreas(assignedAreas);
-
-                const qActiveEntry = query(collection(db, "time_entries"), where("employeeId", "==", data.id), where("status", "==", "clocked-in"));
-                const activeEntrySnapshot = await getDocs(qActiveEntry);
-                const activeEntryData = activeEntrySnapshot.empty ? null : { id: activeEntrySnapshot.docs[0].id, ...activeEntrySnapshot.docs[0].data() };
-                setActiveEntry(activeEntryData);
-                
-                if (activeEntryData) {
-                    const currentArea = allAreas.find(area => area.id === activeEntryData.workAreaId);
-                    setConfigPausa(currentArea?.pauseDuration?.toString() || '0');
-                    
-                    const hasFixedPause = activeEntryData.pauses?.some(p => p.isFixed === true);
-                    setPausaRegistrata(hasFixedPause);
-                } else {
-                    setConfigPausa(null);
-                    setPausaRegistrata(false);
-                }
-
-                const qPastEntries = query(collection(db, "time_entries"), where("employeeId", "==", data.id), where("status", "==", "clocked-out"), orderBy("clockInTime", "desc"));
-                const pastEntriesSnapshot = await getDocs(qPastEntries);
-                
-                const pastEntries = pastEntriesSnapshot.docs.map(docSnap => {
-                    const entryData = docSnap.data();
-                    const area = allAreas.find(wa => wa.id === entryData.workAreaId);
-                    const clockInTime = entryData.clockInTime?.toDate();
-                    const clockOutTime = entryData.clockOutTime?.toDate();
-                    
-                    let duration = 0;
-                    if (clockInTime && clockOutTime) {
-                        const totalDurationMs = clockOutTime.getTime() - clockInTime.getTime();
-                        const pauseDurationMs = (entryData.pauses || []).reduce((acc, p) => {
-                            if (p.start && p.end) return acc + (p.end.toDate().getTime() - p.start.toDate().getTime());
-                            return acc;
-                        }, 0);
-                        duration = (totalDurationMs - pauseDurationMs) / (1000 * 60 * 60);
-                    }
-                    
-                    return {
-                        id: docSnap.id,
-                        areaName: area ? area.name : 'N/D',
-                        clockIn: clockInTime ? clockInTime.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : 'N/A',
-                        clockOut: clockOutTime ? clockOutTime.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : 'N/A',
-                        date: clockInTime ? clockInTime.toLocaleDateString('it-IT') : 'N/A',
-                        duration: duration > 0 ? duration.toFixed(2) : '0.00'
-                    };
-                });
-                setAllTimestamps(pastEntries);
-            } else {
+            if (employeeSnapshot.empty) {
                 setEmployeeData(null);
+                setIsLoading(false);
+                // Non mostrare l'errore qui, la vista `!employeeData` lo gestirà
+                return;
             }
+                
+            const data = { id: employeeSnapshot.docs[0].id, ...employeeSnapshot.docs[0].data() };
+            setEmployeeData(data);
+
+            const deviceId = getDeviceId();
+            const deviceIds = data.deviceIds || [];
+            
+            if (deviceIds.includes(deviceId)) {
+                setIsDeviceOk(true);
+            } else if (deviceIds.length < 2) {
+                setIsDeviceOk(true);
+                setStatusMessage({ type: 'info', text: 'Questo nuovo dispositivo verrà registrato alla prossima timbratura.' });
+            } else {
+                setIsDeviceOk(false);
+                setStatusMessage({ type: 'error', text: "Limite di 2 dispositivi raggiunto. Contatta un amministratore." });
+            }
+            
+            let assignedAreas = [];
+            if (data.workAreaIds && data.workAreaIds.length > 0) {
+                const workAreasQuery = query(collection(db, "work_areas"), where(documentId(), "in", data.workAreaIds));
+                const workAreasSnapshot = await getDocs(workAreasQuery);
+                assignedAreas = workAreasSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+            }
+            setWorkAreas(assignedAreas);
+
+            const qActiveEntry = query(collection(db, "time_entries"), where("employeeId", "==", data.id), where("status", "==", "clocked-in"));
+            const activeEntrySnapshot = await getDocs(qActiveEntry);
+            const activeEntryData = activeEntrySnapshot.empty ? null : { id: activeEntrySnapshot.docs[0].id, ...activeEntrySnapshot.docs[0].data() };
+            setActiveEntry(activeEntryData);
+            
+            if (activeEntryData) {
+                const currentArea = assignedAreas.find(area => area.id === activeEntryData.workAreaId);
+                setConfigPausa(currentArea?.pauseDuration?.toString() || '0');
+                const hasFixedPause = activeEntryData.pauses?.some(p => p.isFixed === true);
+                setPausaRegistrata(hasFixedPause);
+            } else {
+                setConfigPausa(null);
+                setPausaRegistrata(false);
+            }
+
+            const qPastEntries = query(collection(db, "time_entries"), where("employeeId", "==", data.id), where("status", "==", "clocked-out"), orderBy("clockInTime", "desc"));
+            const pastEntriesSnapshot = await getDocs(qPastEntries);
+            
+            const pastEntries = pastEntriesSnapshot.docs.map(docSnap => {
+                const entryData = docSnap.data();
+                const area = assignedAreas.find(wa => wa.id === entryData.workAreaId);
+                const clockInTime = entryData.clockInTime?.toDate();
+                const clockOutTime = entryData.clockOutTime?.toDate();
+                
+                let duration = 0;
+                if (clockInTime && clockOutTime) {
+                    const totalDurationMs = clockOutTime.getTime() - clockInTime.getTime();
+                    const pauseDurationMs = (entryData.pauses || []).reduce((acc, p) => {
+                        if (p.start && p.end) return acc + (p.end.toDate().getTime() - p.start.toDate().getTime());
+                        return acc;
+                    }, 0);
+                    duration = (totalDurationMs - pauseDurationMs) / (1000 * 60 * 60);
+                }
+                
+                return {
+                    id: docSnap.id,
+                    areaName: area ? area.name : 'N/D',
+                    clockIn: clockInTime ? clockInTime.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : 'N/A',
+                    clockOut: clockOutTime ? clockOutTime.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : 'N/A',
+                    date: clockInTime ? clockInTime.toLocaleDateString('it-IT') : 'N/A',
+                    duration: duration > 0 ? duration.toFixed(2) : '0.00'
+                };
+            });
+            setAllTimestamps(pastEntries);
+            
         } catch (error) {
             console.error("Errore nel recupero dati dipendente:", error);
             setStatusMessage({ type: 'error', text: 'Errore nel caricamento dei dati.' });
