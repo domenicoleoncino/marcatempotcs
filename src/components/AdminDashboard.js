@@ -613,11 +613,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                        <textarea name="note" value={formData.note || ''} onChange={handleInputChange} placeholder="Note (opzionale)" className="w-full p-2 border rounded"></textarea>
                     </div>
                 );
-            case 'deleteEmployee': return <p>Sei sicuro di voler eliminare il dipendente <strong>{item.name} {item.surname}</strong>? L'azione è irreversibile.</p>;
-            case 'deleteArea': return <p>Sei sicuro di voler eliminare l'area <strong>{item.name}</strong>? Verrà rimossa da tutti i dipendenti a cui è assegnata.</p>;
-            case 'deleteAdmin': return <p>Sei sicuro di voler eliminare l'utente <strong>{item.name} {item.surname}</strong>?</p>;
-            case 'resetDevice': return <p>Sei sicuro di voler resettare i dispositivi per <strong>{item.name} {item.surname}</strong>? Potrà registrare 2 nuovi dispositivi.</p>;
-            default: return null;
+            default: return <p>Sei sicuro di voler procedere?</p>;
         }
     };
 
@@ -807,7 +803,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     };
 
     const handleAdminClockIn = async (areaId) => {
-        if (!adminEmployeeProfile || !allWorkAreas) return;
+        if (!adminEmployeeProfile) return;
         try {
             const clockInTimeRounded = roundToNearest30Minutes(new Date());
             await addDoc(collection(db, "time_entries"), {
