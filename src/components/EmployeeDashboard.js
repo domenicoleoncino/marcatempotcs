@@ -5,7 +5,7 @@ import {
     arrayUnion, Timestamp, writeBatch
 } from 'firebase/firestore';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 import CompanyLogo from './CompanyLogo';
 
 // Funzione per arrotondare l'orario per DIFETTO al multiplo di 10 minuti
@@ -241,17 +241,21 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
             
             filteredTimestamps.forEach(entry => {
                 const entryData = [
-                    entry.date, 
-                    entry.areaName, 
-                    entry.clockIn, 
-                    entry.clockOut, 
-                    entry.duration
+                    entry.date || 'N/D', 
+                    entry.areaName || 'N/D', 
+                    entry.clockIn || 'N/A', 
+                    entry.clockOut || 'N/A', 
+                    entry.duration || '0.00'
                 ];
                 tableRows.push(entryData);
                 totalHours += parseFloat(entry.duration) || 0;
             });
             
-            doc.autoTable({ head: [tableColumn], body: tableRows, startY: 35 });
+            autoTable(doc, { 
+                head: [tableColumn], 
+                body: tableRows, 
+                startY: 35 
+            });
             
             const finalY = doc.lastAutoTable.finalY;
             doc.setFontSize(12);
