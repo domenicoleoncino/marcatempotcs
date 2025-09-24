@@ -9,63 +9,22 @@ import CompanyLogo from './CompanyLogo';
 
 // --- FUNZIONI DI SUPPORTO ---
 
-const roundTimeDownTo10Minutes = (date) => {
+const roundToNearest10Minutes = (date) => {
     const roundedDate = new Date(date.getTime());
     const minutes = roundedDate.getMinutes();
-    const remainder = minutes % 10;
-    roundedDate.setMinutes(minutes - remainder);
-    roundedDate.setSeconds(0);
-    roundedDate.setMilliseconds(0);
-    return roundedDate;
-};
 
-const roundTimeUpTo10Minutes = (date) => {
-    const roundedDate = new Date(date.getTime());
-    const minutes = roundedDate.getMinutes();
-    const seconds = roundedDate.getSeconds();
-    const milliseconds = roundedDate.getMilliseconds();
-    if (minutes % 10 === 0 && seconds === 0 && milliseconds === 0) {
-        return roundedDate;
+    const remainder = minutes % 10;
+
+    if (remainder >= 5) {
+        roundedDate.setMinutes(minutes + (10 - remainder));
+    } else {
+        roundedDate.setMinutes(minutes - remainder);
     }
-    const remainder = minutes % 10;
-    const minutesToAdd = 10 - remainder;
-    roundedDate.setMinutes(roundedDate.getMinutes() + minutesToAdd);
+
     roundedDate.setSeconds(0);
     roundedDate.setMilliseconds(0);
+
     return roundedDate;
-};
-
-// Funzione per calcolare la distanza (necessaria per la timbratura del preposto)
-const calculateDistance = (lat1, lon1, lat2, lon2) => {
-    const R = 6371e3; // metres
-    const φ1 = lat1 * Math.PI / 180;
-    const φ2 = lat2 * Math.PI / 180;
-    const Δφ = (lat2 - lat1) * Math.PI / 180;
-    const Δλ = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c; // in metres
-};
-
-// Funzione per ottenere la posizione (necessaria per la timbratura del preposto)
-const getCurrentLocation = () => {
-    return new Promise((resolve, reject) => {
-        if (!navigator.geolocation) {
-            reject("La geolocalizzazione non è supportata dal tuo browser.");
-            return;
-        }
-        navigator.geolocation.getCurrentPosition(
-            (position) => resolve({ latitude: position.coords.latitude, longitude: position.coords.longitude }),
-            (error) => {
-                let message = "Errore sconosciuto di geolocalizzazione.";
-                if (error.code === error.PERMISSION_DENIED) message = "Permesso di geolocalizzazione negato.";
-                if (error.code === error.POSITION_UNAVAILABLE) message = "Posizione non disponibile.";
-                if (error.code === error.TIMEOUT) message = "Richiesta di geolocalizzazione scaduta.";
-                reject(message);
-            },
-            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-        );
-    });
 };
 
 
@@ -461,7 +420,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                         await addDoc(collection(db, "time_entries"), { 
                             employeeId: item.id, 
                             workAreaId: formData.workAreaId, 
-                            clockInTime: roundTimeUpTo10Minutes(new Date(formData.timestamp)), 
+                            clockInTime: roundToNearest10Minutes(new Date(formData.timestamp)), 
                             clockOutTime: null, 
                             status: 'clocked-in', 
                             note: formData.note || null, 
@@ -470,7 +429,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                         break;
                     case 'manualClockOut':
                         await updateDoc(doc(db, "time_entries", item.activeEntry.id), { 
-                            clockOutTime: roundTimeDownTo10Minutes(new Date(formData.timestamp)), 
+                            clockOutTime: roundToNearest10Minutes(new Date(formData.timestamp)), 
                             status: 'clocked-out', 
                             note: formData.note || item.activeEntry.note || null 
                         });
@@ -513,16 +472,75 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
         switch (type) {
             case 'newEmployee':
             case 'newAdmin':
-                return ( <div className="space-y-4">...</div> );
+                return (
+                    <div className="space-y-4">
+                        <input name="name" value={formData.name || ''} onChange={handleInputChange} placeholder="Nome" required className="w-full p-2 border rounded" />
+                        <input name="surname" value={formData.surname || ''} onChange={handleInputChange} placeholder="Cognome" required className="w-full p-2 border rounded" />
+                        <input type="email" name="email" value={formData.email || ''} onChange={handleInputChange} placeholder="Email" required className="w-full p-2 border rounded" />
+                        <input type="password" name="password" value={formData.password || ''} onChange={handleInputChange} placeholder="Password (min. 6 caratteri)" required className="w-full p-2 border rounded" />
+                        {type === 'newEmployee' && <input name="phone" value={formData.phone || ''} onChange={handleInputChange} placeholder="Telefono (opzionale)" className="w-full p-2 border rounded" />}
+                        {type === 'newAdmin' && currentUserRole === 'admin' && (
+                            <select name="role" value={formData.role || 'preposto'} onChange={handleInputChange} required className="w-full p-2 border rounded">
+                                <option value="preposto">Preposto</option>
+                                <option value="admin">Admin</option>
+                            </select>
+                        )}
+                    </div>
+                );
             case 'editEmployee':
-                return ( <div className="space-y-4">...</div> );
+                return (
+                    <div className="space-y-4">
+                        <input name="name" value={formData.name || ''} onChange={handleInputChange} placeholder="Nome" required className="w-full p-2 border rounded" />
+                        <input name="surname" value={formData.surname || ''} onChange={handleInputChange} placeholder="Cognome" required className="w-full p-2 border rounded" />
+                        <input name="phone" value={formData.phone || ''} onChange={handleInputChange} placeholder="Telefono" className="w-full p-2 border rounded" />
+                    </div>
+                );
             case 'newArea':
             case 'editArea':
-                return ( <div className="space-y-4">...</div> );
+                return (
+                    <div className="space-y-4">
+                        <input name="name" value={formData.name || ''} onChange={handleInputChange} placeholder="Nome Area" required className="w-full p-2 border rounded" />
+                        <input type="number" step="any" name="latitude" value={formData.latitude || ''} onChange={handleInputChange} placeholder="Latitudine" required className="w-full p-2 border rounded" />
+                        <input type="number" step="any" name="longitude" value={formData.longitude || ''} onChange={handleInputChange} placeholder="Longitudine" required className="w-full p-2 border rounded" />
+                        <input type="number" name="radius" value={formData.radius || ''} onChange={handleInputChange} placeholder="Raggio (metri)" required className="w-full p-2 border rounded" />
+                        <div>
+                            <label htmlFor="pauseDuration" className="block text-sm font-medium text-gray-700">Durata Pausa</label>
+                            <select 
+                                name="pauseDuration" 
+                                id="pauseDuration"
+                                value={formData.pauseDuration || '0'} 
+                                onChange={handleInputChange}
+                                className="w-full p-2 border rounded bg-white"
+                            >
+                                <option value="0">0 Minuti (Disabilitata)</option>
+                                <option value="30">30 Minuti</option>
+                                <option value="60">60 Minuti</option>
+                            </select>
+                        </div>
+                    </div>
+                );
             case 'assignArea':
-                return ( <div className="space-y-2 max-h-60 overflow-y-auto">...</div> );
+                return (
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                        {workAreas.map(area => (
+                            <div key={area.id} className="flex items-center">
+                                <input type="checkbox" id={area.id} name={area.id} checked={formData.workAreaIds?.includes(area.id) || false} onChange={handleCheckboxChange} className="h-4 w-4" />
+                                <label htmlFor={area.id} className="ml-2">{area.name}</label>
+                            </div>
+                        ))}
+                    </div>
+                );
             case 'assignManagedAreas':
-                return ( <div className="space-y-2 max-h-60 overflow-y-auto">...</div> );
+                return (
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                        {workAreas.map(area => (
+                            <div key={area.id} className="flex items-center">
+                                <input type="checkbox" id={area.id} name={area.id} checked={formData.managedAreaIds?.includes(area.id) || false} onChange={handleManagedAreasChange} className="h-4 w-4" />
+                                <label htmlFor={area.id} className="ml-2">{area.name}</label>
+                            </div>
+                        ))}
+                    </div>
+                );
             case 'manualClockIn':
             case 'adminClockIn':
                 return (
@@ -543,7 +561,11 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                        <textarea name="note" value={formData.note || ''} onChange={handleInputChange} placeholder="Note (opzionale)" className="w-full p-2 border rounded"></textarea>
                     </div>
                 );
-            default: return <p>Sei sicuro di voler procedere?</p>;
+            case 'deleteEmployee': return <p>Sei sicuro di voler eliminare il dipendente <strong>{item.name} {item.surname}</strong>? L'azione è irreversibile.</p>;
+            case 'deleteArea': return <p>Sei sicuro di voler eliminare l'area <strong>{item.name}</strong>? Verrà rimossa da tutti i dipendenti a cui è assegnata.</p>;
+            case 'deleteAdmin': return <p>Sei sicuro di voler eliminare l'utente <strong>{item.name} {item.surname}</strong>?</p>;
+            case 'resetDevice': return <p>Sei sicuro di voler resettare i dispositivi per <strong>{item.name} {item.surname}</strong>? Potrà registrare 2 nuovi dispositivi.</p>;
+            default: return null;
         }
     };
 
@@ -735,7 +757,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const handleAdminClockIn = async (areaId) => {
         if (!adminEmployeeProfile) return;
         try {
-            const clockInTimeRounded = roundTimeUpTo10Minutes(new Date());
+            const clockInTimeRounded = roundToNearest10Minutes(new Date());
             await addDoc(collection(db, "time_entries"), {
                 employeeId: adminEmployeeProfile.id,
                 workAreaId: areaId,
@@ -744,6 +766,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             });
             fetchData();
         } catch (error) {
+            alert(`Errore durante la timbratura: ${error.message}`);
             console.error(error);
         }
     };
@@ -751,7 +774,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const handleAdminClockOut = async () => {
         if (!adminActiveEntry) return;
         try {
-            const clockOutTimeRounded = roundTimeDownTo10Minutes(new Date());
+            const clockOutTimeRounded = roundToNearest10Minutes(new Date());
             await updateDoc(doc(db, "time_entries", adminActiveEntry.id), {
                 clockOutTime: clockOutTimeRounded,
                 status: 'clocked-out'
@@ -1015,3 +1038,4 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 };
 
 export default AdminDashboard;
+

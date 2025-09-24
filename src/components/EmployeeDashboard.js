@@ -8,32 +8,26 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import CompanyLogo from './CompanyLogo';
 
-// Funzione per arrotondare l'orario per DIFETTO al multiplo di 10 minuti
-const roundTimeDownTo10Minutes = (date) => {
-  const roundedDate = new Date(date.getTime());
-  const minutes = roundedDate.getMinutes();
-  const remainder = minutes % 10;
-  roundedDate.setMinutes(minutes - remainder);
-  roundedDate.setSeconds(0);
-  roundedDate.setMilliseconds(0);
-  return roundedDate;
-};
+// --- NUOVA FUNZIONE DI ARROTONDAMENTO ALLA MEZZ'ORA PIÙ VICINA ---
+const roundToNearest30Minutes = (date) => {
+    const roundedDate = new Date(date.getTime());
+    const minutes = roundedDate.getMinutes();
 
-// Funzione per arrotondare l'orario per ECCESSO al multiplo di 10 minuti
-const roundTimeUpTo10Minutes = (date) => {
-  const roundedDate = new Date(date.getTime());
-  const minutes = roundedDate.getMinutes();
-  const seconds = roundedDate.getSeconds();
-  const milliseconds = roundedDate.getMilliseconds();
-  if (minutes % 10 === 0 && seconds === 0 && milliseconds === 0) {
+    // Arrotonda i minuti al multiplo di 30 più vicino (0 o 30)
+    const roundedMinutes = Math.round(minutes / 30) * 30;
+
+    // Se l'arrotondamento porta a 60, azzera i minuti e aggiungi un'ora
+    if (roundedMinutes === 60) {
+        roundedDate.setHours(roundedDate.getHours() + 1);
+        roundedDate.setMinutes(0);
+    } else {
+        roundedDate.setMinutes(roundedMinutes);
+    }
+
+    roundedDate.setSeconds(0);
+    roundedDate.setMilliseconds(0);
+
     return roundedDate;
-  }
-  const remainder = minutes % 10;
-  const minutesToAdd = 10 - remainder;
-  roundedDate.setMinutes(roundedDate.getMinutes() + minutesToAdd);
-  roundedDate.setSeconds(0);
-  roundedDate.setMilliseconds(0);
-  return roundedDate;
 };
 
 // Funzione per calcolare la distanza tra due punti geografici (Haversine formula)
@@ -79,7 +73,6 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
         if (!user) { setIsLoading(false); return; }
         
         try {
-            // 1. Trova il profilo del dipendente
             const qEmployee = query(collection(db, "employees"), where("userId", "==", user.uid));
             const employeeSnapshot = await getDocs(qEmployee);
 
@@ -91,7 +84,6 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
             const data = { id: employeeSnapshot.docs[0].id, ...employeeSnapshot.docs[0].data() };
             setEmployeeData(data);
 
-            // 2. Controllo dispositivo
             const deviceId = getDeviceId();
             const deviceIds = data.deviceIds || [];
             if (deviceIds.includes(deviceId)) {
@@ -104,22 +96,18 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
                 setStatusMessage({ type: 'error', text: "Limite dispositivi raggiunto." });
             }
 
-            // 3. Carica TUTTE le aree di lavoro (la regola `read: if request.auth != null` lo permette)
             const allAreasSnapshot = await getDocs(collection(db, "work_areas"));
             const allAreas = allAreasSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
 
-            // 4. Filtra le aree assegnate al dipendente
             const assignedAreaIds = data.workAreaIds || [];
             const assignedAreas = allAreas.filter(area => assignedAreaIds.includes(area.id));
             setWorkAreas(assignedAreas);
 
-            // 5. Cerca la timbratura attiva
             const qActiveEntry = query(collection(db, "time_entries"), where("employeeId", "==", data.id), where("status", "==", "clocked-in"));
             const activeEntrySnapshot = await getDocs(qActiveEntry);
             const activeEntryData = activeEntrySnapshot.empty ? null : { id: activeEntrySnapshot.docs[0].id, ...activeEntrySnapshot.docs[0].data() };
             setActiveEntry(activeEntryData);
             
-            // 6. Imposta la configurazione della pausa
             if (activeEntryData) {
                 const currentArea = assignedAreas.find(area => area.id === activeEntryData.workAreaId);
                 setConfigPausa(currentArea?.pauseDuration?.toString() || '0');
@@ -130,12 +118,11 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
                 setPausaRegistrata(false);
             }
             
-            // 7. Carica le timbrature passate
             const qPastEntries = query(collection(db, "time_entries"), where("employeeId", "==", data.id), where("status", "==", "clocked-out"), orderBy("clockInTime", "desc"));
             const pastEntriesSnapshot = await getDocs(qPastEntries);
             const pastEntries = pastEntriesSnapshot.docs.map(docSnap => {
                 const entryData = docSnap.data();
-                const area = allAreas.find(wa => wa.id === entryData.workAreaId); // Usa la lista completa per trovare il nome
+                const area = allAreas.find(wa => wa.id === entryData.workAreaId);
                 const clockInTime = entryData.clockInTime?.toDate();
                 const clockOutTime = entryData.clockOutTime?.toDate();
                 let duration = 0;
@@ -250,6 +237,26 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
         }
     };
 
+    const getCurrentLocation = () => {
+        return new Promise((resolve, reject) => {
+            if (!navigator.geolocation) {
+                reject("La geolocalizzazione non è supportata dal tuo browser.");
+                return;
+            }
+            navigator.geolocation.getCurrentPosition(
+                (position) => resolve({ latitude: position.coords.latitude, longitude: position.coords.longitude }),
+                (error) => {
+                    let message = "Errore sconosciuto di geolocalizzazione.";
+                    if (error.code === error.PERMISSION_DENIED) message = "Permesso di geolocalizzazione negato.";
+                    if (error.code === error.POSITION_UNAVAILABLE) message = "Posizione non disponibile.";
+                    if (error.code === error.TIMEOUT) message = "Richiesta di geolocalizzazione scaduta.";
+                    reject(message);
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
+        });
+    };
+
     const handleClockIn = async (areaId) => {
         if (!isDeviceOk) return;
         setStatusMessage({ type: 'info', text: 'Rilevamento posizione in corso...' });
@@ -279,7 +286,7 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
                     await updateDoc(employeeRef, { deviceIds: arrayUnion(deviceId) });
                 }
                 
-                const clockInTimeRounded = roundTimeUpTo10Minutes(new Date());
+                const clockInTimeRounded = roundToNearest30Minutes(new Date());
 
                 await addDoc(collection(db, "time_entries"), { 
                     employeeId: employeeData.id, 
@@ -316,7 +323,7 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
                 }
             }
             
-            const clockOutTimeRounded = roundTimeDownTo10Minutes(new Date());
+            const clockOutTimeRounded = roundToNearest30Minutes(new Date());
 
             batch.update(entryRef, { 
                 clockOutTime: clockOutTimeRounded, 
@@ -475,3 +482,4 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
 };
 
 export default EmployeeDashboard;
+
