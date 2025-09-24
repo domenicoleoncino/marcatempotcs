@@ -592,7 +592,14 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                     </div>
                 );
             case 'assignManagedAreas':
-                return ( <div className="space-y-2 max-h-60 overflow-y-auto">...</div> );
+                return ( <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {workAreas.map(area => (
+                        <div key={area.id} className="flex items-center">
+                            <input type="checkbox" id={area.id} name={area.id} checked={formData.managedAreaIds?.includes(area.id) || false} onChange={handleManagedAreasChange} className="h-4 w-4" />
+                            <label htmlFor={area.id} className="ml-2">{area.name}</label>
+                        </div>
+                    ))}
+                </div> );
             case 'manualClockIn':
             case 'adminClockIn':
                 return (
