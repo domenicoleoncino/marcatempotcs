@@ -2,29 +2,57 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db } from '../firebase';
 import {
     doc, collection, addDoc, getDocs, query, where,
-    updateDoc, deleteDoc, writeBatch, Timestamp
+    updateDoc, deleteDoc, writeBatch, Timestamp, arrayUnion
 } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import CompanyLogo from './CompanyLogo';
 
 // --- FUNZIONI DI SUPPORTO ---
 
-const roundToNearest10Minutes = (date) => {
+const roundToNearest30Minutes = (date) => {
     const roundedDate = new Date(date.getTime());
     const minutes = roundedDate.getMinutes();
-
-    const remainder = minutes % 10;
-
-    if (remainder >= 5) {
-        roundedDate.setMinutes(minutes + (10 - remainder));
+    const roundedMinutes = Math.round(minutes / 30) * 30;
+    if (roundedMinutes === 60) {
+        roundedDate.setHours(roundedDate.getHours() + 1);
+        roundedDate.setMinutes(0);
     } else {
-        roundedDate.setMinutes(minutes - remainder);
+        roundedDate.setMinutes(roundedMinutes);
     }
-
     roundedDate.setSeconds(0);
     roundedDate.setMilliseconds(0);
-
     return roundedDate;
+};
+
+const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371e3;
+    const φ1 = lat1 * Math.PI / 180;
+    const φ2 = lat2 * Math.PI / 180;
+    const Δφ = (lat2 - lat1) * Math.PI / 180;
+    const Δλ = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+};
+
+const getCurrentLocation = () => {
+    return new Promise((resolve, reject) => {
+        if (!navigator.geolocation) {
+            reject("La geolocalizzazione non è supportata dal tuo browser.");
+            return;
+        }
+        navigator.geolocation.getCurrentPosition(
+            (position) => resolve({ latitude: position.coords.latitude, longitude: position.coords.longitude }),
+            (error) => {
+                let message = "Errore sconosciuto di geolocalizzazione.";
+                if (error.code === error.PERMISSION_DENIED) message = "Permesso di geolocalizzazione negato.";
+                if (error.code === error.POSITION_UNAVAILABLE) message = "Posizione non disponibile.";
+                if (error.code === error.TIMEOUT) message = "Richiesta di geolocalizzazione scaduta.";
+                reject(message);
+            },
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+    });
 };
 
 
@@ -85,7 +113,10 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
         <div>
             <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Gestione Dipendenti</h1>
-                {(currentUserRole === 'admin' || currentUserRole === 'preposto') && <button onClick={() => openModal('newEmployee')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">Aggiungi Dipendente</button>}
+                <div className="flex gap-2">
+                    {currentUserRole === 'admin' && <button onClick={() => openModal('newEmployee')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">Crea Nuovo Dipendente</button>}
+                    {currentUserRole === 'preposto' && <button onClick={() => openModal('assignEmployeeToArea')} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 w-full sm:w-auto text-sm">Assegna Dipendente a Aree</button>}
+                </div>
             </div>
             <div className="mb-4">
                 <input
@@ -125,14 +156,15 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                 <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
                                     <div className="flex flex-col items-start gap-1">
                                         {emp.activeEntry ? <button onClick={() => openModal('manualClockOut', emp)} className="px-2 py-1 text-xs bg-yellow-500 text-white rounded-md hover:bg-yellow-600 w-full text-center">Timbra Uscita</button> : <button onClick={() => openModal('manualClockIn', emp)} className="px-2 py-1 text-xs bg-blue-500 text-white rounded-md hover:bg-blue-600 w-full text-center">Timbra Entrata</button>}
-                                        {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (
+                                        
+                                        {currentUserRole === 'admin' && (
                                             <>
                                                 <div className="flex gap-2 w-full justify-start mt-1">
-                                                    {currentUserRole === 'admin' && <button onClick={() => openModal('assignArea', emp)} className="text-xs text-indigo-600 hover:text-indigo-900">Aree</button>}
+                                                    <button onClick={() => openModal('assignArea', emp)} className="text-xs text-indigo-600 hover:text-indigo-900">Aree</button>
                                                     <button onClick={() => openModal('editEmployee', emp)} className="text-xs text-green-600 hover:text-green-900">Modifica</button>
                                                     <button onClick={() => openModal('deleteEmployee', emp)} className="text-xs text-red-600 hover:text-red-900">Elimina</button>
                                                 </div>
-                                                {currentUserRole === 'admin' && emp.deviceIds && emp.deviceIds.length > 0 && <button onClick={() => openModal('resetDevice', emp)} className="text-xs text-yellow-600 hover:text-yellow-900 mt-1">Resetta Disp.</button>}
+                                                {emp.deviceIds && emp.deviceIds.length > 0 && <button onClick={() => openModal('resetDevice', emp)} className="text-xs text-yellow-600 hover:text-yellow-900 mt-1">Resetta Disp.</button>}
                                             </>
                                         )}
                                     </div>
@@ -368,6 +400,16 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
 
             } else {
                 switch (type) {
+                    case 'assignEmployeeToArea':
+                        const empRef = doc(db, "employees", formData.employeeId);
+                        const empDoc = await getDoc(empRef);
+                        if (empDoc.exists()) {
+                            const currentWorkAreaIds = empDoc.data().workAreaIds || [];
+                            const newWorkAreaIds = [...new Set([...currentWorkAreaIds, ...(formData.workAreaIds || [])])];
+                            const newWorkAreaNames = workAreas.filter(area => newWorkAreaIds.includes(area.id)).map(area => area.name);
+                            await updateDoc(empRef, { workAreaIds: newWorkAreaIds, workAreaNames: newWorkAreaNames });
+                        }
+                        break;
                     case 'editEmployee':
                         await updateDoc(doc(db, "employees", item.id), { name: formData.name, surname: formData.surname, phone: formData.phone });
                         break;
@@ -420,7 +462,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                         await addDoc(collection(db, "time_entries"), { 
                             employeeId: item.id, 
                             workAreaId: formData.workAreaId, 
-                            clockInTime: roundToNearest10Minutes(new Date(formData.timestamp)), 
+                            clockInTime: roundToNearest30Minutes(new Date(formData.timestamp)), 
                             clockOutTime: null, 
                             status: 'clocked-in', 
                             note: formData.note || null, 
@@ -429,7 +471,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                         break;
                     case 'manualClockOut':
                         await updateDoc(doc(db, "time_entries", item.activeEntry.id), { 
-                            clockOutTime: roundToNearest10Minutes(new Date(formData.timestamp)), 
+                            clockOutTime: roundToNearest30Minutes(new Date(formData.timestamp)), 
                             status: 'clocked-out', 
                             note: formData.note || item.activeEntry.note || null 
                         });
@@ -465,82 +507,92 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
         manualClockIn: `Timbra Entrata per ${item?.name} ${item?.surname}`,
         manualClockOut: `Timbra Uscita per ${item?.name} ${item?.surname}`,
         resetDevice: `Resetta Dispositivi di ${item?.name} ${item?.surname}`,
-        adminClockIn: `Timbra Entrata Personale`
+        adminClockIn: `Timbra Entrata Personale`,
+        assignEmployeeToArea: 'Assegna Dipendente ad Aree'
     };
 
     const renderForm = () => {
         switch (type) {
             case 'newEmployee':
             case 'newAdmin':
-                return (
-                    <div className="space-y-4">
-                        <input name="name" value={formData.name || ''} onChange={handleInputChange} placeholder="Nome" required className="w-full p-2 border rounded" />
-                        <input name="surname" value={formData.surname || ''} onChange={handleInputChange} placeholder="Cognome" required className="w-full p-2 border rounded" />
-                        <input type="email" name="email" value={formData.email || ''} onChange={handleInputChange} placeholder="Email" required className="w-full p-2 border rounded" />
-                        <input type="password" name="password" value={formData.password || ''} onChange={handleInputChange} placeholder="Password (min. 6 caratteri)" required className="w-full p-2 border rounded" />
-                        {type === 'newEmployee' && <input name="phone" value={formData.phone || ''} onChange={handleInputChange} placeholder="Telefono (opzionale)" className="w-full p-2 border rounded" />}
-                        {type === 'newAdmin' && currentUserRole === 'admin' && (
-                            <select name="role" value={formData.role || 'preposto'} onChange={handleInputChange} required className="w-full p-2 border rounded">
-                                <option value="preposto">Preposto</option>
-                                <option value="admin">Admin</option>
-                            </select>
-                        )}
-                    </div>
-                );
+                return ( <div className="space-y-4">
+                    <input name="name" value={formData.name || ''} onChange={handleInputChange} placeholder="Nome" required className="w-full p-2 border rounded" />
+                    <input name="surname" value={formData.surname || ''} onChange={handleInputChange} placeholder="Cognome" required className="w-full p-2 border rounded" />
+                    <input type="email" name="email" value={formData.email || ''} onChange={handleInputChange} placeholder="Email" required className="w-full p-2 border rounded" />
+                    <input type="password" name="password" value={formData.password || ''} onChange={handleInputChange} placeholder="Password (min. 6 caratteri)" required className="w-full p-2 border rounded" />
+                    {type === 'newEmployee' && <input name="phone" value={formData.phone || ''} onChange={handleInputChange} placeholder="Telefono (opzionale)" className="w-full p-2 border rounded" />}
+                    {type === 'newAdmin' && currentUserRole === 'admin' && (
+                        <select name="role" value={formData.role || 'preposto'} onChange={handleInputChange} required className="w-full p-2 border rounded">
+                            <option value="preposto">Preposto</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    )}
+                </div> );
             case 'editEmployee':
-                return (
-                    <div className="space-y-4">
-                        <input name="name" value={formData.name || ''} onChange={handleInputChange} placeholder="Nome" required className="w-full p-2 border rounded" />
-                        <input name="surname" value={formData.surname || ''} onChange={handleInputChange} placeholder="Cognome" required className="w-full p-2 border rounded" />
-                        <input name="phone" value={formData.phone || ''} onChange={handleInputChange} placeholder="Telefono" className="w-full p-2 border rounded" />
-                    </div>
-                );
+                return ( <div className="space-y-4">
+                    <input name="name" value={formData.name || ''} onChange={handleInputChange} placeholder="Nome" required className="w-full p-2 border rounded" />
+                    <input name="surname" value={formData.surname || ''} onChange={handleInputChange} placeholder="Cognome" required className="w-full p-2 border rounded" />
+                    <input name="phone" value={formData.phone || ''} onChange={handleInputChange} placeholder="Telefono" className="w-full p-2 border rounded" />
+                </div> );
             case 'newArea':
             case 'editArea':
+                return ( <div className="space-y-4">
+                    <input name="name" value={formData.name || ''} onChange={handleInputChange} placeholder="Nome Area" required className="w-full p-2 border rounded" />
+                    <input type="number" step="any" name="latitude" value={formData.latitude || ''} onChange={handleInputChange} placeholder="Latitudine" required className="w-full p-2 border rounded" />
+                    <input type="number" step="any" name="longitude" value={formData.longitude || ''} onChange={handleInputChange} placeholder="Longitudine" required className="w-full p-2 border rounded" />
+                    <input type="number" name="radius" value={formData.radius || ''} onChange={handleInputChange} placeholder="Raggio (metri)" required className="w-full p-2 border rounded" />
+                    <div>
+                        <label htmlFor="pauseDuration" className="block text-sm font-medium text-gray-700">Durata Pausa</label>
+                        <select 
+                            name="pauseDuration" 
+                            id="pauseDuration"
+                            value={formData.pauseDuration || '0'} 
+                            onChange={handleInputChange}
+                            className="w-full p-2 border rounded bg-white"
+                        >
+                            <option value="0">0 Minuti (Disabilitata)</option>
+                            <option value="30">30 Minuti</option>
+                            <option value="60">60 Minuti</option>
+                        </select>
+                    </div>
+                </div> );
+            case 'assignArea':
+                return ( <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {workAreas.map(area => (
+                        <div key={area.id} className="flex items-center">
+                            <input type="checkbox" id={area.id} name={area.id} checked={formData.workAreaIds?.includes(area.id) || false} onChange={handleCheckboxChange} className="h-4 w-4" />
+                            <label htmlFor={area.id} className="ml-2">{area.name}</label>
+                        </div>
+                    ))}
+                </div> );
+            case 'assignEmployeeToArea':
+                const prepostoAreas = workAreas.filter(area => userData.managedAreaIds.includes(area.id));
                 return (
                     <div className="space-y-4">
-                        <input name="name" value={formData.name || ''} onChange={handleInputChange} placeholder="Nome Area" required className="w-full p-2 border rounded" />
-                        <input type="number" step="any" name="latitude" value={formData.latitude || ''} onChange={handleInputChange} placeholder="Latitudine" required className="w-full p-2 border rounded" />
-                        <input type="number" step="any" name="longitude" value={formData.longitude || ''} onChange={handleInputChange} placeholder="Longitudine" required className="w-full p-2 border rounded" />
-                        <input type="number" name="radius" value={formData.radius || ''} onChange={handleInputChange} placeholder="Raggio (metri)" required className="w-full p-2 border rounded" />
                         <div>
-                            <label htmlFor="pauseDuration" className="block text-sm font-medium text-gray-700">Durata Pausa</label>
-                            <select 
-                                name="pauseDuration" 
-                                id="pauseDuration"
-                                value={formData.pauseDuration || '0'} 
-                                onChange={handleInputChange}
-                                className="w-full p-2 border rounded bg-white"
-                            >
-                                <option value="0">0 Minuti (Disabilitata)</option>
-                                <option value="30">30 Minuti</option>
-                                <option value="60">60 Minuti</option>
+                            <label htmlFor="employeeId" className="block text-sm font-medium text-gray-700">Seleziona Dipendente</label>
+                            <select name="employeeId" value={formData.employeeId || ''} onChange={handleInputChange} required className="w-full p-2 border rounded">
+                                <option value="">-- Scegli un dipendente --</option>
+                                {allEmployees.map(emp => (
+                                    <option key={emp.id} value={emp.id}>{emp.name} {emp.surname}</option>
+                                ))}
                             </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">Seleziona Aree da Assegnare</label>
+                            <div className="space-y-2 max-h-40 overflow-y-auto mt-2 border p-2 rounded-md">
+                                {prepostoAreas.map(area => (
+                                    <div key={area.id} className="flex items-center">
+                                        <input type="checkbox" id={area.id} name={area.id} onChange={handleCheckboxChange} className="h-4 w-4" />
+                                        <label htmlFor={area.id} className="ml-2">{area.name}</label>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     </div>
                 );
-            case 'assignArea':
-                return (
-                    <div className="space-y-2 max-h-60 overflow-y-auto">
-                        {workAreas.map(area => (
-                            <div key={area.id} className="flex items-center">
-                                <input type="checkbox" id={area.id} name={area.id} checked={formData.workAreaIds?.includes(area.id) || false} onChange={handleCheckboxChange} className="h-4 w-4" />
-                                <label htmlFor={area.id} className="ml-2">{area.name}</label>
-                            </div>
-                        ))}
-                    </div>
-                );
             case 'assignManagedAreas':
-                return (
-                    <div className="space-y-2 max-h-60 overflow-y-auto">
-                        {workAreas.map(area => (
-                            <div key={area.id} className="flex items-center">
-                                <input type="checkbox" id={area.id} name={area.id} checked={formData.managedAreaIds?.includes(area.id) || false} onChange={handleManagedAreasChange} className="h-4 w-4" />
-                                <label htmlFor={area.id} className="ml-2">{area.name}</label>
-                            </div>
-                        ))}
-                    </div>
-                );
+                return ( <div className="space-y-2 max-h-60 overflow-y-auto">...</div> );
             case 'manualClockIn':
             case 'adminClockIn':
                 return (
@@ -755,9 +807,9 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     };
 
     const handleAdminClockIn = async (areaId) => {
-        if (!adminEmployeeProfile) return;
+        if (!adminEmployeeProfile || !allWorkAreas) return;
         try {
-            const clockInTimeRounded = roundToNearest10Minutes(new Date());
+            const clockInTimeRounded = roundToNearest30Minutes(new Date());
             await addDoc(collection(db, "time_entries"), {
                 employeeId: adminEmployeeProfile.id,
                 workAreaId: areaId,
@@ -774,7 +826,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const handleAdminClockOut = async () => {
         if (!adminActiveEntry) return;
         try {
-            const clockOutTimeRounded = roundToNearest10Minutes(new Date());
+            const clockOutTimeRounded = roundToNearest30Minutes(new Date());
             await updateDoc(doc(db, "time_entries", adminActiveEntry.id), {
                 clockOutTime: clockOutTimeRounded,
                 status: 'clocked-out'
