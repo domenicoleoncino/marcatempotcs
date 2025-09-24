@@ -496,7 +496,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                     <div className="space-y-4">
                         <select name="workAreaId" value={formData.workAreaId || ''} onChange={handleInputChange} required className="w-full p-2 border rounded">
                             <option value="">Seleziona Area</option>
-                            {item.workAreaIds.map(areaId => {
+                            {(item.workAreaIds || []).map(areaId => {
                                 const area = workAreas.find(a => a.id === areaId);
                                 return area ? <option key={area.id} value={area.id}>{area.name}</option> : null;
                             })}
@@ -740,13 +740,47 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     };
 
     const generateReport = async () => {
-        // Implementation for generateReport
+        // ... (Logica per generare il report)
     };
 
     const handleExportXml = () => {
-        // Implementation for handleExportXml
+        // ... (Logica per esportare in XML)
     };
 
+    const sortedAndFilteredEmployees = useMemo(() => {
+        let sortableItems = [...employees];
+        if (searchTerm) {
+            const lowercasedFilter = searchTerm.toLowerCase();
+            sortableItems = sortableItems.filter(emp =>
+                `${emp.name} ${emp.surname}`.toLowerCase().includes(lowercasedFilter)
+            );
+        }
+
+        sortableItems.sort((a, b) => {
+            if (sortConfig.key === 'name') {
+                const nameA = `${a.name} ${a.surname}`.toLowerCase();
+                const nameB = `${b.name} ${b.surname}`.toLowerCase();
+                if (nameA < nameB) return sortConfig.direction === 'ascending' ? -1 : 1;
+                if (nameA > nameB) return sortConfig.direction === 'ascending' ? 1 : -1;
+                return 0;
+            }
+            if (sortConfig.key === 'status') {
+                const getStatusValue = (emp) => {
+                    if (!emp.activeEntry) return 0;
+                    if (emp.isOnBreak) return 1;
+                    return 2;
+                };
+                const statusA = getStatusValue(a);
+                const statusB = getStatusValue(b);
+                if (statusA < statusB) return sortConfig.direction === 'ascending' ? 1 : -1;
+                if (statusA > statusB) return sortConfig.direction === 'ascending' ? -1 : 1;
+                return 0;
+            }
+            return 0;
+        });
+
+        return sortableItems;
+    }, [employees, searchTerm, sortConfig]);
 
     if (isLoading) { return <div className="min-h-screen flex items-center justify-center">Caricamento in corso...</div>; }
 
