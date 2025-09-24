@@ -810,7 +810,8 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     };
 
     const handleAdminClockIn = async (areaId) => {
-        if (!adminEmployeeProfile) return;
+        if (!adminEmployeeProfile || !allWorkAreas) return;
+        
         try {
             const clockInTimeRounded = roundToNearest30Minutes(new Date());
             await addDoc(collection(db, "time_entries"), {
