@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { db } from '../firebase';
 import { 
     collection, query, where, orderBy, getDocs, addDoc, updateDoc, doc, 
-    arrayUnion, Timestamp, writeBatch, documentId
+    arrayUnion, Timestamp, writeBatch
 } from 'firebase/firestore';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -69,41 +69,17 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
     const [isDeviceOk, setIsDeviceOk] = useState(false);
     const [currentTime, setCurrentTime] = useState(new Date());
     
-    // Stati per il filtro e download del report
     const [selectedMonth, setSelectedMonth] = useState('');
     const [availableMonths, setAvailableMonths] = useState([]);
-
-    // Stati per la gestione della pausa
     const [configPausa, setConfigPausa] = useState(null);
     const [pausaRegistrata, setPausaRegistrata] = useState(false);
-
-    // Stato per la compatibilità con la vecchia logica di pausa manuale (se presente)
     const isOnBreak = activeEntry?.pauses?.some(p => !p.end) || false;
-
-    const getCurrentLocation = () => {
-        return new Promise((resolve, reject) => {
-            if (!navigator.geolocation) {
-                reject("La geolocalizzazione non è supportata dal tuo browser.");
-                return;
-            }
-            navigator.geolocation.getCurrentPosition(
-                (position) => resolve({ latitude: position.coords.latitude, longitude: position.coords.longitude }),
-                (error) => {
-                    let message = "Errore sconosciuto di geolocalizzazione.";
-                    if (error.code === error.PERMISSION_DENIED) message = "Permesso di geolocalizzazione negato.";
-                    if (error.code === error.POSITION_UNAVAILABLE) message = "Posizione non disponibile.";
-                    if (error.code === error.TIMEOUT) message = "Richiesta di geolocalizzazione scaduta.";
-                    reject(message);
-                },
-                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-            );
-        });
-    };
 
     const fetchEmployeeData = useCallback(async () => {
         if (!user) { setIsLoading(false); return; }
         
         try {
+            // 1. Trova il profilo del dipendente
             const qEmployee = query(collection(db, "employees"), where("userId", "==", user.uid));
             const employeeSnapshot = await getDocs(qEmployee);
 
@@ -112,36 +88,38 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
                 setIsLoading(false);
                 return;
             }
-                
             const data = { id: employeeSnapshot.docs[0].id, ...employeeSnapshot.docs[0].data() };
             setEmployeeData(data);
 
+            // 2. Controllo dispositivo
             const deviceId = getDeviceId();
             const deviceIds = data.deviceIds || [];
-            
             if (deviceIds.includes(deviceId)) {
                 setIsDeviceOk(true);
             } else if (deviceIds.length < 2) {
                 setIsDeviceOk(true);
-                setStatusMessage({ type: 'info', text: 'Questo nuovo dispositivo verrà registrato alla prossima timbratura.' });
+                setStatusMessage({ type: 'info', text: 'Questo nuovo dispositivo verrà registrato.' });
             } else {
                 setIsDeviceOk(false);
-                setStatusMessage({ type: 'error', text: "Limite di 2 dispositivi raggiunto. Contatta un amministratore." });
+                setStatusMessage({ type: 'error', text: "Limite dispositivi raggiunto." });
             }
-            
-            let assignedAreas = [];
-            if (data.workAreaIds && data.workAreaIds.length > 0) {
-                const workAreasQuery = query(collection(db, "work_areas"), where(documentId(), "in", data.workAreaIds));
-                const workAreasSnapshot = await getDocs(workAreasQuery);
-                assignedAreas = workAreasSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-            }
+
+            // 3. Carica TUTTE le aree di lavoro (la regola `read: if request.auth != null` lo permette)
+            const allAreasSnapshot = await getDocs(collection(db, "work_areas"));
+            const allAreas = allAreasSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+
+            // 4. Filtra le aree assegnate al dipendente
+            const assignedAreaIds = data.workAreaIds || [];
+            const assignedAreas = allAreas.filter(area => assignedAreaIds.includes(area.id));
             setWorkAreas(assignedAreas);
 
+            // 5. Cerca la timbratura attiva
             const qActiveEntry = query(collection(db, "time_entries"), where("employeeId", "==", data.id), where("status", "==", "clocked-in"));
             const activeEntrySnapshot = await getDocs(qActiveEntry);
             const activeEntryData = activeEntrySnapshot.empty ? null : { id: activeEntrySnapshot.docs[0].id, ...activeEntrySnapshot.docs[0].data() };
             setActiveEntry(activeEntryData);
             
+            // 6. Imposta la configurazione della pausa
             if (activeEntryData) {
                 const currentArea = assignedAreas.find(area => area.id === activeEntryData.workAreaId);
                 setConfigPausa(currentArea?.pauseDuration?.toString() || '0');
@@ -151,16 +129,15 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
                 setConfigPausa(null);
                 setPausaRegistrata(false);
             }
-
+            
+            // 7. Carica le timbrature passate
             const qPastEntries = query(collection(db, "time_entries"), where("employeeId", "==", data.id), where("status", "==", "clocked-out"), orderBy("clockInTime", "desc"));
             const pastEntriesSnapshot = await getDocs(qPastEntries);
-            
             const pastEntries = pastEntriesSnapshot.docs.map(docSnap => {
                 const entryData = docSnap.data();
-                const area = assignedAreas.find(wa => wa.id === entryData.workAreaId);
+                const area = allAreas.find(wa => wa.id === entryData.workAreaId); // Usa la lista completa per trovare il nome
                 const clockInTime = entryData.clockInTime?.toDate();
                 const clockOutTime = entryData.clockOutTime?.toDate();
-                
                 let duration = 0;
                 if (clockInTime && clockOutTime) {
                     const totalDurationMs = clockOutTime.getTime() - clockInTime.getTime();
@@ -170,7 +147,6 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
                     }, 0);
                     duration = (totalDurationMs - pauseDurationMs) / (1000 * 60 * 60);
                 }
-                
                 return {
                     id: docSnap.id,
                     areaName: area ? area.name : 'N/D',
