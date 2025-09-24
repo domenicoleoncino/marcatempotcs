@@ -1,8 +1,6 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { db } from '../firebase';
 import {
     doc, collection, addDoc, getDocs, query, where,
-    updateDoc, deleteDoc, writeBatch, Timestamp, arrayUnion
+    updateDoc, deleteDoc, writeBatch, Timestamp, arrayUnion, getDoc
 } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import CompanyLogo from './CompanyLogo';
