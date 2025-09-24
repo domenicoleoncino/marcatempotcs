@@ -480,16 +480,75 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
         switch (type) {
             case 'newEmployee':
             case 'newAdmin':
-                return ( <div className="space-y-4">...</div> );
+                return (
+                    <div className="space-y-4">
+                        <input name="name" value={formData.name || ''} onChange={handleInputChange} placeholder="Nome" required className="w-full p-2 border rounded" />
+                        <input name="surname" value={formData.surname || ''} onChange={handleInputChange} placeholder="Cognome" required className="w-full p-2 border rounded" />
+                        <input type="email" name="email" value={formData.email || ''} onChange={handleInputChange} placeholder="Email" required className="w-full p-2 border rounded" />
+                        <input type="password" name="password" value={formData.password || ''} onChange={handleInputChange} placeholder="Password (min. 6 caratteri)" required className="w-full p-2 border rounded" />
+                        {type === 'newEmployee' && <input name="phone" value={formData.phone || ''} onChange={handleInputChange} placeholder="Telefono (opzionale)" className="w-full p-2 border rounded" />}
+                        {type === 'newAdmin' && currentUserRole === 'admin' && (
+                            <select name="role" value={formData.role || 'preposto'} onChange={handleInputChange} required className="w-full p-2 border rounded">
+                                <option value="preposto">Preposto</option>
+                                <option value="admin">Admin</option>
+                            </select>
+                        )}
+                    </div>
+                );
             case 'editEmployee':
-                return ( <div className="space-y-4">...</div> );
+                return (
+                    <div className="space-y-4">
+                        <input name="name" value={formData.name || ''} onChange={handleInputChange} placeholder="Nome" required className="w-full p-2 border rounded" />
+                        <input name="surname" value={formData.surname || ''} onChange={handleInputChange} placeholder="Cognome" required className="w-full p-2 border rounded" />
+                        <input name="phone" value={formData.phone || ''} onChange={handleInputChange} placeholder="Telefono" className="w-full p-2 border rounded" />
+                    </div>
+                );
             case 'newArea':
             case 'editArea':
-                return ( <div className="space-y-4">...</div> );
+                return (
+                    <div className="space-y-4">
+                        <input name="name" value={formData.name || ''} onChange={handleInputChange} placeholder="Nome Area" required className="w-full p-2 border rounded" />
+                        <input type="number" step="any" name="latitude" value={formData.latitude || ''} onChange={handleInputChange} placeholder="Latitudine" required className="w-full p-2 border rounded" />
+                        <input type="number" step="any" name="longitude" value={formData.longitude || ''} onChange={handleInputChange} placeholder="Longitudine" required className="w-full p-2 border rounded" />
+                        <input type="number" name="radius" value={formData.radius || ''} onChange={handleInputChange} placeholder="Raggio (metri)" required className="w-full p-2 border rounded" />
+                        <div>
+                            <label htmlFor="pauseDuration" className="block text-sm font-medium text-gray-700">Durata Pausa</label>
+                            <select 
+                                name="pauseDuration" 
+                                id="pauseDuration"
+                                value={formData.pauseDuration || '0'} 
+                                onChange={handleInputChange}
+                                className="w-full p-2 border rounded bg-white"
+                            >
+                                <option value="0">0 Minuti (Disabilitata)</option>
+                                <option value="30">30 Minuti</option>
+                                <option value="60">60 Minuti</option>
+                            </select>
+                        </div>
+                    </div>
+                );
             case 'assignArea':
-                return ( <div className="space-y-2 max-h-60 overflow-y-auto">...</div> );
+                return (
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                        {workAreas.map(area => (
+                            <div key={area.id} className="flex items-center">
+                                <input type="checkbox" id={area.id} name={area.id} checked={formData.workAreaIds?.includes(area.id) || false} onChange={handleCheckboxChange} className="h-4 w-4" />
+                                <label htmlFor={area.id} className="ml-2">{area.name}</label>
+                            </div>
+                        ))}
+                    </div>
+                );
             case 'assignManagedAreas':
-                return ( <div className="space-y-2 max-h-60 overflow-y-auto">...</div> );
+                return (
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                        {workAreas.map(area => (
+                            <div key={area.id} className="flex items-center">
+                                <input type="checkbox" id={area.id} name={area.id} checked={formData.managedAreaIds?.includes(area.id) || false} onChange={handleManagedAreasChange} className="h-4 w-4" />
+                                <label htmlFor={area.id} className="ml-2">{area.name}</label>
+                            </div>
+                        ))}
+                    </div>
+                );
             case 'manualClockIn':
             case 'adminClockIn':
                 return (
@@ -740,13 +799,115 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     };
 
     const generateReport = async () => {
-        // ... (Logica per generare il report)
+        if (!dateRange.start || !dateRange.end) {
+            alert("Seleziona un intervallo di date valido.");
+            return;
+        }
+
+        const startDate = new Date(dateRange.start);
+        startDate.setHours(0, 0, 0, 0);
+
+        const endDate = new Date(dateRange.end);
+        endDate.setHours(23, 59, 59, 999);
+        
+        const formattedStartDate = startDate.toLocaleDateString('it-IT');
+        const formattedEndDate = endDate.toLocaleDateString('it-IT');
+        let titleParts = [];
+        
+        if (reportEmployeeFilter !== 'all') {
+            const selectedEmployee = allEmployees.find(emp => emp.id === reportEmployeeFilter);
+            if (selectedEmployee) titleParts.push(`per ${selectedEmployee.name} ${selectedEmployee.surname}`);
+        }
+        
+        if (reportAreaFilter !== 'all') {
+            const selectedArea = allWorkAreas.find(area => area.id === reportAreaFilter);
+            if (selectedArea) titleParts.push(`in area "${selectedArea.name}"`);
+        }
+        
+        const titlePrefix = titleParts.length > 0 ? `Report ${titleParts.join(' ')}` : 'Report';
+        const title = `${titlePrefix} | ${formattedStartDate} - ${formattedEndDate}`;
+        setReportTitle(title);
+        
+        const queryConstraints = [
+            where("clockInTime", ">=", Timestamp.fromDate(startDate)),
+            where("clockInTime", "<=", Timestamp.fromDate(endDate))
+        ];
+        if (reportAreaFilter !== 'all') {
+            queryConstraints.push(where("workAreaId", "==", reportAreaFilter));
+        }
+        if (reportEmployeeFilter !== 'all') {
+            queryConstraints.push(where("employeeId", "==", reportEmployeeFilter));
+        }
+
+        const q = query(collection(db, "time_entries"), ...queryConstraints);
+        const querySnapshot = await getDocs(q);
+        const entries = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        const reportData = [];
+        for (const entry of entries) {
+            const employeeData = allEmployees.find(e => e.id === entry.employeeId);
+            const areaData = allWorkAreas.find(a => a.id === entry.workAreaId);
+
+            if (employeeData && areaData) {
+                const clockInTime = entry.clockInTime.toDate();
+                const clockOutTime = entry.clockOutTime ? entry.clockOutTime.toDate() : null;
+                let duration = null;
+                if (clockOutTime) {
+                    const totalDurationMs = clockOutTime.getTime() - clockInTime.getTime();
+                    const pauseDurationMs = (entry.pauses || []).reduce((acc, p) => {
+                        if (p.start && p.end) {
+                            return acc + (p.end.toDate().getTime() - p.start.toDate().getTime());
+                        }
+                        return acc;
+                    }, 0);
+
+                    const netDurationMs = totalDurationMs - pauseDurationMs;
+                    const totalMinutes = Math.round(netDurationMs / 60000);
+                    const hours = Math.floor(totalMinutes / 60);
+                    const minutes = totalMinutes % 60;
+                    duration = hours + (minutes / 60);
+                }
+                reportData.push({
+                    id: entry.id,
+                    employeeName: `${employeeData.name} ${employeeData.surname}`,
+                    areaName: areaData.name,
+                    clockInDate: clockInTime.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit' }),
+                    clockInTimeFormatted: clockInTime.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
+                    clockOutTimeFormatted: clockOutTime ? clockOutTime.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : 'In corso',
+                    duration: duration,
+                    note: entry.note || ''
+                });
+            }
+        }
+        setReports(reportData.sort((a,b) => a.employeeName.localeCompare(b.employeeName)));
+        setView('reports');
     };
 
     const handleExportXml = () => {
-        // ... (Logica per esportare in XML)
-    };
+        let xmlString = '<?xml version="1.0" encoding="UTF-8"?>\n<Report>\n';
+        reports.forEach(entry => {
+            xmlString += '  <Timbratura>\n';
+            xmlString += `    <Dipendente>${entry.employeeName}</Dipendente>\n`;
+            xmlString += `    <Area>${entry.areaName}</Area>\n`;
+            xmlString += `    <Data>${entry.clockInDate}</Data>\n`;
+            xmlString += `    <Entrata>${entry.clockInTimeFormatted}</Entrata>\n`;
+            xmlString += `    <Uscita>${entry.clockOutTimeFormatted}</Uscita>\n`;
+            xmlString += `    <Ore>${entry.duration ? entry.duration.toFixed(2) : 'N/A'}</Ore>\n`;
+            xmlString += `    <Note>${entry.note || ''}</Note>\n`;
+            xmlString += '  </Timbratura>\n';
+        });
+        xmlString += '</Report>';
 
+        const blob = new Blob([xmlString], { type: 'application/xml' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `Report_${dateRange.start}_${dateRange.end}.xml`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+    
     const sortedAndFilteredEmployees = useMemo(() => {
         let sortableItems = [...employees];
         if (searchTerm) {
