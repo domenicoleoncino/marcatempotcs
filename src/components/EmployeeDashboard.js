@@ -110,7 +110,6 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
             if (employeeSnapshot.empty) {
                 setEmployeeData(null);
                 setIsLoading(false);
-                // Non mostrare l'errore qui, la vista `!employeeData` lo gestirà
                 return;
             }
                 
