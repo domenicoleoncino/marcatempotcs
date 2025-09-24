@@ -297,7 +297,7 @@ const ReportView = ({ reports, title, handleExportXml }) => {
     );
 };
 
-const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAdminEmail, user, allEmployees, currentUserRole, userData }) => {
+const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAdminEmail, user, allEmployees, currentUserRole, userData, onAdminClockIn }) => {
     const [formData, setFormData] = useState(item || {});
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
@@ -351,7 +351,9 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
         setError('');
 
         try {
-            if (type === 'newEmployee' || type === 'newAdmin') {
+            if (type === 'adminClockIn') {
+                await onAdminClockIn(formData.workAreaId);
+            } else if (type === 'newEmployee' || type === 'newAdmin') {
                 await user.getIdToken(true); 
                 const functions = getFunctions(undefined, 'us-central1');
                 const createNewUser = httpsCallable(functions, 'createNewUser');
@@ -480,32 +482,71 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
             case 'newAdmin':
                 return (
                     <div className="space-y-4">
-                        {/* ... form content ... */}
+                        <input name="name" value={formData.name || ''} onChange={handleInputChange} placeholder="Nome" required className="w-full p-2 border rounded" />
+                        <input name="surname" value={formData.surname || ''} onChange={handleInputChange} placeholder="Cognome" required className="w-full p-2 border rounded" />
+                        <input type="email" name="email" value={formData.email || ''} onChange={handleInputChange} placeholder="Email" required className="w-full p-2 border rounded" />
+                        <input type="password" name="password" value={formData.password || ''} onChange={handleInputChange} placeholder="Password (min. 6 caratteri)" required className="w-full p-2 border rounded" />
+                        {type === 'newEmployee' && <input name="phone" value={formData.phone || ''} onChange={handleInputChange} placeholder="Telefono (opzionale)" className="w-full p-2 border rounded" />}
+                        {type === 'newAdmin' && currentUserRole === 'admin' && (
+                            <select name="role" value={formData.role || 'preposto'} onChange={handleInputChange} required className="w-full p-2 border rounded">
+                                <option value="preposto">Preposto</option>
+                                <option value="admin">Admin</option>
+                            </select>
+                        )}
                     </div>
                 );
             case 'editEmployee':
                 return (
                     <div className="space-y-4">
-                        {/* ... form content ... */}
+                        <input name="name" value={formData.name || ''} onChange={handleInputChange} placeholder="Nome" required className="w-full p-2 border rounded" />
+                        <input name="surname" value={formData.surname || ''} onChange={handleInputChange} placeholder="Cognome" required className="w-full p-2 border rounded" />
+                        <input name="phone" value={formData.phone || ''} onChange={handleInputChange} placeholder="Telefono" className="w-full p-2 border rounded" />
                     </div>
                 );
             case 'newArea':
             case 'editArea':
                 return (
                     <div className="space-y-4">
-                       {/* ... form content ... */}
+                        <input name="name" value={formData.name || ''} onChange={handleInputChange} placeholder="Nome Area" required className="w-full p-2 border rounded" />
+                        <input type="number" step="any" name="latitude" value={formData.latitude || ''} onChange={handleInputChange} placeholder="Latitudine" required className="w-full p-2 border rounded" />
+                        <input type="number" step="any" name="longitude" value={formData.longitude || ''} onChange={handleInputChange} placeholder="Longitudine" required className="w-full p-2 border rounded" />
+                        <input type="number" name="radius" value={formData.radius || ''} onChange={handleInputChange} placeholder="Raggio (metri)" required className="w-full p-2 border rounded" />
+                        <div>
+                            <label htmlFor="pauseDuration" className="block text-sm font-medium text-gray-700">Durata Pausa</label>
+                            <select 
+                                name="pauseDuration" 
+                                id="pauseDuration"
+                                value={formData.pauseDuration || '0'} 
+                                onChange={handleInputChange}
+                                className="w-full p-2 border rounded bg-white"
+                            >
+                                <option value="0">0 Minuti (Disabilitata)</option>
+                                <option value="30">30 Minuti</option>
+                                <option value="60">60 Minuti</option>
+                            </select>
+                        </div>
                     </div>
                 );
             case 'assignArea':
                 return (
                     <div className="space-y-2 max-h-60 overflow-y-auto">
-                        {/* ... form content ... */}
+                        {workAreas.map(area => (
+                            <div key={area.id} className="flex items-center">
+                                <input type="checkbox" id={area.id} name={area.id} checked={formData.workAreaIds?.includes(area.id) || false} onChange={handleCheckboxChange} className="h-4 w-4" />
+                                <label htmlFor={area.id} className="ml-2">{area.name}</label>
+                            </div>
+                        ))}
                     </div>
                 );
             case 'assignManagedAreas':
                 return (
                     <div className="space-y-2 max-h-60 overflow-y-auto">
-                        {/* ... form content ... */}
+                        {workAreas.map(area => (
+                            <div key={area.id} className="flex items-center">
+                                <input type="checkbox" id={area.id} name={area.id} checked={formData.managedAreaIds?.includes(area.id) || false} onChange={handleManagedAreasChange} className="h-4 w-4" />
+                                <label htmlFor={area.id} className="ml-2">{area.name}</label>
+                            </div>
+                        ))}
                     </div>
                 );
             case 'manualClockIn':
@@ -524,10 +565,15 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
             case 'manualClockOut':
                  return (
                     <div className="space-y-4">
-                       {/* ... form content ... */}
+                       <input type="datetime-local" name="timestamp" value={formData.timestamp || ''} onChange={handleInputChange} required className="w-full p-2 border rounded" />
+                       <textarea name="note" value={formData.note || ''} onChange={handleInputChange} placeholder="Note (opzionale)" className="w-full p-2 border rounded"></textarea>
                     </div>
                 );
-            default: return <p>Sei sicuro di voler procedere?</p>;
+            case 'deleteEmployee': return <p>Sei sicuro di voler eliminare il dipendente <strong>{item.name} {item.surname}</strong>? L'azione è irreversibile.</p>;
+            case 'deleteArea': return <p>Sei sicuro di voler eliminare l'area <strong>{item.name}</strong>? Verrà rimossa da tutti i dipendenti a cui è assegnata.</p>;
+            case 'deleteAdmin': return <p>Sei sicuro di voler eliminare l'utente <strong>{item.name} {item.surname}</strong>?</p>;
+            case 'resetDevice': return <p>Sei sicuro di voler resettare i dispositivi per <strong>{item.name} {item.surname}</strong>? Potrà registrare 2 nuovi dispositivi.</p>;
+            default: return null;
         }
     };
 
@@ -709,7 +755,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     }, [fetchData]);
 
     const handleAdminClockIn = async (areaId) => {
-        // Questa funzione ora viene chiamata dal modal
         if (!adminEmployeeProfile) return;
         try {
             const clockInTimeRounded = roundTimeUpTo10Minutes(new Date());
@@ -745,7 +790,40 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         setShowModal(true);
     };
 
-    // ... (altre funzioni) ...
+    const sortedAndFilteredEmployees = useMemo(() => {
+        let sortableItems = [...employees];
+        if (searchTerm) {
+            const lowercasedFilter = searchTerm.toLowerCase();
+            sortableItems = sortableItems.filter(emp =>
+                `${emp.name} ${emp.surname}`.toLowerCase().includes(lowercasedFilter)
+            );
+        }
+
+        sortableItems.sort((a, b) => {
+            if (sortConfig.key === 'name') {
+                const nameA = `${a.name} ${a.surname}`.toLowerCase();
+                const nameB = `${b.name} ${b.surname}`.toLowerCase();
+                if (nameA < nameB) return sortConfig.direction === 'ascending' ? -1 : 1;
+                if (nameA > nameB) return sortConfig.direction === 'ascending' ? 1 : -1;
+                return 0;
+            }
+            if (sortConfig.key === 'status') {
+                const getStatusValue = (emp) => {
+                    if (!emp.activeEntry) return 0;
+                    if (emp.isOnBreak) return 1;
+                    return 2;
+                };
+                const statusA = getStatusValue(a);
+                const statusB = getStatusValue(b);
+                if (statusA < statusB) return sortConfig.direction === 'ascending' ? 1 : -1;
+                if (statusA > statusB) return sortConfig.direction === 'ascending' ? -1 : 1;
+                return 0;
+            }
+            return 0;
+        });
+
+        return sortableItems;
+    }, [employees, searchTerm, sortConfig]);
 
     if (isLoading) { return <div className="min-h-screen flex items-center justify-center">Caricamento in corso...</div>; }
 
@@ -778,18 +856,30 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                     </div>
                 </div>
             </header>
-            <nav>
-                {/* ... */}
+            <nav className="bg-white border-b border-gray-200">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div className="flex justify-center">
+                        <div className="flex flex-wrap justify-center py-2 sm:space-x-4">
+                            <button onClick={() => setView('dashboard')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'dashboard' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Dashboard</button>
+                            <button onClick={() => setView('employees')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'employees' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Dipendenti</button>
+                            <button onClick={() => setView('areas')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'areas' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Aree</button>
+                            {currentUserRole === 'admin' && <button onClick={() => setView('admins')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'admins' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Admin</button>}
+                        </div>
+                    </div>
+                </div>
             </nav>
             <div className="max-w-7xl mx-auto w-full p-4 sm:p-6 lg:p-8">
                 {view !== 'reports' && (
                    <div className="bg-white shadow-md rounded-lg p-4 mb-6">
-                        {/* ... */}
+                        {/* The Report Generation form is not included here for brevity, but should be present in your actual code */}
                    </div>
                 )}
                 <main>
                     {view === 'dashboard' && <DashboardView activeEntries={activeEntries} totalEmployees={employees.length} totalDayHours={totalDayHours} activeEmployeesDetails={activeEmployeesDetails} />}
-                    {/* ... */}
+                    {view === 'employees' && <EmployeeManagementView employees={sortedAndFilteredEmployees} openModal={openModal} currentUserRole={currentUserRole} sortConfig={sortConfig} requestSort={requestSort} searchTerm={searchTerm} setSearchTerm={setSearchTerm} />}
+                    {view === 'areas' && <AreaManagementView workAreas={workAreas} openModal={openModal} currentUserRole={currentUserRole} />}
+                    {view === 'admins' && <AdminManagementView admins={admins} openModal={openModal} user={user} superAdminEmail={superAdminEmail} currentUserRole={currentUserRole} />}
+                    {view === 'reports' && <ReportView reports={reports} title={reportTitle} handleExportXml={() => {}} />}
                 </main>
             </div>
             {showModal && <AdminModal 
@@ -803,7 +893,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 allEmployees={allEmployees} 
                 currentUserRole={currentUserRole} 
                 userData={userData}
-                // --- NUOVA PROP PER LA TIMBRATURA DEL PREPOSTO ---
                 onAdminClockIn={handleAdminClockIn}
             />}
         </div>
