@@ -2,12 +2,11 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db } from '../firebase';
 import {
     doc, collection, addDoc, getDocs, query, where,
-    updateDoc, deleteDoc, writeBatch, Timestamp, arrayUnion, getDoc
+    updateDoc, Timestamp
 } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+// Rimosso l'import da 'firebase/functions' perché non serve in questo file
 import CompanyLogo from './CompanyLogo';
 import AdminModal from './AdminModal';
-
 // --- FUNZIONI DI SUPPORTO ---
 
 const roundToNearest30Minutes = (date) => {
