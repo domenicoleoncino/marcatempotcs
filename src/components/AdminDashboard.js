@@ -6,7 +6,8 @@ import {
 } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import CompanyLogo from './CompanyLogo';
-import AdminModal from './AdminModal';
+import AdminModal from './AdminModal'; // <-- IMPORTAZIONE CHIAVE CHE MANCAVA E ORA È PRESENTE
+
 // --- FUNZIONI DI SUPPORTO ---
 
 const roundToNearest30Minutes = (date) => {
@@ -480,7 +481,8 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     };
 
     const handleAdminClockIn = async (areaId) => {
-        if (!adminEmployeeProfile) return;
+        if (!adminEmployeeProfile || !allWorkAreas) return;
+        
         try {
             const clockInTimeRounded = roundToNearest30Minutes(new Date());
             await addDoc(collection(db, "time_entries"), {
