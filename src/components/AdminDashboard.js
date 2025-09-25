@@ -6,7 +6,7 @@ import {
 } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import CompanyLogo from './CompanyLogo';
-
+import AdminModal from './AdminModal';
 // --- FUNZIONI DI SUPPORTO ---
 
 const roundToNearest30Minutes = (date) => {
