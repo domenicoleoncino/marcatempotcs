@@ -14,3 +14,4 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
             setFormData({ ...formData, workAreaIds: currentAreas.filter(id => id !== name) });
         }
     };
+}
