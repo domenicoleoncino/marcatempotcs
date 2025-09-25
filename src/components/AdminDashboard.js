@@ -6,7 +6,7 @@ import {
 } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import CompanyLogo from './CompanyLogo';
-import AdminModal from './AdminModal'; // <-- IMPORTAZIONE CHIAVE CHE MANCAVA E ORA È PRESENTE
+import AdminModal from './AdminModal';
 
 // --- FUNZIONI DI SUPPORTO ---
 
@@ -25,7 +25,7 @@ const roundToNearest30Minutes = (date) => {
     return roundedDate;
 };
 
-// --- SUB-COMPONENTI INTERNI (Definiti qui per completezza e per evitare errori) ---
+// --- SUB-COMPONENTI INTERNI ---
 
 const DashboardView = ({ activeEntries, totalEmployees, totalDayHours, activeEmployeesDetails }) => {
     return (
@@ -322,16 +322,25 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const currentUserRole = userData?.role;
     const superAdminEmail = "domenico.leoncino@tcsitalia.com";
 
+    // =================================================================================
+    // =========== FUNZIONE FETCHDATA COMPLETAMENTE CORRETTA ===========================
+    // =================================================================================
     const fetchData = useCallback(async () => {
         if (!user || !userData) { setIsLoading(false); return; }
         setIsLoading(true);
         try {
+            // Step 1: Carica i dati grezzi una sola volta
             const allAreasSnapshot = await getDocs(collection(db, "work_areas"));
             const allAreasList = allAreasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             setAllWorkAreas(allAreasList);
 
             let allEmployeesList = (await getDocs(collection(db, "employees"))).docs.map(doc => ({ id: doc.id, ...doc.data() }));
             
+            // Step 2: Carica tutte le timbrature attive una sola volta
+            const activeEntriesSnapshot = await getDocs(query(collection(db, "time_entries"), where("status", "==", "clocked-in")));
+            const activeEntriesList = activeEntriesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+            // Step 3: Gestisci il profilo "dipendente" del preposto/admin
             if (currentUserRole === 'preposto') {
                 const qAdminEmployee = query(collection(db, "employees"), where("userId", "==", user.uid));
                 const adminEmployeeSnapshot = await getDocs(qAdminEmployee);
@@ -343,13 +352,13 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                         allEmployeesList.push(adminProfile);
                     }
 
-                    const qAdminActiveEntry = query(collection(db, "time_entries"), where("employeeId", "==", adminProfile.id), where("status", "==", "clocked-in"));
-                    const adminActiveEntrySnapshot = await getDocs(qAdminActiveEntry);
-                    setAdminActiveEntry(adminActiveEntrySnapshot.empty ? null : { id: adminActiveEntrySnapshot.docs[0].id, ...adminActiveEntrySnapshot.docs[0].data() });
+                    const adminActiveEntryData = activeEntriesList.find(entry => entry.employeeId === adminProfile.id);
+                    setAdminActiveEntry(adminActiveEntryData ? { id: adminActiveEntryData.id, ...adminActiveEntryData } : null);
                 }
             }
             setAllEmployees(allEmployeesList);
             
+            // Step 4: Carica gli utenti admin/preposto
             const qAdmins = query(collection(db, "users"), where("role", "in", ["admin", "preposto"]));
             const adminsSnapshot = await getDocs(qAdmins);
             const adminUsers = adminsSnapshot.docs.map(doc => {
@@ -361,20 +370,34 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             });
             setAdmins(adminUsers);
 
-            let employeesToDisplay = allEmployeesList;
-            let areasToDisplay = allAreasList;
+            // Step 5: Filtra dipendenti e aree in base al ruolo (scope)
+            let employeesInScope = allEmployeesList;
+            let areasInScope = allAreasList;
 
             if (currentUserRole === 'preposto' && userData.managedAreaIds) {
-                areasToDisplay = allAreasList.filter(area => userData.managedAreaIds.includes(area.id));
+                areasInScope = allAreasList.filter(area => userData.managedAreaIds.includes(area.id));
                 const managedAreaIds = userData.managedAreaIds;
-                employeesToDisplay = allEmployeesList.filter(emp =>
+                employeesInScope = allEmployeesList.filter(emp =>
                     (emp.workAreaIds && emp.workAreaIds.some(areaId => managedAreaIds.includes(areaId))) ||
                     emp.userId === user.uid
                 );
             }
-            setEmployees(employeesToDisplay);
-            setWorkAreas(areasToDisplay);
+
+            // Step 6: *** LOGICA CORRETTA *** Arricchisci i dipendenti con lo stato attuale
+            const employeesWithStatus = employeesInScope.map(emp => {
+                const activeEntry = activeEntriesList.find(entry => entry.employeeId === emp.id);
+                const isOnBreak = activeEntry?.pauses?.some(p => !p.end) || false;
+                return {
+                    ...emp,
+                    activeEntry: activeEntry || null,
+                    isOnBreak: isOnBreak,
+                };
+            });
+
+            setEmployees(employeesWithStatus);
+            setWorkAreas(areasInScope);
             
+            // Step 7: Calcola e aggiorna i dati per la Dashboard principale
             const startOfDay = new Date();
             startOfDay.setHours(0, 0, 0, 0);
             const endOfDay = new Date();
@@ -392,7 +415,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             const now = new Date();
 
             allTodayEntries.forEach(entry => {
-                if (employeesToDisplay.some(e => e.id === entry.employeeId)) {
+                if (employeesInScope.some(e => e.id === entry.employeeId)) {
                     const clockIn = entry.clockInTime.toDate();
                     const clockOut = entry.clockOutTime ? entry.clockOutTime.toDate() : now;
                     const pauseDurationMs = (entry.pauses || []).reduce((acc, p) => {
@@ -408,9 +431,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             const decimalHours = totalMinutes / 60;
             setTotalDayHours(decimalHours.toFixed(2));
 
-            const activeEntriesSnapshot = await getDocs(query(collection(db, "time_entries"), where("status", "==", "clocked-in")));
-            const activeEntriesList = activeEntriesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            const activeEntriesForScope = activeEntriesList.filter(entry => employeesToDisplay.some(e => e.id === entry.employeeId));
+            const activeEntriesForScope = activeEntriesList.filter(entry => employeesInScope.some(e => e.id === entry.employeeId));
             setActiveEntries(activeEntriesForScope);
 
             const details = activeEntriesForScope.map(entry => {
@@ -433,6 +454,9 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             setIsLoading(false);
         }
     }, [user, userData, currentUserRole]);
+    // =================================================================================
+    // ======================== FINE FUNZIONE CORRETTA =================================
+    // =================================================================================
 
     useEffect(() => {
         fetchData();
@@ -615,9 +639,9 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             }
             if (sortConfig.key === 'status') {
                 const getStatusValue = (emp) => {
-                    if (!emp.activeEntry) return 0;
-                    if (emp.isOnBreak) return 1;
-                    return 2;
+                    if (!emp.activeEntry) return 0; // Non al lavoro
+                    if (emp.isOnBreak) return 1; // In pausa
+                    return 2; // Al lavoro
                 };
                 const statusA = getStatusValue(a);
                 const statusB = getStatusValue(b);
@@ -733,4 +757,3 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 };
 
 export default AdminDashboard;
-
