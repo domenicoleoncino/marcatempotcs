@@ -3,21 +3,37 @@ import { db } from '../firebase';
 import { doc, updateDoc, addDoc, collection, deleteDoc, writeBatch, getDoc } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
-// Funzione di arrotondamento (necessaria per le timbrature manuali)
-const roundToNearest30Minutes = (date) => {
-    const roundedDate = new Date(date.getTime());
-    const minutes = roundedDate.getMinutes();
-    const roundedMinutes = Math.round(minutes / 30) * 30;
-    if (roundedMinutes === 60) {
-        roundedDate.setHours(roundedDate.getHours() + 1);
-        roundedDate.setMinutes(0);
-    } else {
-        roundedDate.setMinutes(roundedMinutes);
+// =================================================================================
+// NUOVA FUNZIONE DI ARROTONDAMENTO DEFINITIVA
+// =================================================================================
+const roundTimeWithCustomRules = (date, type) => {
+    const newDate = new Date(date.getTime());
+    const minutes = newDate.getMinutes();
+
+    if (type === 'entrata') {
+        // Logica di ENTRATA (confermata)
+        if (minutes >= 46) {
+            newDate.setHours(newDate.getHours() + 1);
+            newDate.setMinutes(0);
+        } else if (minutes >= 16) {
+            newDate.setMinutes(30);
+        } else {
+            newDate.setMinutes(0);
+        }
+    } else if (type === 'uscita') {
+        // Logica di USCITA (standard proposta)
+        if (minutes >= 30) {
+            newDate.setMinutes(30);
+        } else {
+            newDate.setMinutes(0);
+        }
     }
-    roundedDate.setSeconds(0);
-    roundedDate.setMilliseconds(0);
-    return roundedDate;
+
+    newDate.setSeconds(0);
+    newDate.setMilliseconds(0);
+    return newDate;
 };
+
 
 const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAdminEmail, user, allEmployees, currentUserRole, userData, onAdminClockIn }) => {
     const [formData, setFormData] = useState(item || {});
@@ -73,8 +89,9 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
         setError('');
 
         try {
+            // MODIFICA CRUCIALE: Passa anche il timestamp alla funzione del genitore
             if (type === 'adminClockIn') {
-                await onAdminClockIn(formData.workAreaId);
+                await onAdminClockIn(formData.workAreaId, formData.timestamp);
             } else if (type === 'newEmployee' || type === 'newAdmin') {
                 await user.getIdToken(true); 
                 const functions = getFunctions(undefined, 'us-central1');
@@ -160,7 +177,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                         await addDoc(collection(db, "time_entries"), { 
                             employeeId: item.id, 
                             workAreaId: formData.workAreaId, 
-                            clockInTime: roundToNearest30Minutes(new Date(formData.timestamp)), 
+                            clockInTime: roundTimeWithCustomRules(new Date(formData.timestamp), 'entrata'), 
                             clockOutTime: null, 
                             status: 'clocked-in', 
                             note: formData.note || null, 
@@ -169,7 +186,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                         break;
                     case 'manualClockOut':
                         await updateDoc(doc(db, "time_entries", item.activeEntry.id), { 
-                            clockOutTime: roundToNearest30Minutes(new Date(formData.timestamp)), 
+                            clockOutTime: roundTimeWithCustomRules(new Date(formData.timestamp), 'uscita'), 
                             status: 'clocked-out', 
                             note: formData.note || item.activeEntry.note || null 
                         });
@@ -209,6 +226,9 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
         assignEmployeeToArea: 'Assegna Dipendente ad Aree'
     };
 
+    // =================================================================================
+    // FUNZIONE RENDERFORM COMPLETAMENTE AGGIORNATA
+    // =================================================================================
     const renderForm = () => {
         switch (type) {
             case 'newEmployee':
@@ -298,26 +318,117 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                         </div>
                     ))}
                 </div> );
+
             case 'manualClockIn':
+                return (
+                    <div className="space-y-4">
+                        <div>
+                            <label htmlFor="timestamp" className="block text-sm font-medium text-gray-700 mb-1">Data e Ora di Entrata</label>
+                            <input 
+                                type="datetime-local" 
+                                id="timestamp"
+                                name="timestamp" 
+                                value={formData.timestamp || ''} 
+                                onChange={handleInputChange} 
+                                required 
+                                className="w-full p-2 border rounded" 
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="workAreaId" className="block text-sm font-medium text-gray-700 mb-1">Area di Lavoro</label>
+                            <select 
+                                name="workAreaId" 
+                                id="workAreaId"
+                                value={formData.workAreaId || ''} 
+                                onChange={handleInputChange} 
+                                required 
+                                className="w-full p-2 border rounded"
+                            >
+                                <option value="">Seleziona Area</option>
+                                {(item.workAreaIds || []).map(areaId => {
+                                    const area = workAreas.find(a => a.id === areaId);
+                                    return area ? <option key={area.id} value={area.id}>{area.name}</option> : null;
+                                })}
+                            </select>
+                        </div>
+                         <div>
+                            <label htmlFor="note" className="block text-sm font-medium text-gray-700 mb-1">Note (opzionale)</label>
+                            <textarea 
+                                name="note" 
+                                id="note"
+                                value={formData.note || ''} 
+                                onChange={handleInputChange} 
+                                placeholder="Aggiungi una nota..." 
+                                className="w-full p-2 border rounded"
+                            ></textarea>
+                        </div>
+                    </div>
+                );
+
             case 'adminClockIn':
                 return (
                     <div className="space-y-4">
-                        <select name="workAreaId" value={formData.workAreaId || ''} onChange={handleInputChange} required className="w-full p-2 border rounded">
-                            <option value="">Seleziona Area</option>
-                            {(item.workAreaIds || []).map(areaId => {
-                                const area = workAreas.find(a => a.id === areaId);
-                                return area ? <option key={area.id} value={area.id}>{area.name}</option> : null;
-                            })}
-                        </select>
+                        <div>
+                            <label htmlFor="timestamp" className="block text-sm font-medium text-gray-700 mb-1">Data e Ora di Entrata</label>
+                            <input 
+                                type="datetime-local" 
+                                id="timestamp"
+                                name="timestamp" 
+                                value={formData.timestamp || ''} 
+                                onChange={handleInputChange} 
+                                required 
+                                className="w-full p-2 border rounded" 
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="workAreaId" className="block text-sm font-medium text-gray-700 mb-1">Area di Lavoro</label>
+                            <select 
+                                name="workAreaId" 
+                                id="workAreaId"
+                                value={formData.workAreaId || ''} 
+                                onChange={handleInputChange} 
+                                required 
+                                className="w-full p-2 border rounded"
+                            >
+                                <option value="">Seleziona Area</option>
+                                {(item.workAreaIds || []).map(areaId => {
+                                    const area = workAreas.find(a => a.id === areaId);
+                                    return area ? <option key={area.id} value={area.id}>{area.name}</option> : null;
+                                })}
+                            </select>
+                        </div>
                     </div>
                 );
+
             case 'manualClockOut':
                  return (
-                    <div className="space-y-4">
-                       <input type="datetime-local" name="timestamp" value={formData.timestamp || ''} onChange={handleInputChange} required className="w-full p-2 border rounded" />
-                       <textarea name="note" value={formData.note || ''} onChange={handleInputChange} placeholder="Note (opzionale)" className="w-full p-2 border rounded"></textarea>
-                    </div>
-                );
+                     <div className="space-y-4">
+                        <div>
+                            <label htmlFor="timestamp" className="block text-sm font-medium text-gray-700 mb-1">Data e Ora di Uscita</label>
+                            <input 
+                               type="datetime-local" 
+                               id="timestamp"
+                               name="timestamp" 
+                               value={formData.timestamp || ''} 
+                               onChange={handleInputChange} 
+                               required 
+                               className="w-full p-2 border rounded" 
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="note" className="block text-sm font-medium text-gray-700 mb-1">Note (opzionale)</label>
+                            <textarea 
+                               name="note" 
+                               id="note"
+                               value={formData.note || ''} 
+                               onChange={handleInputChange} 
+                               placeholder="Aggiungi o modifica una nota..." 
+                               className="w-full p-2 border rounded"
+                            ></textarea>
+                        </div>
+                     </div>
+                 );
+            
             case 'deleteEmployee': return <p>Sei sicuro di voler eliminare il dipendente <strong>{item.name} {item.surname}</strong>? L'azione è irreversibile.</p>;
             case 'deleteArea': return <p>Sei sicuro di voler eliminare l'area <strong>{item.name}</strong>? Verrà rimossa da tutti i dipendenti a cui è assegnata.</p>;
             case 'deleteAdmin': return <p>Sei sicuro di voler eliminare l'utente <strong>{item.name} {item.surname}</strong>?</p>;
