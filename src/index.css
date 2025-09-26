@@ -11,3 +11,12 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+/* Aggiungi questo codice alla fine di index.css */
+
+#root {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start; /* Allinea in alto */
+  min-height: 100vh;
+  width: 100%;
+}
