@@ -181,7 +181,8 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                             clockOutTime: null, 
                             status: 'clocked-in', 
                             note: formData.note || null, 
-                            pauses: [] 
+                            pauses: [] ,
+                            createdBy: user.uid 
                         });
                         break;
                     case 'manualClockOut':

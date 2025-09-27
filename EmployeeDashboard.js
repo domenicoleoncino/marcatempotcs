@@ -9,7 +9,39 @@ import {
 import CompanyLogo from './CompanyLogo';
 import Clock from './Clock';
 
-// Importa la funzione di utilità
+// =================================================================================
+// NUOVA FUNZIONE DI ARROTONDAMENTO DEFINITIVA
+// =================================================================================
+const roundTimeWithCustomRules = (date, type) => {
+    const newDate = new Date(date.getTime());
+    const minutes = newDate.getMinutes();
+
+    if (type === 'entrata') {
+        // Logica di ENTRATA (definitiva)
+        if (minutes >= 46) {
+            newDate.setHours(newDate.getHours() + 1);
+            newDate.setMinutes(0);
+        } else if (minutes >= 16) {
+            newDate.setMinutes(30);
+        } else {
+            newDate.setMinutes(0);
+        }
+    } else if (type === 'uscita') {
+        // Logica di USCITA (standard)
+        if (minutes >= 30) {
+            newDate.setMinutes(30);
+        } else {
+            newDate.setMinutes(0);
+        }
+    }
+
+    newDate.setSeconds(0);
+    newDate.setMilliseconds(0);
+    return newDate;
+};
+
+
+// Funzione di utilità per la geolocalizzazione
 const getDistance = (coords1, coords2) => {
     const toRad = (x) => (x * Math.PI) / 180;
     const R = 6371; // Raggio della Terra in km
@@ -133,6 +165,9 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
     }, [employeeData]);
 
 
+    // =================================================================================
+    // FUNZIONI HANDLECLOCKIN E HANDLECLOCKOUT AGGIORNATE
+    // =================================================================================
     const handleClockIn = async () => {
         if (!canClockIn || !currentPosition) return;
         setClockingInProgress(true);
@@ -148,9 +183,11 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
                 await addDoc(collection(db, "time_entries"), {
                     employeeId: employeeData.id,
                     workAreaId: areaToClockIn.id,
-                    clockInTime: new Date(),
+                    clockInTime: roundTimeWithCustomRules(new Date(), 'entrata'), // <-- ARROTONDAMENTO
                     clockOutTime: null,
-                    status: 'clocked-in'
+                    status: 'clocked-in',
+                    createdBy: user.uid, // <-- CAMPO CREATEDBY
+                    pauses: []
                 });
             } catch (err) { console.error("Error clocking in: ", err); }
         }
@@ -161,8 +198,9 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
         setClockingInProgress(true);
         try {
             await updateDoc(doc(db, "time_entries", status.entryId), {
-                clockOutTime: new Date(),
-                status: 'clocked-out'
+                clockOutTime: roundTimeWithCustomRules(new Date(), 'uscita'), // <-- ARROTONDAMENTO
+                status: 'clocked-out',
+                createdBy: user.uid // <-- CAMPO CREATEDBY
             });
         } catch (err) { console.error("Error clocking out: ", err); }
         setClockingInProgress(false);
@@ -173,7 +211,7 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
             <header className="bg-white shadow-md p-4 flex justify-between items-center w-full">
                 <CompanyLogo />
                 <div className="flex items-center space-x-4">
-                    <span className="text-gray-600 hidden sm:block">Dipendente: {user.email}</span>
+                    <span className="text-gray-600 hidden sm:block">Dipendente: {employeeData ? `${employeeData.name} ${employeeData.surname}` : user.email}</span>
                     <button onClick={handleLogout} className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600">Logout</button>
                 </div>
             </header>
@@ -247,14 +285,14 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
                                     {history.map(entry => {
                                         const clockIn = entry.clockInTime.toDate();
                                         const clockOut = entry.clockOutTime.toDate();
-                                        const durationMs = clockOut - clockIn;
+                                        const durationMs = clockOut - clockIn; // Semplificato, non tiene conto delle pause
                                         const durationHours = durationMs / 3600000;
                                         return (
                                             <tr key={entry.id}>
                                                 <td className="px-4 py-4 whitespace-nowrap text-sm">{clockIn.toLocaleDateString('it-IT')}</td>
                                                 <td className="px-4 py-4 whitespace-nowrap text-sm">{entry.areaName}</td>
-                                                <td className="px-4 py-4 whitespace-nowrap text-sm">{clockIn.toLocaleTimeString('it-IT')}</td>
-                                                <td className="px-4 py-4 whitespace-nowrap text-sm">{clockOut.toLocaleTimeString('it-IT')}</td>
+                                                <td className="px-4 py-4 whitespace-nowrap text-sm">{clockIn.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</td>
+                                                <td className="px-4 py-4 whitespace-nowrap text-sm">{clockOut.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</td>
                                                 <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">{durationHours.toFixed(2)}</td>
                                             </tr>
                                         );
