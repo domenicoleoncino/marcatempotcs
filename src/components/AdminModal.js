@@ -11,7 +11,6 @@ const roundTimeWithCustomRules = (date, type) => {
     const minutes = newDate.getMinutes();
 
     if (type === 'entrata') {
-        // Logica di ENTRATA (confermata)
         if (minutes >= 46) {
             newDate.setHours(newDate.getHours() + 1);
             newDate.setMinutes(0);
@@ -21,7 +20,6 @@ const roundTimeWithCustomRules = (date, type) => {
             newDate.setMinutes(0);
         }
     } else if (type === 'uscita') {
-        // Logica di USCITA (standard proposta)
         if (minutes >= 30) {
             newDate.setMinutes(30);
         } else {
@@ -35,7 +33,7 @@ const roundTimeWithCustomRules = (date, type) => {
 };
 
 
-const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAdminEmail, user, allEmployees, currentUserRole, userData, onAdminClockIn }) => {
+const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAdminEmail, user, allEmployees, currentUserRole, userData, onAdminClockIn, onAdminApplyPause }) => {
     const [formData, setFormData] = useState(item || {});
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
@@ -89,9 +87,10 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
         setError('');
 
         try {
-            // MODIFICA CRUCIALE: Passa anche il timestamp alla funzione del genitore
             if (type === 'adminClockIn') {
                 await onAdminClockIn(formData.workAreaId, formData.timestamp);
+            } else if (type === 'applyPredefinedPause') {
+                await onAdminApplyPause(item);
             } else if (type === 'newEmployee' || type === 'newAdmin') {
                 await user.getIdToken(true); 
                 const functions = getFunctions(undefined, 'us-central1');
@@ -224,12 +223,10 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
         manualClockOut: `Timbra Uscita per ${item?.name} ${item?.surname}`,
         resetDevice: `Resetta Dispositivi di ${item?.name} ${item?.surname}`,
         adminClockIn: `Timbra Entrata Personale`,
-        assignEmployeeToArea: 'Assegna Dipendente ad Aree'
+        assignEmployeeToArea: 'Assegna Dipendente ad Aree',
+        applyPredefinedPause: `Applica Pausa a ${item?.name} ${item?.surname}`,
     };
 
-    // =================================================================================
-    // FUNZIONE RENDERFORM COMPLETAMENTE AGGIORNATA
-    // =================================================================================
     const renderForm = () => {
         switch (type) {
             case 'newEmployee':
@@ -403,33 +400,34 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
 
             case 'manualClockOut':
                  return (
-                     <div className="space-y-4">
-                        <div>
-                            <label htmlFor="timestamp" className="block text-sm font-medium text-gray-700 mb-1">Data e Ora di Uscita</label>
-                            <input 
-                               type="datetime-local" 
-                               id="timestamp"
-                               name="timestamp" 
-                               value={formData.timestamp || ''} 
-                               onChange={handleInputChange} 
-                               required 
-                               className="w-full p-2 border rounded" 
-                            />
-                        </div>
-                        <div>
-                            <label htmlFor="note" className="block text-sm font-medium text-gray-700 mb-1">Note (opzionale)</label>
-                            <textarea 
-                               name="note" 
-                               id="note"
-                               value={formData.note || ''} 
-                               onChange={handleInputChange} 
-                               placeholder="Aggiungi o modifica una nota..." 
-                               className="w-full p-2 border rounded"
-                            ></textarea>
-                        </div>
-                     </div>
-                 );
+                       <div className="space-y-4">
+                            <div>
+                                <label htmlFor="timestamp" className="block text-sm font-medium text-gray-700 mb-1">Data e Ora di Uscita</label>
+                                <input 
+                                   type="datetime-local" 
+                                   id="timestamp"
+                                   name="timestamp" 
+                                   value={formData.timestamp || ''} 
+                                   onChange={handleInputChange} 
+                                   required 
+                                   className="w-full p-2 border rounded" 
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="note" className="block text-sm font-medium text-gray-700 mb-1">Note (opzionale)</label>
+                                <textarea 
+                                   name="note" 
+                                   id="note"
+                                   value={formData.note || ''} 
+                                   onChange={handleInputChange} 
+                                   placeholder="Aggiungi o modifica una nota..." 
+                                   className="w-full p-2 border rounded"
+                                ></textarea>
+                            </div>
+                       </div>
+                    );
             
+            case 'applyPredefinedPause': return <p>Sei sicuro di voler applicare la pausa predefinita per l'area di lavoro a <strong>{item.name} {item.surname}</strong>? L'orario di inizio e fine verrà registrato immediatamente.</p>;
             case 'deleteEmployee': return <p>Sei sicuro di voler eliminare il dipendente <strong>{item.name} {item.surname}</strong>? L'azione è irreversibile.</p>;
             case 'deleteArea': return <p>Sei sicuro di voler eliminare l'area <strong>{item.name}</strong>? Verrà rimossa da tutti i dipendenti a cui è assegnata.</p>;
             case 'deleteAdmin': return <p>Sei sicuro di voler eliminare l'utente <strong>{item.name} {item.surname}</strong>?</p>;
@@ -454,8 +452,8 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                     {error && <p className="text-sm text-red-600 mb-4">{error}</p>}
                     <div className="flex justify-end space-x-4">
                         <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Annulla</button>
-                        <button type="submit" disabled={isLoading} className={`px-4 py-2 text-white rounded-md ${type.includes('delete') ? 'bg-red-600 hover:bg-red-700' : 'bg-indigo-600 hover:bg-indigo-700'} disabled:bg-gray-400`}>
-                            {isLoading ? 'Caricamento...' : (type.includes('delete') ? 'Elimina' : 'Conferma')}
+                        <button type="submit" disabled={isLoading} className={`px-4 py-2 text-white rounded-md ${type.includes('delete') || type === 'applyPredefinedPause' ? 'bg-red-600 hover:bg-red-700' : 'bg-indigo-600 hover:bg-indigo-700'} disabled:bg-gray-400 flex items-center gap-2`}>
+                            {isLoading ? 'Caricamento...' : (type.includes('delete') || type === 'applyPredefinedPause' ? 'Conferma' : 'Salva')}
                         </button>
                     </div>
                 </form>
@@ -465,3 +463,4 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
 };
 
 export default AdminModal;
+
