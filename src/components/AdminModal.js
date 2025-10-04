@@ -87,9 +87,10 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
             } else if (type === 'applyPredefinedPause') {
                 await onAdminApplyPause(item);
             } else if (type === 'newEmployee' || type === 'newAdmin') {
-                await user.getIdToken(true);
+                await user.getIdToken(true); 
                 const functions = getFunctions(undefined, 'us-central1');
                 const createNewUser = httpsCallable(functions, 'createNewUser');
+
                 const newUserPayload = {
                     email: formData.email.toLowerCase().trim(),
                     password: formData.password,
@@ -98,7 +99,9 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                     phone: formData.phone || "",
                     role: type === 'newEmployee' ? 'employee' : (formData.role || 'preposto'),
                 };
+
                 await createNewUser(newUserPayload);
+
             } else {
                 switch (type) {
                     case 'assignEmployeeToArea':
@@ -173,6 +176,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                     default: break;
                 }
             }
+
             if(onDataUpdate) await onDataUpdate();
             setShowModal(false);
         } catch (err) {
