@@ -334,7 +334,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 return { id: doc.id, ...data, managedAreaNames };
             });
             setAdmins(adminUsers);
-
         } catch (error) {
             console.error("Errore nel caricamento dei dati statici: ", error);
         } finally {
@@ -348,12 +347,9 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
     useEffect(() => {
         if (!allEmployees.length || !allWorkAreas.length) return;
-
         const q = query(collection(db, "time_entries"), where("status", "==", "clocked-in"));
-        
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const activeEntriesList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            
             if (currentUserRole === 'preposto' && adminEmployeeProfile) {
                 const adminActiveEntryData = activeEntriesList.find(entry => entry.employeeId === adminEmployeeProfile.id);
                 if (adminActiveEntryData) {
@@ -363,7 +359,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                     setAdminActiveEntry(null);
                 }
             }
-
             const details = activeEntriesList.map(entry => {
                 const employee = allEmployees.find(emp => emp.id === entry.employeeId);
                 const area = allWorkAreas.find(ar => ar.id === entry.workAreaId);
@@ -377,38 +372,26 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                     status: isOnBreak ? 'In Pausa' : 'Al Lavoro'
                 };
             }).sort((a, b) => a.employeeName.localeCompare(b.employeeName));
-
             setActiveEmployeesDetails(details);
         });
-
         return () => unsubscribe();
-
     }, [allEmployees, allWorkAreas, adminEmployeeProfile, currentUserRole]);
     
     useEffect(() => {
-        if (!allEmployees.length) return;
-
         const startOfDay = new Date();
         startOfDay.setHours(0, 0, 0, 0);
-        const q = query(
-            collection(db, "time_entries"),
-            where("clockInTime", ">=", Timestamp.fromDate(startOfDay))
-        );
-
+        const q = query(collection(db, "time_entries"), where("clockInTime", ">=", Timestamp.fromDate(startOfDay)));
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const allTodayEntries = snapshot.docs.map(d => d.data());
             let totalMinutes = 0;
             const now = new Date();
-
-            allTodayEntries.forEach(entry => {
+            snapshot.docs.forEach(doc => {
+                const entry = doc.data();
                 const clockIn = entry.clockInTime.toDate();
                 const clockOut = entry.clockOutTime ? entry.clockOutTime.toDate() : (entry.status === 'clocked-in' ? now : clockIn);
-                
                 const pauseDurationMs = (entry.pauses || []).reduce((acc, p) => {
                     if (p.start && p.end) return acc + (p.end.toMillis() - p.start.toMillis());
                     return acc;
                 }, 0);
-
                 const durationMs = (clockOut.getTime() - clockIn.getTime()) - pauseDurationMs;
                 if (durationMs > 0) {
                     totalMinutes += (durationMs / 60000);
@@ -416,9 +399,8 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             });
             setTotalDayHours((totalMinutes / 60).toFixed(2));
         });
-
         return () => unsubscribe();
-    }, [allEmployees]);
+    }, []);
     
     const sortedAndFilteredEmployees = useMemo(() => {
         let employeesInScope = allEmployees;
@@ -429,12 +411,10 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 emp.userId === user.uid
             );
         }
-        
         const employeesWithStatus = employeesInScope.map(emp => ({
             ...emp,
             activeEntry: activeEmployeesDetails.find(detail => detail.employeeId === emp.id) || null,
         }));
-        
         let sortableItems = [...employeesWithStatus];
         if (searchTerm) {
             const lowercasedFilter = searchTerm.toLowerCase();
@@ -442,20 +422,8 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 `${emp.name} ${emp.surname}`.toLowerCase().includes(lowercasedFilter)
             );
         }
-        
-        if (sortConfig.key) {
-             sortableItems.sort((a, b) => {
-                if (a[sortConfig.key] < b[sortConfig.key]) {
-                    return sortConfig.direction === 'ascending' ? -1 : 1;
-                }
-                if (a[sortConfig.key] > b[sortConfig.key]) {
-                    return sortConfig.direction === 'ascending' ? 1 : -1;
-                }
-                return 0;
-            });
-        }
         return sortableItems;
-    }, [allEmployees, activeEmployeesDetails, currentUserRole, userData, user, searchTerm, sortConfig]);
+    }, [allEmployees, activeEmployeesDetails, currentUserRole, userData, user, searchTerm]);
 
     const handleAdminClockIn = async (areaId, timestamp) => { /* ... */ };
     const handleAdminClockOut = async () => { /* ... */ };
@@ -472,19 +440,16 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         startDate.setHours(0, 0, 0, 0);
         const endDate = new Date(dateRange.end);
         endDate.setHours(23, 59, 59, 999);
-
         let q = query(collection(db, "time_entries"), 
             where("clockInTime", ">=", Timestamp.fromDate(startDate)),
             where("clockInTime", "<=", Timestamp.fromDate(endDate))
         );
-
         if (reportEmployeeFilter !== 'all') {
             q = query(q, where("employeeId", "==", reportEmployeeFilter));
         }
         if (reportAreaFilter !== 'all') {
             q = query(q, where("workAreaId", "==", reportAreaFilter));
         }
-        
         const querySnapshot = await getDocs(q);
         const entries = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
@@ -512,13 +477,19 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             const clockOut = entry.clockOutTime ? entry.clockOutTime.toDate() : null;
             let duration = null;
             if (clockOut) {
-                // ... (duration logic)
+                const totalMs = clockOut.getTime() - clockIn.getTime();
+                const pauseMs = (entry.pauses || []).reduce((acc, p) => acc + (p.end.toMillis() - p.start.toMillis()), 0);
+                duration = (totalMs - pauseMs) / 3600000;
             }
             return {
                 id: entry.id,
                 employeeName: employee ? `${employee.name} ${employee.surname}` : 'Sconosciuto',
                 areaName: area ? area.name : 'Sconosciuta',
-                // ... other report fields
+                clockInDate: clockIn.toLocaleDateString('it-IT'),
+                clockInTimeFormatted: clockIn.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
+                clockOutTimeFormatted: clockOut ? clockOut.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : 'In corso',
+                duration: duration,
+                note: entry.note || '',
             };
         });
         setReports(reportData);
@@ -527,28 +498,25 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         setIsLoading(false);
     };
 
+    const handleExportXml = () => { /* ... */ };
+    const requestSort = (key) => { /* ... */ };
+    
     const openModal = (type, item = null) => {
         setModalType(type);
         setSelectedItem(item);
         setShowModal(true);
     };
 
-    const handleExportXml = () => { /* ... */ };
-    const requestSort = (key) => { /* ... */ };
-
     if (isLoading) { return <div className="min-h-screen flex items-center justify-center bg-gray-100 w-full"><p>Caricamento dati...</p></div>; }
 
     return (
         <div className="min-h-screen bg-gray-100 w-full">
-            <header> {/* ... JSX for header ... */} </header>
-            <nav> {/* ... JSX for nav ... */} </nav>
+            <header> {/* ... JSX ... */} </header>
+            <nav> {/* ... JSX ... */} </nav>
             <div className="max-w-7xl mx-auto w-full p-4 sm:p-6 lg:p-8">
                 {view !== 'reports' && (
                    <div className="bg-white shadow-md rounded-lg p-4 mb-6">
-                        <h3 className="text-lg font-medium text-gray-900 mb-4 text-center sm:text-left">Genera Report Personalizzato</h3>
-                        <div className="flex flex-col gap-3 md:flex-row md:items-baseline md:flex-wrap md:gap-4">
-                           {/* JSX for report form fields */}
-                        </div>
+                        {/* ... JSX form ... */}
                    </div>
                 )}
                 <main>
@@ -563,15 +531,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 type={modalType} 
                 item={selectedItem} 
                 setShowModal={setShowModal} 
-                workAreas={allWorkAreas} 
-                onDataUpdate={fetchData} 
-                user={user} 
-                superAdminEmail={superAdminEmail} 
-                allEmployees={allEmployees} 
-                currentUserRole={currentUserRole} 
-                userData={userData}
-                onAdminClockIn={handleAdminClockIn}
-                onAdminApplyPause={handleAdminApplyPause}
+                // ... props
             />}
         </div>
     );
