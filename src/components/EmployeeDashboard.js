@@ -196,8 +196,10 @@ const EmployeeDashboard = ({ user, handleLogout }) => {
             const currentPauses = entryDoc.data().pauses || [];
             if (status.isOnBreak) { // L'utente sta finendo la pausa
                 const lastPauseIndex = currentPauses.length - 1;
-                currentPauses[lastPauseIndex].end = Timestamp.fromDate(new Date());
-                await updateDoc(entryRef, { pauses: currentPauses });
+                if (lastPauseIndex >= 0 && !currentPauses[lastPauseIndex].end) {
+                    currentPauses[lastPauseIndex].end = Timestamp.fromDate(new Date());
+                    await updateDoc(entryRef, { pauses: currentPauses });
+                }
             } else { // L'utente sta iniziando la pausa
                 const newPause = { start: Timestamp.fromDate(new Date()), end: null };
                 await updateDoc(entryRef, { pauses: [...currentPauses, newPause] });

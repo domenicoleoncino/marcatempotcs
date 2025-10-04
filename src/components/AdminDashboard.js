@@ -233,7 +233,7 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
     );
 };
 
-const ReportView = ({ reports, title, handleExportXml }) => (
+const ReportView = ({ reports, title, handleExportXml, user }) => (
     <div>
         <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 flex-wrap gap-4">
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">{title || 'Report'}</h1>
@@ -259,7 +259,7 @@ const ReportView = ({ reports, title, handleExportXml }) => (
                     <tbody className="bg-white divide-y divide-gray-200">
                         {reports.map((entry) => (
                             <tr key={entry.id}>
-                                <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.employeeName}{entry.createdBy !== entry.employeeId ? <span className="text-red-500 ml-1">*</span> : ''}</td>
+                                <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.employeeName}{entry.createdBy !== entry.employeeId ? <span className="text-red-500 ml-1 font-bold">*</span> : ''}</td>
                                 <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.areaName}</td>
                                 <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.clockInDate}</td>
                                 <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.clockInTimeFormatted}</td>
@@ -274,6 +274,7 @@ const ReportView = ({ reports, title, handleExportXml }) => (
         </div>
     </div>
 );
+
 
 // --- COMPONENTE PRINCIPALE ---
 const AdminDashboard = ({ user, handleLogout, userData }) => {
@@ -702,7 +703,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                     {view === 'employees' && <EmployeeManagementView employees={sortedAndFilteredEmployees} openModal={openModal} currentUserRole={currentUserRole} requestSort={requestSort} sortConfig={sortConfig} searchTerm={searchTerm} setSearchTerm={setSearchTerm} />}
                     {view === 'areas' && <AreaManagementView workAreas={workAreasWithHours} openModal={openModal} currentUserRole={currentUserRole} />}
                     {view === 'admins' && <AdminManagementView admins={admins} openModal={openModal} user={user} superAdminEmail={superAdminEmail} currentUserRole={currentUserRole} />}
-                    {view === 'reports' && <ReportView reports={reports} title={reportTitle} handleExportXml={handleExportXml} />}
+                    {view === 'reports' && <ReportView reports={reports} title={reportTitle} handleExportXml={handleExportXml} user={user} />}
                 </main>
             </div>
             {showModal && <AdminModal 
