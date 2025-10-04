@@ -162,9 +162,7 @@ const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
                 <thead className="bg-gray-50">
                     <tr>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome Area</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Latitudine</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Longitudine</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Raggio (m)</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ore Totali (nel report)</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pausa (min)</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Azioni</th>
                     </tr>
@@ -173,9 +171,7 @@ const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
                     {workAreas.map(area => (
                         <tr key={area.id}>
                             <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{area.name}</td>
-                            <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{area.latitude}</td>
-                            <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{area.longitude}</td>
-                            <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{area.radius}</td>
+                            <td className="px-4 py-2 whitespace-nowrap text-sm font-bold">{area.totalHours ? `${area.totalHours}h` : 'N/D'}</td>
                             <td className="px-4 py-2 whitespace-nowrap text-sm font-bold text-gray-700">{area.pauseDuration || 0}</td>
                             <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
                                 <div className="flex items-center gap-4">
@@ -279,6 +275,7 @@ const ReportView = ({ reports, title, handleExportXml }) => (
     </div>
 );
 
+
 // --- COMPONENTE PRINCIPALE ---
 const AdminDashboard = ({ user, handleLogout, userData }) => {
     const [view, setView] = useState('dashboard');
@@ -303,6 +300,8 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const [adminEmployeeProfile, setAdminEmployeeProfile] = useState(null);
     const [adminActiveEntry, setAdminActiveEntry] = useState(null);
     const [totalDayHours, setTotalDayHours] = useState('0.00');
+    const [workAreasWithHours, setWorkAreasWithHours] = useState([]);
+
     const currentUserRole = userData?.role;
     const superAdminEmail = "domenico.leoncino@tcsitalia.com";
 
@@ -313,6 +312,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             const allAreasSnapshot = await getDocs(collection(db, "work_areas"));
             const allAreasList = allAreasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             setAllWorkAreas(allAreasList);
+            setWorkAreasWithHours(allAreasList);
 
             const allEmployeesList = (await getDocs(collection(db, "employees"))).docs.map(doc => ({ id: doc.id, ...doc.data() }));
             setAllEmployees(allEmployeesList);
@@ -408,8 +408,18 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             );
         }
         
-        // Sorting logic can be added here based on sortConfig
-        
+        if (sortConfig.key) {
+             sortableItems.sort((a, b) => {
+                // This is a simplified sort, can be improved
+                if (a[sortConfig.key] < b[sortConfig.key]) {
+                    return sortConfig.direction === 'ascending' ? -1 : 1;
+                }
+                if (a[sortConfig.key] > b[sortConfig.key]) {
+                    return sortConfig.direction === 'ascending' ? 1 : -1;
+                }
+                return 0;
+            });
+        }
         return sortableItems;
     }, [allEmployees, activeEmployeesDetails, currentUserRole, userData, user, searchTerm, sortConfig]);
 
@@ -504,7 +514,47 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         setShowModal(true);
     };
 
-    const generateReport = async () => { /* Logic to generate report data */ };
+    const generateReport = async () => {
+        if (!dateRange.start || !dateRange.end) {
+            alert("Seleziona un intervallo di date valido.");
+            return;
+        }
+        setIsLoading(true);
+        const startDate = new Date(dateRange.start);
+        startDate.setHours(0, 0, 0, 0);
+        const endDate = new Date(dateRange.end);
+        endDate.setHours(23, 59, 59, 999);
+
+        const q = query(collection(db, "time_entries"), 
+            where("clockInTime", ">=", Timestamp.fromDate(startDate)),
+            where("clockInTime", "<=", Timestamp.fromDate(endDate))
+        );
+        const querySnapshot = await getDocs(q);
+        const entries = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        const areasWithHours = allWorkAreas.map(area => {
+            const entriesForArea = entries.filter(entry => entry.workAreaId === area.id && entry.clockOutTime);
+            const totalMillis = entriesForArea.reduce((sum, entry) => {
+                let duration = entry.clockOutTime.toMillis() - entry.clockInTime.toMillis();
+                const pauseMillis = (entry.pauses || []).reduce((pauseSum, p) => {
+                    if (p.start && p.end) {
+                        return pauseSum + (p.end.toMillis() - p.start.toMillis());
+                    }
+                    return pauseSum;
+                }, 0);
+                return sum + (duration - pauseMillis);
+            }, 0);
+            const totalHours = totalMillis / 3600000;
+            return { ...area, totalHours: totalHours.toFixed(2) };
+        });
+        setWorkAreasWithHours(areasWithHours);
+
+        // ... Logic to build the detailed report (reportData)
+        
+        setIsLoading(false);
+        // setView('reports');
+    };
+
     const handleExportXml = () => { /* Logic to export XML */ };
     const requestSort = (key) => {
         let direction = 'ascending';
@@ -608,7 +658,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 <main>
                     {view === 'dashboard' && <DashboardView totalEmployees={allEmployees.length} activeEmployeesDetails={activeEmployeesDetails} totalDayHours={totalDayHours} />}
                     {view === 'employees' && <EmployeeManagementView employees={sortedAndFilteredEmployees} openModal={openModal} currentUserRole={currentUserRole} sortConfig={sortConfig} requestSort={requestSort} searchTerm={searchTerm} setSearchTerm={setSearchTerm} />}
-                    {view === 'areas' && <AreaManagementView workAreas={allWorkAreas} openModal={openModal} currentUserRole={currentUserRole} />}
+                    {view === 'areas' && <AreaManagementView workAreas={workAreasWithHours} openModal={openModal} currentUserRole={currentUserRole} />}
                     {view === 'admins' && <AdminManagementView admins={admins} openModal={openModal} user={user} superAdminEmail={superAdminEmail} currentUserRole={currentUserRole} />}
                     {view === 'reports' && <ReportView reports={reports} title={reportTitle} handleExportXml={handleExportXml} />}
                 </main>
