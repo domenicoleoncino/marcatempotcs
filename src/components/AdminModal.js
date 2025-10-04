@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
-import { doc, updateDoc, addDoc, collection, deleteDoc, writeBatch, getDoc, Timestamp } from 'firebase/firestore';
+import { doc, updateDoc, addDoc, collection, deleteDoc, writeBatch, getDoc } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
 // --- FUNZIONE DI ARROTONDAMENTO ---
