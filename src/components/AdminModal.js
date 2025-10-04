@@ -1,15 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
-import { doc, updateDoc, addDoc, collection, deleteDoc, writeBatch, getDoc } from 'firebase/firestore';
+import { doc, updateDoc, addDoc, collection, deleteDoc, writeBatch, getDoc, Timestamp } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
-// =================================================================================
-// NUOVA FUNZIONE DI ARROTONDAMENTO DEFINITIVA
-// =================================================================================
+// --- FUNZIONE DI ARROTONDAMENTO ---
 const roundTimeWithCustomRules = (date, type) => {
     const newDate = new Date(date.getTime());
     const minutes = newDate.getMinutes();
-
     if (type === 'entrata') {
         if (minutes >= 46) {
             newDate.setHours(newDate.getHours() + 1);
@@ -26,12 +23,10 @@ const roundTimeWithCustomRules = (date, type) => {
             newDate.setMinutes(0);
         }
     }
-
     newDate.setSeconds(0);
     newDate.setMilliseconds(0);
     return newDate;
 };
-
 
 const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAdminEmail, user, allEmployees, currentUserRole, userData, onAdminClockIn, onAdminApplyPause }) => {
     const [formData, setFormData] = useState(item || {});
@@ -92,10 +87,9 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
             } else if (type === 'applyPredefinedPause') {
                 await onAdminApplyPause(item);
             } else if (type === 'newEmployee' || type === 'newAdmin') {
-                await user.getIdToken(true); 
+                await user.getIdToken(true);
                 const functions = getFunctions(undefined, 'us-central1');
                 const createNewUser = httpsCallable(functions, 'createNewUser');
-
                 const newUserPayload = {
                     email: formData.email.toLowerCase().trim(),
                     password: formData.password,
@@ -104,14 +98,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                     phone: formData.phone || "",
                     role: type === 'newEmployee' ? 'employee' : (formData.role || 'preposto'),
                 };
-
-                if (currentUserRole === 'preposto' && type === 'newEmployee') {
-                    newUserPayload.managedAreaIds = userData.managedAreaIds || [];
-                    newUserPayload.managedAreaNames = userData.managedAreaNames || [];
-                }
-
                 await createNewUser(newUserPayload);
-
             } else {
                 switch (type) {
                     case 'assignEmployeeToArea':
@@ -120,8 +107,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                         if (empDoc.exists()) {
                             const currentWorkAreaIds = empDoc.data().workAreaIds || [];
                             const newWorkAreaIds = [...new Set([...currentWorkAreaIds, ...(formData.workAreaIds || [])])];
-                            const newWorkAreaNames = workAreas.filter(area => newWorkAreaIds.includes(area.id)).map(area => area.name);
-                            await updateDoc(empRef, { workAreaIds: newWorkAreaIds, workAreaNames: newWorkAreaNames });
+                            await updateDoc(empRef, { workAreaIds: newWorkAreaIds });
                         }
                         break;
                     case 'editEmployee':
@@ -149,28 +135,17 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                         });
                         break;
                     case 'deleteArea':
-                        const batchDeleteArea = writeBatch(db);
-                        const employeesToUpdate = allEmployees.filter(emp => emp.workAreaIds?.includes(item.id));
-                        employeesToUpdate.forEach(emp => {
-                            const empRef = doc(db, "employees", emp.id);
-                            const updatedAreaIds = emp.workAreaIds.filter(id => id !== item.id);
-                            const updatedAreaNames = emp.workAreaNames.filter(name => name !== item.name);
-                            batchDeleteArea.update(empRef, { workAreaIds: updatedAreaIds, workAreaNames: updatedAreaNames });
-                        });
-                        await batchDeleteArea.commit();
                         await deleteDoc(doc(db, "work_areas", item.id));
                         break;
                     case 'assignArea':
-                        const selectedAreaNames = workAreas.filter(area => formData.workAreaIds?.includes(area.id)).map(area => area.name);
-                        await updateDoc(doc(db, "employees", item.id), { workAreaIds: formData.workAreaIds || [], workAreaNames: selectedAreaNames });
+                        await updateDoc(doc(db, "employees", item.id), { workAreaIds: formData.workAreaIds || [] });
                         break;
                     case 'deleteAdmin':
                         if (item.email === superAdminEmail) { throw new Error("Non puoi eliminare il Super Admin."); }
                         await deleteDoc(doc(db, "users", item.id));
                         break;
                     case 'assignManagedAreas':
-                        const selectedManagedAreaNames = workAreas.filter(area => formData.managedAreaIds?.includes(area.id)).map(area => area.name);
-                        await updateDoc(doc(db, "users", item.id), { managedAreaIds: formData.managedAreaIds || [], managedAreaNames: selectedManagedAreaNames });
+                        await updateDoc(doc(db, "users", item.id), { managedAreaIds: formData.managedAreaIds || [] });
                         break;
                     case 'manualClockIn':
                         await addDoc(collection(db, "time_entries"), { 
@@ -180,7 +155,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                             clockOutTime: null, 
                             status: 'clocked-in', 
                             note: formData.note || null, 
-                            pauses: [] ,
+                            pauses: [],
                             createdBy: user.uid 
                         });
                         break;
@@ -188,7 +163,8 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                         await updateDoc(doc(db, "time_entries", item.activeEntry.id), { 
                             clockOutTime: roundTimeWithCustomRules(new Date(formData.timestamp), 'uscita'), 
                             status: 'clocked-out', 
-                            note: formData.note || item.activeEntry.note || null 
+                            note: formData.note || item.activeEntry.note || null,
+                            createdBy: user.uid
                         });
                         break;
                     case 'resetDevice':
@@ -197,8 +173,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                     default: break;
                 }
             }
-
-            await onDataUpdate();
+            if(onDataUpdate) await onDataUpdate();
             setShowModal(false);
         } catch (err) {
             setError(err.message);
@@ -236,7 +211,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                     <input name="surname" value={formData.surname || ''} onChange={handleInputChange} placeholder="Cognome" required className="w-full p-2 border rounded" />
                     <input type="email" name="email" value={formData.email || ''} onChange={handleInputChange} placeholder="Email" required className="w-full p-2 border rounded" />
                     <input type="password" name="password" value={formData.password || ''} onChange={handleInputChange} placeholder="Password (min. 6 caratteri)" required className="w-full p-2 border rounded" />
-                    {type === 'newEmployee' && <input name="phone" value={formData.phone || ''} onChange={handleInputChange} placeholder="Telefono (opzionale)" className="w-full p-2 border rounded" />}
+                    <input name="phone" value={formData.phone || ''} onChange={handleInputChange} placeholder="Telefono (opzionale)" className="w-full p-2 border rounded" />
                     {type === 'newAdmin' && currentUserRole === 'admin' && (
                         <select name="role" value={formData.role || 'preposto'} onChange={handleInputChange} required className="w-full p-2 border rounded">
                             <option value="preposto">Preposto</option>
@@ -259,14 +234,8 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                     <input type="number" name="radius" value={formData.radius || ''} onChange={handleInputChange} placeholder="Raggio (metri)" required className="w-full p-2 border rounded" />
                     <div>
                         <label htmlFor="pauseDuration" className="block text-sm font-medium text-gray-700">Durata Pausa</label>
-                        <select 
-                            name="pauseDuration" 
-                            id="pauseDuration"
-                            value={formData.pauseDuration || '0'} 
-                            onChange={handleInputChange}
-                            className="w-full p-2 border rounded bg-white"
-                        >
-                            <option value="0">0 Minuti (Disabilitata)</option>
+                        <select name="pauseDuration" id="pauseDuration" value={formData.pauseDuration || '0'} onChange={handleInputChange} className="w-full p-2 border rounded bg-white">
+                            <option value="0">0 Minuti</option>
                             <option value="30">30 Minuti</option>
                             <option value="60">60 Minuti</option>
                         </select>
@@ -295,7 +264,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                             </select>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700">Seleziona Aree da Assegnare</label>
+                            <label className="block text-sm font-medium text-gray-700">Seleziona Aree</label>
                             <div className="space-y-2 max-h-40 overflow-y-auto mt-2 border p-2 rounded-md">
                                 {prepostoAreas.map(area => (
                                     <div key={area.id} className="flex items-center">
@@ -316,32 +285,16 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                         </div>
                     ))}
                 </div> );
-
             case 'manualClockIn':
                 return (
                     <div className="space-y-4">
                         <div>
                             <label htmlFor="timestamp" className="block text-sm font-medium text-gray-700 mb-1">Data e Ora di Entrata</label>
-                            <input 
-                                type="datetime-local" 
-                                id="timestamp"
-                                name="timestamp" 
-                                value={formData.timestamp || ''} 
-                                onChange={handleInputChange} 
-                                required 
-                                className="w-full p-2 border rounded" 
-                            />
+                            <input type="datetime-local" id="timestamp" name="timestamp" value={formData.timestamp || ''} onChange={handleInputChange} required className="w-full p-2 border rounded" />
                         </div>
                         <div>
                             <label htmlFor="workAreaId" className="block text-sm font-medium text-gray-700 mb-1">Area di Lavoro</label>
-                            <select 
-                                name="workAreaId" 
-                                id="workAreaId"
-                                value={formData.workAreaId || ''} 
-                                onChange={handleInputChange} 
-                                required 
-                                className="w-full p-2 border rounded"
-                            >
+                            <select name="workAreaId" id="workAreaId" value={formData.workAreaId || ''} onChange={handleInputChange} required className="w-full p-2 border rounded">
                                 <option value="">Seleziona Area</option>
                                 {(item.workAreaIds || []).map(areaId => {
                                     const area = workAreas.find(a => a.id === areaId);
@@ -351,43 +304,20 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                         </div>
                          <div>
                             <label htmlFor="note" className="block text-sm font-medium text-gray-700 mb-1">Note (opzionale)</label>
-                            <textarea 
-                                name="note" 
-                                id="note"
-                                value={formData.note || ''} 
-                                onChange={handleInputChange} 
-                                placeholder="Aggiungi una nota..." 
-                                className="w-full p-2 border rounded"
-                            ></textarea>
+                            <textarea name="note" id="note" value={formData.note || ''} onChange={handleInputChange} placeholder="Aggiungi una nota..." className="w-full p-2 border rounded"></textarea>
                         </div>
                     </div>
                 );
-
             case 'adminClockIn':
                 return (
                     <div className="space-y-4">
                         <div>
                             <label htmlFor="timestamp" className="block text-sm font-medium text-gray-700 mb-1">Data e Ora di Entrata</label>
-                            <input 
-                                type="datetime-local" 
-                                id="timestamp"
-                                name="timestamp" 
-                                value={formData.timestamp || ''} 
-                                onChange={handleInputChange} 
-                                required 
-                                className="w-full p-2 border rounded" 
-                            />
+                            <input type="datetime-local" id="timestamp" name="timestamp" value={formData.timestamp || ''} onChange={handleInputChange} required className="w-full p-2 border rounded" />
                         </div>
                         <div>
                             <label htmlFor="workAreaId" className="block text-sm font-medium text-gray-700 mb-1">Area di Lavoro</label>
-                            <select 
-                                name="workAreaId" 
-                                id="workAreaId"
-                                value={formData.workAreaId || ''} 
-                                onChange={handleInputChange} 
-                                required 
-                                className="w-full p-2 border rounded"
-                            >
+                            <select name="workAreaId" id="workAreaId" value={formData.workAreaId || ''} onChange={handleInputChange} required className="w-full p-2 border rounded">
                                 <option value="">Seleziona Area</option>
                                 {(item.workAreaIds || []).map(areaId => {
                                     const area = workAreas.find(a => a.id === areaId);
@@ -397,41 +327,25 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                         </div>
                     </div>
                 );
-
             case 'manualClockOut':
                  return (
-                       <div className="space-y-4">
-                            <div>
-                                <label htmlFor="timestamp" className="block text-sm font-medium text-gray-700 mb-1">Data e Ora di Uscita</label>
-                                <input 
-                                   type="datetime-local" 
-                                   id="timestamp"
-                                   name="timestamp" 
-                                   value={formData.timestamp || ''} 
-                                   onChange={handleInputChange} 
-                                   required 
-                                   className="w-full p-2 border rounded" 
-                                />
-                            </div>
-                            <div>
-                                <label htmlFor="note" className="block text-sm font-medium text-gray-700 mb-1">Note (opzionale)</label>
-                                <textarea 
-                                   name="note" 
-                                   id="note"
-                                   value={formData.note || ''} 
-                                   onChange={handleInputChange} 
-                                   placeholder="Aggiungi o modifica una nota..." 
-                                   className="w-full p-2 border rounded"
-                                ></textarea>
-                            </div>
-                       </div>
-                    );
-            
-            case 'applyPredefinedPause': return <p>Sei sicuro di voler applicare la pausa predefinita per l'area di lavoro a <strong>{item.name} {item.surname}</strong>? L'orario di inizio e fine verrà registrato immediatamente.</p>;
-            case 'deleteEmployee': return <p>Sei sicuro di voler eliminare il dipendente <strong>{item.name} {item.surname}</strong>? L'azione è irreversibile.</p>;
-            case 'deleteArea': return <p>Sei sicuro di voler eliminare l'area <strong>{item.name}</strong>? Verrà rimossa da tutti i dipendenti a cui è assegnata.</p>;
+                     <div className="space-y-4">
+                        <div>
+                            <label htmlFor="timestamp" className="block text-sm font-medium text-gray-700 mb-1">Data e Ora di Uscita</label>
+                            <input type="datetime-local" id="timestamp" name="timestamp" value={formData.timestamp || ''} onChange={handleInputChange} required className="w-full p-2 border rounded" />
+                        </div>
+                        <div>
+                            <label htmlFor="note" className="block text-sm font-medium text-gray-700 mb-1">Note (opzionale)</label>
+                            <textarea name="note" id="note" value={formData.note || ''} onChange={handleInputChange} placeholder="Aggiungi o modifica una nota..." className="w-full p-2 border rounded"></textarea>
+                        </div>
+                     </div>
+                 );
+            case 'applyPredefinedPause': 
+                return <p>Sei sicuro di voler applicare la pausa predefinita a <strong>{item.name} {item.surname}</strong>?</p>;
+            case 'deleteEmployee': return <p>Sei sicuro di voler eliminare il dipendente <strong>{item.name} {item.surname}</strong>?</p>;
+            case 'deleteArea': return <p>Sei sicuro di voler eliminare l'area <strong>{item.name}</strong>?</p>;
             case 'deleteAdmin': return <p>Sei sicuro di voler eliminare l'utente <strong>{item.name} {item.surname}</strong>?</p>;
-            case 'resetDevice': return <p>Sei sicuro di voler resettare i dispositivi per <strong>{item.name} {item.surname}</strong>? Potrà registrare 2 nuovi dispositivi.</p>;
+            case 'resetDevice': return <p>Sei sicuro di voler resettare i dispositivi per <strong>{item.name} {item.surname}</strong>?</p>;
             default: return null;
         }
     };
@@ -446,9 +360,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                     </button>
                 </div>
                 <form onSubmit={handleSubmit}>
-                    <div className="mb-4">
-                        {renderForm()}
-                    </div>
+                    <div className="mb-4">{renderForm()}</div>
                     {error && <p className="text-sm text-red-600 mb-4">{error}</p>}
                     <div className="flex justify-end space-x-4">
                         <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Annulla</button>
@@ -463,4 +375,3 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
 };
 
 export default AdminModal;
-

@@ -238,7 +238,7 @@ const ReportView = ({ reports, title, handleExportXml }) => (
         <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 flex-wrap gap-4">
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">{title || 'Report'}</h1>
             <div className="flex items-center space-x-2">
-                <button disabled={reports.length === 0} className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 text-sm">Esporta Excel</button>
+                <button onClick={() => { /* Implement Excel Export */ }} disabled={reports.length === 0} className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 text-sm">Esporta Excel</button>
                 <button onClick={handleExportXml} disabled={reports.length === 0} className="px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:bg-gray-400 text-sm">Esporta XML</button>
             </div>
         </div>
@@ -259,7 +259,7 @@ const ReportView = ({ reports, title, handleExportXml }) => (
                     <tbody className="bg-white divide-y divide-gray-200">
                         {reports.map((entry) => (
                             <tr key={entry.id}>
-                                <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.employeeName}</td>
+                                <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.employeeName}{entry.createdBy !== entry.employeeId ? <span className="text-red-500 ml-1">*</span> : ''}</td>
                                 <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.areaName}</td>
                                 <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.clockInDate}</td>
                                 <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.clockInTimeFormatted}</td>
@@ -274,6 +274,7 @@ const ReportView = ({ reports, title, handleExportXml }) => (
         </div>
     </div>
 );
+
 
 // --- COMPONENTE PRINCIPALE ---
 const AdminDashboard = ({ user, handleLogout, userData }) => {
@@ -333,7 +334,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 return { id: doc.id, ...data, managedAreaNames };
             });
             setAdmins(adminUsers);
-
         } catch (error) {
             console.error("Errore nel caricamento dei dati statici: ", error);
         } finally {
@@ -598,7 +598,31 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         }
     };
 
-    const handleExportXml = () => { /* Logic to export XML */ };
+    const handleExportXml = () => {
+        let xmlString = '<?xml version="1.0" encoding="UTF-8"?>\n<Report>\n';
+        reports.forEach(entry => {
+            xmlString += '  <Timbratura>\n';
+            xmlString += `    <Dipendente>${entry.employeeName}</Dipendente>\n`;
+            xmlString += `    <Area>${entry.areaName}</Area>\n`;
+            xmlString += `    <Data>${entry.clockInDate}</Data>\n`;
+            xmlString += `    <Entrata>${entry.clockInTimeFormatted}</Entrata>\n`;
+            xmlString += `    <Uscita>${entry.clockOutTimeFormatted}</Uscita>\n`;
+            xmlString += `    <Ore>${entry.duration ? entry.duration.toFixed(2) : 'N/A'}</Ore>\n`;
+            xmlString += `    <Note>${entry.note || ''}</Note>\n`;
+            xmlString += '  </Timbratura>\n';
+        });
+        xmlString += '</Report>';
+
+        const blob = new Blob([xmlString], { type: 'application/xml' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `Report_${reportTitle.replace(/ /g, '_')}.xml`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     const requestSort = (key) => {
         let direction = 'ascending';
         if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
