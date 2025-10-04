@@ -275,7 +275,6 @@ const ReportView = ({ reports, title, handleExportXml }) => (
     </div>
 );
 
-
 // --- COMPONENTE PRINCIPALE ---
 const AdminDashboard = ({ user, handleLogout, userData }) => {
     const [view, setView] = useState('dashboard');
@@ -334,6 +333,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 return { id: doc.id, ...data, managedAreaNames };
             });
             setAdmins(adminUsers);
+
         } catch (error) {
             console.error("Errore nel caricamento dei dati statici: ", error);
         } finally {
@@ -425,81 +425,90 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         return sortableItems;
     }, [allEmployees, activeEmployeesDetails, currentUserRole, userData, user, searchTerm]);
 
-    const handleAdminClockIn = async (areaId, timestamp) => { /* ... */ };
-    const handleAdminClockOut = async () => { /* ... */ };
-    const handleAdminPause = async () => { /* ... */ };
-    const handleAdminApplyPause = async (employee) => { /* ... */ };
+    const handleAdminClockIn = async (areaId, timestamp) => {
+        if (!adminEmployeeProfile) return;
+        try {
+            await addDoc(collection(db, "time_entries"), {
+                employeeId: adminEmployeeProfile.id,
+                workAreaId: areaId,
+                clockInTime: roundTimeWithCustomRules(new Date(timestamp), 'entrata'),
+                clockOutTime: null,
+                status: 'clocked-in',
+                createdBy: user.uid,
+                pauses: []
+            });
+        } catch (error) {
+            alert(`Errore durante la timbratura: ${error.message}`);
+        }
+    };
     
-    const generateReport = async () => {
-        if (!dateRange.start || !dateRange.end) {
-            alert("Seleziona un intervallo di date valido.");
-            return;
+    const handleAdminClockOut = async () => {
+        if (!adminActiveEntry) return;
+        try {
+            await updateDoc(doc(db, "time_entries", adminActiveEntry.id), {
+                clockOutTime: roundTimeWithCustomRules(new Date(), 'uscita'),
+                status: 'clocked-out',
+                createdBy: user.uid
+            });
+        } catch (error) {
+            console.error("Errore nel timbrare l'uscita:", error);
         }
-        setIsLoading(true);
-        const startDate = new Date(dateRange.start);
-        startDate.setHours(0, 0, 0, 0);
-        const endDate = new Date(dateRange.end);
-        endDate.setHours(23, 59, 59, 999);
-        let q = query(collection(db, "time_entries"), 
-            where("clockInTime", ">=", Timestamp.fromDate(startDate)),
-            where("clockInTime", "<=", Timestamp.fromDate(endDate))
-        );
-        if (reportEmployeeFilter !== 'all') {
-            q = query(q, where("employeeId", "==", reportEmployeeFilter));
-        }
-        if (reportAreaFilter !== 'all') {
-            q = query(q, where("workAreaId", "==", reportAreaFilter));
-        }
-        const querySnapshot = await getDocs(q);
-        const entries = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-        const areasWithHours = allWorkAreas.map(area => {
-            const entriesForArea = entries.filter(entry => entry.workAreaId === area.id && entry.clockOutTime);
-            const totalMillis = entriesForArea.reduce((sum, entry) => {
-                let duration = entry.clockOutTime.toMillis() - entry.clockInTime.toMillis();
-                const pauseMillis = (entry.pauses || []).reduce((pauseSum, p) => {
-                    if (p.start && p.end) {
-                        return pauseSum + (p.end.toMillis() - p.start.toMillis());
-                    }
-                    return pauseSum;
-                }, 0);
-                return sum + (duration - pauseMillis);
-            }, 0);
-            const totalHours = totalMillis / 3600000;
-            return { ...area, totalHours: totalHours.toFixed(2) };
-        });
-        setWorkAreasWithHours(areasWithHours);
-
-        const reportData = entries.map(entry => {
-            const employee = allEmployees.find(e => e.id === entry.employeeId);
-            const area = allWorkAreas.find(a => a.id === entry.workAreaId);
-            const clockIn = entry.clockInTime.toDate();
-            const clockOut = entry.clockOutTime ? entry.clockOutTime.toDate() : null;
-            let duration = null;
-            if (clockOut) {
-                const totalMs = clockOut.getTime() - clockIn.getTime();
-                const pauseMs = (entry.pauses || []).reduce((acc, p) => acc + (p.end.toMillis() - p.start.toMillis()), 0);
-                duration = (totalMs - pauseMs) / 3600000;
-            }
-            return {
-                id: entry.id,
-                employeeName: employee ? `${employee.name} ${employee.surname}` : 'Sconosciuto',
-                areaName: area ? area.name : 'Sconosciuta',
-                clockInDate: clockIn.toLocaleDateString('it-IT'),
-                clockInTimeFormatted: clockIn.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
-                clockOutTimeFormatted: clockOut ? clockOut.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : 'In corso',
-                duration: duration,
-                note: entry.note || '',
-            };
-        });
-        setReports(reportData);
-        setReportTitle(`Report dal ${dateRange.start} al ${dateRange.end}`);
-        setView('reports');
-        setIsLoading(false);
     };
 
-    const handleExportXml = () => { /* ... */ };
-    const requestSort = (key) => { /* ... */ };
+    const handleAdminPause = async () => {
+        if (!adminActiveEntry) return;
+        try {
+            const entryRef = doc(db, "time_entries", adminActiveEntry.id);
+            const entryDoc = await getDoc(entryRef);
+            const currentPauses = entryDoc.data().pauses || [];
+            if (adminActiveEntry.isOnBreak) {
+                const lastPauseIndex = currentPauses.length - 1;
+                if (lastPauseIndex >= 0 && !currentPauses[lastPauseIndex].end) {
+                    currentPauses[lastPauseIndex].end = Timestamp.fromDate(new Date());
+                    await updateDoc(entryRef, { pauses: currentPauses });
+                }
+            } else {
+                const newPause = { start: Timestamp.fromDate(new Date()), end: null };
+                await updateDoc(entryRef, { pauses: [...currentPauses, newPause] });
+            }
+        } catch (error) {
+            console.error("Errore nella gestione della pausa:", error);
+            alert("Si è verificato un errore durante la gestione della pausa.");
+        }
+    };
+
+    const handleAdminApplyPause = async (employee) => {
+        if (!employee || !employee.activeEntry) {
+            alert("Impossibile applicare la pausa: nessuna timbratura attiva trovata.");
+            return;
+        }
+        const workArea = allWorkAreas.find(area => area.id === employee.activeEntry.workAreaId);
+        if (!workArea || !workArea.pauseDuration || workArea.pauseDuration === 0) {
+            alert("Nessuna durata di pausa predefinita impostata per questa area di lavoro.");
+            return;
+        }
+        const pauseDurationInMinutes = workArea.pauseDuration;
+        try {
+            const entryRef = doc(db, "time_entries", employee.activeEntry.id);
+            const entryDoc = await getDoc(entryRef);
+            const currentPauses = entryDoc.data().pauses || [];
+            const startTime = new Date();
+            const endTime = new Date(startTime.getTime() + pauseDurationInMinutes * 60000);
+            const newPause = { 
+                start: Timestamp.fromDate(startTime),
+                end: Timestamp.fromDate(endTime),
+                duration: pauseDurationInMinutes,
+                createdBy: user.uid
+            };
+            await updateDoc(entryRef, {
+                pauses: [...currentPauses, newPause]
+            });
+            alert(`Pausa di ${pauseDurationInMinutes} minuti applicata con successo.`);
+        } catch (error) {
+            console.error("Errore durante l'applicazione della pausa:", error);
+            alert(`Si è verificato un errore: ${error.message}`);
+        }
+    };
     
     const openModal = (type, item = null) => {
         setModalType(type);
@@ -507,16 +516,186 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         setShowModal(true);
     };
 
+    const generateReport = async () => {
+        if (!dateRange.start || !dateRange.end) {
+            alert("Seleziona un intervallo di date valido.");
+            return;
+        }
+        setIsLoading(true);
+        try {
+            const startDate = new Date(dateRange.start);
+            startDate.setHours(0, 0, 0, 0);
+            const endDate = new Date(dateRange.end);
+            endDate.setHours(23, 59, 59, 999);
+
+            let q = query(collection(db, "time_entries"), 
+                where("clockInTime", ">=", Timestamp.fromDate(startDate)),
+                where("clockInTime", "<=", Timestamp.fromDate(endDate))
+            );
+
+            if (reportEmployeeFilter !== 'all') {
+                q = query(q, where("employeeId", "==", reportEmployeeFilter));
+            }
+            if (reportAreaFilter !== 'all') {
+                q = query(q, where("workAreaId", "==", reportAreaFilter));
+            }
+            
+            const querySnapshot = await getDocs(q);
+            const entries = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+            const areasWithHours = allWorkAreas.map(area => {
+                const entriesForArea = entries.filter(entry => entry.workAreaId === area.id && entry.clockOutTime);
+                const totalMillis = entriesForArea.reduce((sum, entry) => {
+                    let duration = entry.clockOutTime.toMillis() - entry.clockInTime.toMillis();
+                    const pauseMillis = (entry.pauses || []).reduce((pauseSum, p) => {
+                        if (p.start && p.end) {
+                            return pauseSum + (p.end.toMillis() - p.start.toMillis());
+                        }
+                        return pauseSum;
+                    }, 0);
+                    return sum + (duration - pauseMillis);
+                }, 0);
+                const totalHours = totalMillis / 3600000;
+                return { ...area, totalHours: totalHours.toFixed(2) };
+            });
+            setWorkAreasWithHours(areasWithHours);
+
+            const reportData = entries.map(entry => {
+                const employee = allEmployees.find(e => e.id === entry.employeeId);
+                const area = allWorkAreas.find(a => a.id === entry.workAreaId);
+                const clockIn = entry.clockInTime.toDate();
+                const clockOut = entry.clockOutTime ? entry.clockOutTime.toDate() : null;
+                let duration = null;
+                if (clockOut) {
+                    const totalMs = clockOut.getTime() - clockIn.getTime();
+                    const pauseMs = (entry.pauses || []).reduce((acc, p) => {
+                        if (p.start && p.end) return acc + (p.end.toMillis() - p.start.toMillis());
+                        return acc;
+                    }, 0);
+                    duration = (totalMs - pauseMs) / 3600000;
+                }
+                return {
+                    id: entry.id,
+                    employeeName: employee ? `${employee.name} ${employee.surname}` : 'Sconosciuto',
+                    areaName: area ? area.name : 'Sconosciuta',
+                    clockInDate: clockIn.toLocaleDateString('it-IT'),
+                    clockInTimeFormatted: clockIn.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
+                    clockOutTimeFormatted: clockOut ? clockOut.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : 'In corso',
+                    duration: duration,
+                    note: entry.note || '',
+                    createdBy: entry.createdBy || null,
+                    employeeId: entry.employeeId,
+                };
+            });
+            setReports(reportData);
+            setReportTitle(`Report dal ${dateRange.start} al ${dateRange.end}`);
+            setView('reports');
+        } catch (error) {
+            console.error("Errore generando il report:", error);
+            alert("Si è verificato un errore durante la generazione del report.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleExportXml = () => { /* Logic to export XML */ };
+    const requestSort = (key) => {
+        let direction = 'ascending';
+        if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
+            direction = 'descending';
+        }
+        setSortConfig({ key, direction });
+    };
+    
     if (isLoading) { return <div className="min-h-screen flex items-center justify-center bg-gray-100 w-full"><p>Caricamento dati...</p></div>; }
 
     return (
         <div className="min-h-screen bg-gray-100 w-full">
-            <header> {/* ... JSX ... */} </header>
-            <nav> {/* ... JSX ... */} </nav>
+            <header className="bg-white shadow-md">
+                 <div className="max-w-7xl mx-auto py-3 px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                    <CompanyLogo />
+                    {currentUserRole === 'preposto' && adminEmployeeProfile && (
+                        <div className="bg-gray-50 p-2 rounded-lg border border-gray-200 text-center">
+                            {adminActiveEntry ? (
+                                <div className="space-y-2">
+                                    <div>
+                                        <p className="text-sm font-semibold text-green-600">Sei al lavoro</p>
+                                        {adminActiveEntry.isOnBreak && <p className="text-xs font-semibold text-yellow-600">In Pausa</p>}
+                                    </div>
+                                    <div className="flex gap-2 justify-center">
+                                        <button 
+                                            onClick={handleAdminPause} 
+                                            className={`text-xs px-3 py-1 text-white rounded ${adminActiveEntry.isOnBreak ? 'bg-green-500 hover:bg-green-600' : 'bg-yellow-500 hover:bg-yellow-600'}`}
+                                        >
+                                            {adminActiveEntry.isOnBreak ? 'Termina Pausa' : 'Inizia Pausa'}
+                                        </button>
+                                        <button 
+                                            onClick={handleAdminClockOut} 
+                                            disabled={adminActiveEntry.isOnBreak}
+                                            className="text-xs px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 disabled:bg-gray-400"
+                                        >
+                                            Timbra Uscita
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div>
+                                    <p className="text-sm font-semibold text-red-600">Non sei al lavoro</p>
+                                    <button onClick={() => openModal('adminClockIn', adminEmployeeProfile)} className="mt-1 text-xs px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700">Timbra Entrata</button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                    <div className="flex items-center space-x-4">
+                        <span className="text-sm text-gray-600 text-right">
+                            {currentUserRole === 'admin' ? 'Admin' : 'Preposto'}:<br/>
+                            <span className="font-medium">{userData?.name && userData?.surname ? `${userData.name} ${userData.surname}` : user?.email}</span>
+                        </span>
+                        <button onClick={handleLogout} className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 text-sm">Logout</button>
+                    </div>
+                </div>
+            </header>
+            <nav className="bg-white border-b border-gray-200">
+                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div className="flex justify-center">
+                        <div className="flex flex-wrap justify-center py-2 sm:space-x-4">
+                            <button onClick={() => setView('dashboard')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'dashboard' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Dashboard</button>
+                            <button onClick={() => setView('employees')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'employees' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Dipendenti</button>
+                            <button onClick={() => setView('areas')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'areas' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Aree</button>
+                            {currentUserRole === 'admin' && <button onClick={() => setView('admins')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'admins' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Admin</button>}
+                        </div>
+                    </div>
+                </div>
+            </nav>
             <div className="max-w-7xl mx-auto w-full p-4 sm:p-6 lg:p-8">
                 {view !== 'reports' && (
                    <div className="bg-white shadow-md rounded-lg p-4 mb-6">
-                        {/* ... JSX form ... */}
+                        <h3 className="text-lg font-medium text-gray-900 mb-4 text-center sm:text-left">Genera Report Personalizzato</h3>
+                        <div className="flex flex-col gap-3 md:flex-row md:items-baseline md:flex-wrap md:gap-4">
+                           <div className="flex items-center justify-between md:justify-start">
+                                <label htmlFor="startDate" className="w-28 text-sm font-medium text-gray-700 text-left">Da:</label>
+                                <input type="date" id="startDate" value={dateRange.start} onChange={e => setDateRange({ ...dateRange, start: e.target.value })} className="p-1 border border-gray-300 rounded-md w-full" />
+                            </div>
+                            <div className="flex items-center justify-between md:justify-start">
+                                <label htmlFor="endDate" className="w-28 text-sm font-medium text-gray-700 text-left">A:</label>
+                                <input type="date" id="endDate" value={dateRange.end} onChange={e => setDateRange({ ...dateRange, end: e.target.value })} className="p-1 border border-gray-300 rounded-md w-full" />
+                            </div>
+                            <div className="flex items-center justify-between md:justify-start">
+                                <label htmlFor="areaFilter" className="w-28 text-sm font-medium text-gray-700 text-left">Area:</label>
+                                <select id="areaFilter" value={reportAreaFilter} onChange={e => setReportAreaFilter(e.target.value)} className="p-1 border border-gray-300 rounded-md w-full">
+                                    <option value="all">Tutte le Aree</option>
+                                    {allWorkAreas.map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}
+                                </select>
+                            </div>
+                            <div className="flex items-center justify-between md:justify-start">
+                                <label htmlFor="employeeFilter" className="w-28 text-sm font-medium text-gray-700 text-left">Dipendente:</label>
+                                <select id="employeeFilter" value={reportEmployeeFilter} onChange={e => setReportEmployeeFilter(e.target.value)} className="p-1 border border-gray-300 rounded-md w-full">
+                                    <option value="all">Tutti i Dipendenti</option>
+                                    {allEmployees.sort((a,b) => `${a.name} ${a.surname}`.localeCompare(`${b.name} ${b.surname}`)).map(emp => (<option key={emp.id} value={emp.id}>{emp.name} {emp.surname}</option>))}
+                                </select>
+                            </div>
+                            <button onClick={generateReport} className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm w-full md:w-auto md:ml-auto">Genera Report</button>
+                        </div>
                    </div>
                 )}
                 <main>
@@ -531,7 +710,15 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 type={modalType} 
                 item={selectedItem} 
                 setShowModal={setShowModal} 
-                // ... props
+                workAreas={allWorkAreas} 
+                onDataUpdate={fetchData} 
+                user={user} 
+                superAdminEmail={superAdminEmail} 
+                allEmployees={allEmployees} 
+                currentUserRole={currentUserRole} 
+                userData={userData}
+                onAdminClockIn={handleAdminClockIn}
+                onAdminApplyPause={handleAdminApplyPause}
             />}
         </div>
     );
