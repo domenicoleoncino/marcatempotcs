@@ -317,15 +317,17 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             const allEmployeesList = (await getDocs(collection(db, "employees"))).docs.map(doc => ({ id: doc.id, ...doc.data() }));
             setAllEmployees(allEmployeesList);
 
-            if (currentUserRole === 'preposto') {
+                        if (currentUserRole === 'preposto') {
                 const q = query(collection(db, "employees"), where("userId", "==", user.uid));
                 const adminEmployeeSnapshot = await getDocs(q);
                 if (!adminEmployeeSnapshot.empty) {
                     const adminProfile = { id: adminEmployeeSnapshot.docs[0].id, ...adminEmployeeSnapshot.docs[0].data() };
                     setAdminEmployeeProfile(adminProfile);
+                } else {
+                    console.log("Profilo dipendente per il preposto non trovato.");
+                    setAdminEmployeeProfile(null);
                 }
             }
-
             const qAdmins = query(collection(db, "users"), where("role", "in", ["admin", "preposto"]));
             const adminsSnapshot = await getDocs(qAdmins);
             const adminUsers = adminsSnapshot.docs.map(doc => {
