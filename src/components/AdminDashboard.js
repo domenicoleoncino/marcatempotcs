@@ -598,7 +598,31 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         }
     };
 
-    const handleExportXml = () => { /* Logic to export XML */ };
+    const handleExportXml = () => {
+        let xmlString = '<?xml version="1.0" encoding="UTF-8"?>\n<Report>\n';
+        reports.forEach(entry => {
+            xmlString += `  <Timbratura>\n`;
+            xmlString += `    <Dipendente>${entry.employeeName}</Dipendente>\n`;
+            xmlString += `    <Area>${entry.areaName}</Area>\n`;
+            xmlString += `    <Data>${entry.clockInDate}</Data>\n`;
+            xmlString += `    <Entrata>${entry.clockInTimeFormatted}</Entrata>\n`;
+            xmlString += `    <Uscita>${entry.clockOutTimeFormatted}</Uscita>\n`;
+            xmlString += `    <Ore>${entry.duration ? entry.duration.toFixed(2) : 'N/A'}</Ore>\n`;
+            xmlString += `    <Note>${entry.note || ''}</Note>\n`;
+            xmlString += `  </Timbratura>\n`;
+        });
+        xmlString += '</Report>';
+
+        const blob = new Blob([xmlString], { type: 'application/xml' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `Report.xml`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     const requestSort = (key) => {
         let direction = 'ascending';
         if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
