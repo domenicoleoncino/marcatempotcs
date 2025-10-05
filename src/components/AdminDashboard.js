@@ -359,7 +359,9 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                     setAdminActiveEntry(null);
                 }
             }
-            const details = activeEntriesList.map(entry => {
+            const details = activeEntriesList
+            .filter(entry => entry.clockInTime)
+            .map(entry => {
                 const employee = allEmployees.find(emp => emp.id === entry.employeeId);
                 const area = allWorkAreas.find(ar => ar.id === entry.workAreaId);
                 const isOnBreak = entry.pauses?.some(p => !p.end) || false;
