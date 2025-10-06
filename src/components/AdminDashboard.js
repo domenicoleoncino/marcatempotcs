@@ -162,7 +162,8 @@ const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
                 <thead className="bg-gray-50">
                     <tr>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome Area</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Presenze</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Presenze Attuali</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ore da Report</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pausa (min)</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Azioni</th>
                     </tr>
@@ -172,6 +173,7 @@ const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
                         <tr key={area.id}>
                             <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{area.name}</td>
                             <td className="px-4 py-2 whitespace-nowrap text-sm font-bold text-center">{area.presenzeAttuali ?? 0}</td>
+                            <td className="px-4 py-2 whitespace-nowrap text-sm font-bold text-center">{area.totalHours ? `${area.totalHours}h` : 'N/D'}</td>
                             <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-700 text-center">{area.pauseDuration || 0}</td>
                             <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
                                 <div className="flex items-center gap-4">
@@ -551,7 +553,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             const querySnapshot = await getDocs(q);
             const entries = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-            const areasWithHours = allWorkAreas.map(area => {
+            const areasWithCalculatedHours = allWorkAreas.map(area => {
                 const entriesForArea = entries.filter(entry => entry.workAreaId === area.id && entry.clockOutTime);
                 const totalMillis = entriesForArea.reduce((sum, entry) => {
                     let duration = entry.clockOutTime.toMillis() - entry.clockInTime.toMillis();
@@ -566,7 +568,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 const totalHours = totalMillis / 3600000;
                 return { ...area, totalHours: totalHours.toFixed(2) };
             });
-            setWorkAreasWithHours(areasWithHours);
+            setWorkAreasWithHours(areasWithCalculatedHours);
 
             const reportData = entries.map(entry => {
                 const employee = allEmployees.find(e => e.id === entry.employeeId);
