@@ -366,6 +366,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 const isOnBreak = entry.pauses?.some(p => !p.end) || false;
                 return {
                     id: entry.id,
+                    workAreaId: entry.workAreaId,
                     employeeId: entry.employeeId,
                     employeeName: employee ? `${employee.name} ${employee.surname}` : 'Sconosciuto',
                     areaName: area ? area.name : 'Sconosciuta',
