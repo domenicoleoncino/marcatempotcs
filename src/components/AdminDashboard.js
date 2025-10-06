@@ -154,7 +154,7 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
 const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
     <div>
         <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Gestione Aree di Lavoro</h1>
+           <h1 className="text-2xl sm:text-3xl font-bold text-red-500">Gestione Aree - TEST DI AGGIORNAMENTO</h1>
             {currentUserRole === 'admin' && <button onClick={() => openModal('newArea')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">Aggiungi Area</button>}
         </div>
         <div className="bg-white shadow-md rounded-lg overflow-x-auto">
