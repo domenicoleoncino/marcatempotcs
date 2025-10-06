@@ -12,9 +12,14 @@ const db = admin.firestore();
 // =================================================================================
 exports.createNewUser = onCall(async (request) => {
     // Verifica che l'utente che fa la richiesta sia un admin o preposto
-    const callingUser = await db.collection('users').doc(request.auth.uid).get();
-    if (!callingUser.exists || !['admin', 'preposto'].includes(callingUser.data().role)) {
-        logger.error("Permesso negato:", { uid: request.auth.uid, role: callingUser.data().role });
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'La funzione può essere chiamata solo da utenti autenticati.');
+    }
+    const callingUserDoc = await db.collection('users').doc(request.auth.uid).get();
+    const callingUserData = callingUserDoc.data();
+
+    if (!callingUserDoc.exists || !['admin', 'preposto'].includes(callingUserData.role)) {
+        logger.error("Permesso negato:", { uid: request.auth.uid, role: callingUserData.role });
         throw new HttpsError('permission-denied', 'Solo admin o preposti possono creare nuovi utenti.');
     }
 
@@ -48,6 +53,7 @@ exports.createNewUser = onCall(async (request) => {
                 name: name,
                 surname: surname,
                 email: email,
+                phone: phone || '',
                 role: role,
                 requiresPasswordChange: true // Forza il cambio password al primo login
             });
@@ -70,8 +76,11 @@ exports.createNewUser = onCall(async (request) => {
 // =================================================================================
 exports.deleteUser = onCall(async (request) => {
     // Verifica che chi chiama sia un admin
-    const callingUser = await db.collection('users').doc(request.auth.uid).get();
-    if (!callingUser.exists || callingUser.data().role !== 'admin') {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'La funzione può essere chiamata solo da utenti autenticati.');
+    }
+    const callingUserDoc = await db.collection('users').doc(request.auth.uid).get();
+    if (!callingUserDoc.exists || callingUserDoc.data().role !== 'admin') {
         throw new HttpsError('permission-denied', 'Solo un admin può eliminare utenti.');
     }
 
@@ -94,7 +103,7 @@ exports.deleteUser = onCall(async (request) => {
 // =================================================================================
 // TRIGGER: PULISCE FIRESTORE QUANDO UN UTENTE VIENE CANCELLATO (AGGIORNATO A GEN 2)
 // =================================================================================
-exports.onUserDeleted = onUserDeleted(async (event) => {
+exports.onUserDeletedCleanup = onUserDeleted(async (event) => {
     const uid = event.data.uid;
     logger.info(`Inizio pulizia Firestore per l'utente cancellato: ${uid}`);
 
@@ -132,7 +141,10 @@ exports.syncAdminProfileToEmployees = onDocumentCreated("users/{userId}", (event
         name: userData.name,
         surname: userData.surname,
         email: userData.email,
-        role: userData.role, // Salva il ruolo anche qui se utile
+        phone: userData.phone || '', // Aggiunto per coerenza
+        role: userData.role,
+        workAreaIds: [], // Inizializza come array vuoto per future assegnazioni
+        workAreaNames: [], // Inizializza come array vuoto per future assegnazioni
     };
 
     // Usa l'UID dell'utente come ID del documento per coerenza
@@ -146,4 +158,3 @@ exports.syncAdminProfileToEmployees = onDocumentCreated("users/{userId}", (event
             return null;
         });
 });
-
