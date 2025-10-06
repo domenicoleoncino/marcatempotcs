@@ -8,7 +8,6 @@ import CompanyLogo from './CompanyLogo';
 import AdminModal from './AdminModal';
 
 // --- FUNZIONE DI ARROTONDAMENTO ---
-// ... (la tua funzione rimane invariata) ...
 const roundTimeWithCustomRules = (date, type) => {
     const newDate = new Date(date.getTime());
     const minutes = newDate.getMinutes();
@@ -33,10 +32,8 @@ const roundTimeWithCustomRules = (date, type) => {
     return newDate;
 };
 
-
 // --- SUB-COMPONENTI INTERNI ---
 const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours }) => (
-    // ... (questo componente rimane invariato) ...
     <div>
         <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-4">Dashboard</h1>
         <div className="flex flex-col md:grid md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
@@ -131,11 +128,7 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                                 <button onClick={() => openModal('applyPredefinedPause', emp)} className="px-2 py-1 text-xs bg-orange-500 text-white rounded-md hover:bg-orange-600 w-full text-center mt-1">Applica Pausa</button>
                                             </>
                                         ) : (
-                                            <button onClick={() => {
-                                                console.log('--- PASSO 1 ---');
-                                                console.log('Dati INVIATI al modal per ' + emp.name, emp); // <-- CONTROLLO 1
-                                                openModal('manualClockIn', emp);
-                                            }} className="px-2 py-1 text-xs bg-blue-500 text-white rounded-md hover:bg-blue-600 w-full text-center">Timbra Entrata</button>
+                                            <button onClick={() => openModal('manualClockIn', emp)} className="px-2 py-1 text-xs bg-blue-500 text-white rounded-md hover:bg-blue-600 w-full text-center">Timbra Entrata</button>
                                         )}
                                         {currentUserRole === 'admin' && (
                                             <>
@@ -158,7 +151,6 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
     );
 };
 
-// ... (gli altri sub-componenti come AreaManagementView, etc., rimangono invariati) ...
 const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
     <div>
         <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
@@ -170,7 +162,7 @@ const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
                 <thead className="bg-gray-50">
                     <tr>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome Area</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ore Totali (nel report)</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Presenze</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pausa (min)</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Azioni</th>
                     </tr>
@@ -179,8 +171,8 @@ const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
                     {workAreas.map(area => (
                         <tr key={area.id}>
                             <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{area.name}</td>
-                            <td className="px-4 py-2 whitespace-nowrap text-sm font-bold">{area.totalHours ? `${area.totalHours}h` : 'N/D'}</td>
-                            <td className="px-4 py-2 whitespace-nowrap text-sm font-bold text-gray-700">{area.pauseDuration || 0}</td>
+                            <td className="px-4 py-2 whitespace-nowrap text-sm font-bold text-center">{area.presenzeAttuali ?? 0}</td>
+                            <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-700 text-center">{area.pauseDuration || 0}</td>
                             <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
                                 <div className="flex items-center gap-4">
                                     {(currentUserRole === 'admin' || currentUserRole === 'preposto') && <button onClick={() => openModal('editArea', area)} className="text-green-600 hover:text-green-900">Modifica</button>}
@@ -242,7 +234,6 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
 };
 
 const ReportView = ({ reports, title, handleExportXml, user }) => (
-    // ... (questo componente rimane invariato) ...
     <div>
         <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 flex-wrap gap-4">
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">{title || 'Report'}</h1>
@@ -287,7 +278,6 @@ const ReportView = ({ reports, title, handleExportXml, user }) => (
 
 // --- COMPONENTE PRINCIPALE ---
 const AdminDashboard = ({ user, handleLogout, userData }) => {
-    // ... (tutti gli useState rimangono invariati) ...
     const [view, setView] = useState('dashboard');
     const [allEmployees, setAllEmployees] = useState([]);
     const [allWorkAreas, setAllWorkAreas] = useState([]);
@@ -316,7 +306,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const superAdminEmail = "domenico.leoncino@tcsitalia.com";
 
     const fetchData = useCallback(async () => {
-        // ... (questa funzione rimane invariata) ...
         if (!user || !userData) { setIsLoading(false); return; }
         setIsLoading(true);
         try {
@@ -357,7 +346,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     }, [fetchData]);
 
     useEffect(() => {
-        // ... (questo useEffect rimane invariato) ...
         if (!allEmployees.length || !allWorkAreas.length) return;
         const q = query(collection(db, "time_entries"), where("status", "==", "clocked-in"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -391,7 +379,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     }, [allEmployees, allWorkAreas, adminEmployeeProfile, currentUserRole]);
     
     useEffect(() => {
-        // ... (questo useEffect rimane invariato) ...
         const startOfDay = new Date();
         startOfDay.setHours(0, 0, 0, 0);
         const q = query(collection(db, "time_entries"), where("clockInTime", ">=", Timestamp.fromDate(startOfDay)));
@@ -436,19 +423,9 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 `${emp.name} ${emp.surname}`.toLowerCase().includes(lowercasedFilter)
             );
         }
-        
-        // --- CONTROLLO 2 ---
-        // Controlliamo l'oggetto del preposto come appare nella lista finale
-        const prepostoInList = sortableItems.find(emp => emp.userId === user.uid);
-        if (prepostoInList) {
-            console.log('--- PASSO 2 ---');
-            console.log('Dati del preposto NELLA LISTA FILTRATA:', prepostoInList);
-        }
-
         return sortableItems;
     }, [allEmployees, activeEmployeesDetails, currentUserRole, userData, user, searchTerm]);
 
-    // ... (tutte le altre funzioni come handleAdminClockIn, generateReport, etc., rimangono invariate) ...
     const handleAdminClockIn = async (areaId, timestamp) => {
         if (!adminEmployeeProfile) return;
         try {
@@ -634,7 +611,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     if (isLoading) { return <div className="min-h-screen flex items-center justify-center bg-gray-100 w-full"><p>Caricamento dati...</p></div>; }
 
     return (
-        // ... (tutto il JSX del return rimane invariato) ...
         <div className="min-h-screen bg-gray-100 w-full">
             <header className="bg-white shadow-md">
                  <div className="max-w-7xl mx-auto py-3 px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
@@ -726,7 +702,18 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 <main>
                     {view === 'dashboard' && <DashboardView totalEmployees={allEmployees.length} activeEmployeesDetails={activeEmployeesDetails} totalDayHours={totalDayHours} />}
                     {view === 'employees' && <EmployeeManagementView employees={sortedAndFilteredEmployees} openModal={openModal} currentUserRole={currentUserRole} requestSort={requestSort} sortConfig={sortConfig} searchTerm={searchTerm} setSearchTerm={setSearchTerm} />}
-                    {view === 'areas' && <AreaManagementView workAreas={workAreasWithHours} openModal={openModal} currentUserRole={currentUserRole} />}
+                    
+                    {view === 'areas' && (() => {
+                        const areasConPresenze = useMemo(() => {
+                            return workAreasWithHours.map(area => ({
+                                ...area,
+                                presenzeAttuali: activeEmployeesDetails.filter(d => d.workAreaId === area.id).length
+                            }));
+                        }, [workAreasWithHours, activeEmployeesDetails]);
+
+                        return <AreaManagementView workAreas={areasConPresenze} openModal={openModal} currentUserRole={currentUserRole} />;
+                    })()}
+
                     {view === 'admins' && <AdminManagementView admins={admins} openModal={openModal} user={user} superAdminEmail={superAdminEmail} currentUserRole={currentUserRole} />}
                     {view === 'reports' && <ReportView reports={reports} title={reportTitle} handleExportXml={handleExportXml} user={user} />}
                 </main>
