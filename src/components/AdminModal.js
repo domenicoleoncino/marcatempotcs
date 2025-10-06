@@ -300,7 +300,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                             <label htmlFor="workAreaId" className="block text-sm font-medium text-gray-700 mb-1">Area di Lavoro</label>
                             <select name="workAreaId" id="workAreaId" value={formData.workAreaId || ''} onChange={handleInputChange} required className="w-full p-2 border rounded">
                                 <option value="">Seleziona Area</option>
-                                {(item.workAreaIds || []).map(areaId => {
+                                {(formData.workAreaIds || []).map(areaId => {
                                     const area = workAreas.find(a => a.id === areaId);
                                     return area ? <option key={area.id} value={area.id}>{area.name}</option> : null;
                                 })}
@@ -323,7 +323,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                             <label htmlFor="workAreaId" className="block text-sm font-medium text-gray-700 mb-1">Area di Lavoro</label>
                             <select name="workAreaId" id="workAreaId" value={formData.workAreaId || ''} onChange={handleInputChange} required className="w-full p-2 border rounded">
                                 <option value="">Seleziona Area</option>
-                                {(item.workAreaIds || []).map(areaId => {
+                                {(formData.workAreaIds || []).map(areaId => {
                                     const area = workAreas.find(a => a.id === areaId);
                                     return area ? <option key={area.id} value={area.id}>{area.name}</option> : null;
                                 })}
@@ -333,16 +333,16 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                 );
             case 'manualClockOut':
                  return (
-                     <div className="space-y-4">
-                        <div>
-                            <label htmlFor="timestamp" className="block text-sm font-medium text-gray-700 mb-1">Data e Ora di Uscita</label>
-                            <input type="datetime-local" id="timestamp" name="timestamp" value={formData.timestamp || ''} onChange={handleInputChange} required className="w-full p-2 border rounded" />
-                        </div>
-                        <div>
-                            <label htmlFor="note" className="block text-sm font-medium text-gray-700 mb-1">Note (opzionale)</label>
-                            <textarea name="note" id="note" value={formData.note || ''} onChange={handleInputChange} placeholder="Aggiungi o modifica una nota..." className="w-full p-2 border rounded"></textarea>
-                        </div>
-                     </div>
+                       <div className="space-y-4">
+                            <div>
+                                <label htmlFor="timestamp" className="block text-sm font-medium text-gray-700 mb-1">Data e Ora di Uscita</label>
+                                <input type="datetime-local" id="timestamp" name="timestamp" value={formData.timestamp || ''} onChange={handleInputChange} required className="w-full p-2 border rounded" />
+                            </div>
+                            <div>
+                                <label htmlFor="note" className="block text-sm font-medium text-gray-700 mb-1">Note (opzionale)</label>
+                                <textarea name="note" id="note" value={formData.note || ''} onChange={handleInputChange} placeholder="Aggiungi o modifica una nota..." className="w-full p-2 border rounded"></textarea>
+                            </div>
+                       </div>
                  );
             case 'applyPredefinedPause': 
                 return <p>Sei sicuro di voler applicare la pausa predefinita a <strong>{item.name} {item.surname}</strong>?</p>;
