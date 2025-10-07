@@ -154,7 +154,7 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
 const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
     <div>
         <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
-           <h1 className="text-2xl sm:text-3xl font-bold text-red-500">Gestione Aree Di Lavoro</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Gestione Aree di Lavoro</h1>
             {currentUserRole === 'admin' && <button onClick={() => openModal('newArea')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">Aggiungi Area</button>}
         </div>
         <div className="bg-white shadow-md rounded-lg overflow-x-auto">
@@ -347,11 +347,24 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         fetchData();
     }, [fetchData]);
 
+    const managedEmployees = useMemo(() => {
+        if (currentUserRole !== 'preposto' || !userData?.managedAreaIds) {
+            return allEmployees; // L'admin vede tutti
+        }
+        const managedAreaIds = userData.managedAreaIds;
+        // Il preposto vede i dipendenti delle sue aree E se stesso
+        return allEmployees.filter(emp =>
+            (emp.workAreaIds && emp.workAreaIds.some(areaId => managedAreaIds.includes(areaId))) ||
+            emp.userId === user.uid
+        );
+    }, [allEmployees, currentUserRole, userData, user]);
+
     useEffect(() => {
         if (!allEmployees.length || !allWorkAreas.length) return;
         const q = query(collection(db, "time_entries"), where("status", "==", "clocked-in"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const activeEntriesList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            
             if (currentUserRole === 'preposto' && adminEmployeeProfile) {
                 const adminActiveEntryData = activeEntriesList.find(entry => entry.employeeId === adminEmployeeProfile.id);
                 if (adminActiveEntryData) {
@@ -361,7 +374,16 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                     setAdminActiveEntry(null);
                 }
             }
-            const details = activeEntriesList.map(entry => {
+
+            let visibleEntries = activeEntriesList;
+            if (currentUserRole === 'preposto') {
+                const managedEmployeeIds = managedEmployees.map(emp => emp.id);
+                visibleEntries = activeEntriesList.filter(entry => 
+                    managedEmployeeIds.includes(entry.employeeId)
+                );
+            }
+
+            const details = visibleEntries.map(entry => {
                 const employee = allEmployees.find(emp => emp.id === entry.employeeId);
                 const area = allWorkAreas.find(ar => ar.id === entry.workAreaId);
                 const isOnBreak = entry.pauses?.some(p => !p.end) || false;
@@ -375,10 +397,11 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                     status: isOnBreak ? 'In Pausa' : 'Al Lavoro'
                 };
             }).sort((a, b) => a.employeeName.localeCompare(b.employeeName));
+            
             setActiveEmployeesDetails(details);
         });
         return () => unsubscribe();
-    }, [allEmployees, allWorkAreas, adminEmployeeProfile, currentUserRole]);
+    }, [allEmployees, allWorkAreas, adminEmployeeProfile, currentUserRole, managedEmployees]);
     
     useEffect(() => {
         const startOfDay = new Date();
@@ -406,18 +429,11 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     }, []);
     
     const sortedAndFilteredEmployees = useMemo(() => {
-        let employeesInScope = allEmployees;
-        if (currentUserRole === 'preposto' && userData.managedAreaIds) {
-            const managedAreaIds = userData.managedAreaIds;
-            employeesInScope = allEmployees.filter(emp =>
-                (emp.workAreaIds && emp.workAreaIds.some(areaId => managedAreaIds.includes(areaId))) ||
-                emp.userId === user.uid
-            );
-        }
-        const employeesWithStatus = employeesInScope.map(emp => ({
+        const employeesWithStatus = managedEmployees.map(emp => ({
             ...emp,
             activeEntry: activeEmployeesDetails.find(detail => detail.employeeId === emp.id) || null,
         }));
+        
         let sortableItems = [...employeesWithStatus];
         if (searchTerm) {
             const lowercasedFilter = searchTerm.toLowerCase();
@@ -426,7 +442,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             );
         }
         return sortableItems;
-    }, [allEmployees, activeEmployeesDetails, currentUserRole, userData, user, searchTerm]);
+    }, [managedEmployees, activeEmployeesDetails, searchTerm]);
 
     const areasWithLivePresenze = useMemo(() => {
         return workAreasWithHours.map(area => ({
@@ -709,11 +725,9 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                    </div>
                 )}
                 <main>
-                    {view === 'dashboard' && <DashboardView totalEmployees={allEmployees.length} activeEmployeesDetails={activeEmployeesDetails} totalDayHours={totalDayHours} />}
+                    {view === 'dashboard' && <DashboardView totalEmployees={managedEmployees.length} activeEmployeesDetails={activeEmployeesDetails} totalDayHours={totalDayHours} />}
                     {view === 'employees' && <EmployeeManagementView employees={sortedAndFilteredEmployees} openModal={openModal} currentUserRole={currentUserRole} requestSort={requestSort} sortConfig={sortConfig} searchTerm={searchTerm} setSearchTerm={setSearchTerm} />}
-                    
                     {view === 'areas' && <AreaManagementView workAreas={areasWithLivePresenze} openModal={openModal} currentUserRole={currentUserRole} />}
-
                     {view === 'admins' && <AdminManagementView admins={admins} openModal={openModal} user={user} superAdminEmail={superAdminEmail} currentUserRole={currentUserRole} />}
                     {view === 'reports' && <ReportView reports={reports} title={reportTitle} handleExportXml={handleExportXml} user={user} />}
                 </main>
