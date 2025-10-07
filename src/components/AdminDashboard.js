@@ -438,15 +438,14 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     
 const sortedAndFilteredEmployees = useMemo(() => {
     const employeesWithDetails = managedEmployees.map(emp => {
-        // Per ogni dipendente, traduci gli ID delle aree nei nomi corrispondenti
         const areaNames = (emp.workAreaIds || []).map(id => {
             const area = allWorkAreas.find(a => a.id === id);
             return area ? area.name : null;
-        }).filter(Boolean); // Rimuove eventuali aree non trovate
+        }).filter(Boolean);
 
         return {
             ...emp,
-            workAreaNames: areaNames, // Crea o sovrascrive il campo con i nomi corretti
+            workAreaNames: areaNames,
             activeEntry: activeEmployeesDetails.find(detail => detail.employeeId === emp.id) || null,
         };
     });
@@ -458,8 +457,22 @@ const sortedAndFilteredEmployees = useMemo(() => {
             `${emp.name} ${emp.surname}`.toLowerCase().includes(lowercasedFilter)
         );
     }
+    
+    // QUESTA PARTE ERA MANCANTE
+    if (sortConfig !== null) {
+        sortableItems.sort((a, b) => {
+            if (a[sortConfig.key] < b[sortConfig.key]) {
+                return sortConfig.direction === 'ascending' ? -1 : 1;
+            }
+            if (a[sortConfig.key] > b[sortConfig.key]) {
+                return sortConfig.direction === 'ascending' ? 1 : -1;
+            }
+            return 0;
+        });
+    }
+
     return sortableItems;
-}, [managedEmployees, activeEmployeesDetails, searchTerm, allWorkAreas]); // NOTA: Ho aggiunto 'allWorkAreas'
+}, [managedEmployees, activeEmployeesDetails, searchTerm, allWorkAreas, sortConfig]); // Aggiunto sortConfig'
 
     const areasWithLivePresenze = useMemo(() => {
         let areasInScope = workAreasWithHours;
