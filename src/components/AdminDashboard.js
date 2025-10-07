@@ -445,11 +445,17 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     }, [managedEmployees, activeEmployeesDetails, searchTerm]);
 
     const areasWithLivePresenze = useMemo(() => {
-        return workAreasWithHours.map(area => ({
+        let areasInScope = workAreasWithHours;
+        if (currentUserRole === 'preposto' && userData?.managedAreaIds) {
+            areasInScope = workAreasWithHours.filter(area => 
+                userData.managedAreaIds.includes(area.id)
+            );
+        }
+        return areasInScope.map(area => ({
             ...area,
             presenzeAttuali: activeEmployeesDetails.filter(d => d.workAreaId === area.id).length
         }));
-    }, [workAreasWithHours, activeEmployeesDetails]);
+    }, [workAreasWithHours, activeEmployeesDetails, currentUserRole, userData]);
 
     const handleAdminClockIn = async (areaId, timestamp) => {
         if (!adminEmployeeProfile) return;
