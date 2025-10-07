@@ -1,3 +1,4 @@
+const { onDocumentUpdated } = require("firebase-functions/v2/firestore");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const { onUserDeleted } = require("firebase-functions/v2/auth");
@@ -197,4 +198,43 @@ exports.syncAdminProfileToEmployees = onDocumentCreated("users/{userId}", (event
     return db.collection('employees').doc(userId).set(employeeProfile)
         .then(() => logger.info(`Profilo 'employee' per ${userId} creato.`))
         .catch(error => logger.error(`Errore creazione profilo 'employee' per ${userId}:`, error));
+});
+// =================================================================================
+// TRIGGER: AGGIORNA I NOMI DELLE AREE QUANDO GLI ID CAMBIANO IN UN DIPENDENTE
+// =================================================================================
+exports.updateEmployeeWorkAreaNames = onDocumentUpdated("employees/{employeeId}", async (event) => {
+    const beforeData = event.data.before.data();
+    const afterData = event.data.after.data();
+
+    // Esegui la funzione solo se il campo workAreaIds è effettivamente cambiato
+    if (JSON.stringify(beforeData.workAreaIds) === JSON.stringify(afterData.workAreaIds)) {
+        logger.info(`Nessuna modifica a workAreaIds per l'impiegato ${event.params.employeeId}.`);
+        return null;
+    }
+
+    // Se non ci sono più ID, svuota anche l'array dei nomi
+    if (!afterData.workAreaIds || afterData.workAreaIds.length === 0) {
+        logger.info(`Svuoto workAreaNames per l'impiegato ${event.params.employeeId}.`);
+        return event.data.after.ref.update({ workAreaNames: [] });
+    }
+
+    try {
+        // Prendi tutti i documenti delle aree in una sola volta per efficienza
+        const workAreasSnapshot = await db.collection('work_areas').get();
+        const allAreas = workAreasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        // "Traduci" gli ID nei nomi corrispondenti
+        const areaNames = afterData.workAreaIds.map(id => {
+            const area = allAreas.find(a => a.id === id);
+            return area ? area.name : null;
+        }).filter(Boolean); // Rimuove eventuali risultati null se un'area è stata cancellata
+
+        logger.info(`Aggiorno workAreaNames per ${event.params.employeeId} con: ${areaNames.join(', ')}`);
+        
+        // Aggiorna il documento dell'impiegato con l'array dei nomi
+        return event.data.after.ref.update({ workAreaNames: areaNames });
+    } catch (error) {
+        logger.error(`Errore durante l'aggiornamento di workAreaNames per ${event.params.employeeId}:`, error);
+        return null;
+    }
 });
