@@ -359,6 +359,15 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         );
     }, [allEmployees, currentUserRole, userData, user]);
 
+    const managedAreas = useMemo(() => {
+        if (currentUserRole !== 'preposto' || !userData?.managedAreaIds) {
+            return allWorkAreas; // L'admin vede tutte le aree
+        }
+        return allWorkAreas.filter(area => 
+            userData.managedAreaIds.includes(area.id)
+        );
+    }, [allWorkAreas, currentUserRole, userData]);
+
     useEffect(() => {
         if (!allEmployees.length || !allWorkAreas.length) return;
         const q = query(collection(db, "time_entries"), where("status", "==", "clocked-in"));
@@ -716,14 +725,14 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                                 <label htmlFor="areaFilter" className="w-28 text-sm font-medium text-gray-700 text-left">Area:</label>
                                 <select id="areaFilter" value={reportAreaFilter} onChange={e => setReportAreaFilter(e.target.value)} className="p-1 border border-gray-300 rounded-md w-full">
                                     <option value="all">Tutte le Aree</option>
-                                    {allWorkAreas.map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}
+                                    {managedAreas.map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}
                                 </select>
                             </div>
                             <div className="flex items-center justify-between md:justify-start">
                                 <label htmlFor="employeeFilter" className="w-28 text-sm font-medium text-gray-700 text-left">Dipendente:</label>
                                 <select id="employeeFilter" value={reportEmployeeFilter} onChange={e => setReportEmployeeFilter(e.target.value)} className="p-1 border border-gray-300 rounded-md w-full">
                                     <option value="all">Tutti i Dipendenti</option>
-                                    {allEmployees.sort((a,b) => `${a.name} ${a.surname}`.localeCompare(`${b.name} ${b.surname}`)).map(emp => (<option key={emp.id} value={emp.id}>{emp.name} {emp.surname}</option>))}
+                                    {managedEmployees.sort((a,b) => `${a.name} ${a.surname}`.localeCompare(`${b.name} ${b.surname}`)).map(emp => (<option key={emp.id} value={emp.id}>{emp.name} {emp.surname}</option>))}
                                 </select>
                             </div>
                             <button onClick={generateReport} className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm w-full md:w-auto md:ml-auto">Genera Report</button>
