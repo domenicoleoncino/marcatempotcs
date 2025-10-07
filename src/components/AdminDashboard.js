@@ -349,10 +349,9 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
     const managedEmployees = useMemo(() => {
         if (currentUserRole !== 'preposto' || !userData?.managedAreaIds) {
-            return allEmployees; // L'admin vede tutti
+            return allEmployees;
         }
         const managedAreaIds = userData.managedAreaIds;
-        // Il preposto vede i dipendenti delle sue aree E se stesso
         return allEmployees.filter(emp =>
             (emp.workAreaIds && emp.workAreaIds.some(areaId => managedAreaIds.includes(areaId))) ||
             emp.userId === user.uid
@@ -361,7 +360,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
     const managedAreas = useMemo(() => {
         if (currentUserRole !== 'preposto' || !userData?.managedAreaIds) {
-            return allWorkAreas; // L'admin vede tutte le aree
+            return allWorkAreas;
         }
         return allWorkAreas.filter(area => 
             userData.managedAreaIds.includes(area.id)
