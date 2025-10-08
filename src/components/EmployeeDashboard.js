@@ -6,6 +6,8 @@ import {
 } from 'firebase/firestore';
 import { utils, writeFile } from 'xlsx';
 import { saveAs } from 'file-saver';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 import CompanyLogo from './CompanyLogo';
 import AdminModal from './AdminModal';
 
@@ -14,7 +16,7 @@ const roundTimeWithCustomRules = (date, type) => {
     const newDate = new Date(date.getTime());
     const minutes = newDate.getMinutes();
     if (type === 'entrata') {
-        if (minutes >= 46) { newDate.setHours(newDate.getHours() + 1); newDate.setMinutes(0); } 
+        if (minutes >= 46) { newDate.setHours(newDate.getHours() + 1); newDate.setMinutes(0); }
         else if (minutes >= 16) { newDate.setMinutes(30); }
         else { newDate.setMinutes(0); }
     } else if (type === 'uscita') {
@@ -70,7 +72,7 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours }
     </div>
 );
 
-const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortConfig, requestSort, searchTerm, setSearchTerm }) => {
+const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortConfig, requestSort, searchTerm, setSearchTerm, handleGenerateEmployeeReportPDF }) => {
     const getSortIndicator = (key) => {
         if (!sortConfig || sortConfig.key !== key) return '';
         return sortConfig.direction === 'ascending' ? ' ▲' : ' ▼';
@@ -104,40 +106,49 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                        {employees.map(emp => (
-                            <tr key={emp.id}>
-                                <td className="px-4 py-2 whitespace-nowrap">
-                                    <div className="text-sm font-medium text-gray-900">{emp.name} {emp.surname}</div>
-                                    <div className="text-xs text-gray-500 break-all">{emp.email}</div>
-                                </td>
-                                <td className="px-4 py-2 whitespace-nowrap">
-                                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${emp.activeEntry ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{emp.activeEntry ? 'Al Lavoro' : 'Non al Lavoro'}</span>
-                                </td>
-                                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{emp.workAreaNames?.join(', ') || 'N/A'}</td>
-                                <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
-                                    <div className="flex flex-col items-start gap-1">
-                                        {emp.activeEntry ? (
-                                            <>
-                                                <button onClick={() => openModal('manualClockOut', emp)} className="px-2 py-1 text-xs bg-yellow-500 text-white rounded-md hover:bg-yellow-600 w-full text-center">Timbra Uscita</button>
-                                                <button onClick={() => openModal('applyPredefinedPause', emp)} className="px-2 py-1 text-xs bg-orange-500 text-white rounded-md hover:bg-orange-600 w-full text-center mt-1">Applica Pausa</button>
-                                            </>
-                                        ) : (
-                                            <button onClick={() => openModal('manualClockIn', emp)} className="px-2 py-1 text-xs bg-blue-500 text-white rounded-md hover:bg-blue-600 w-full text-center">Timbra Entrata</button>
-                                        )}
-                                        {currentUserRole === 'admin' && (
-                                            <>
-                                                <div className="flex gap-2 w-full justify-start mt-1">
-                                                    <button onClick={() => openModal('assignArea', emp)} className="text-xs text-indigo-600 hover:text-indigo-900">Aree</button>
-                                                    <button onClick={() => openModal('editEmployee', emp)} className="text-xs text-green-600 hover:text-green-900">Modifica</button>
-                                                    <button onClick={() => openModal('deleteEmployee', emp)} className="text-xs text-red-600 hover:text-red-900">Elimina</button>
-                                                </div>
-                                                {emp.deviceIds && emp.deviceIds.length > 0 && <button onClick={() => openModal('resetDevice', emp)} className="text-xs text-yellow-600 hover:text-yellow-900 mt-1">Resetta Disp.</button>}
-                                            </>
-                                        )}
-                                    </div>
-                                </td>
-                            </tr>
-                        ))}
+                        {employees.map(emp => {
+                            const hasPauseBeenTaken = emp.activeEntry?.pauses && emp.activeEntry.pauses.length > 0;
+                            
+                            return (
+                                <tr key={emp.id}>
+                                    <td className="px-4 py-2 whitespace-nowrap">
+                                        <div className="text-sm font-medium text-gray-900">{emp.name} {emp.surname}</div>
+                                        <div className="text-xs text-gray-500 break-all">{emp.email}</div>
+                                    </td>
+                                    <td className="px-4 py-2 whitespace-nowrap">
+                                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${emp.activeEntry ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{emp.activeEntry ? 'Al Lavoro' : 'Non al Lavoro'}</span>
+                                    </td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{emp.workAreaNames?.join(', ') || 'N/A'}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
+                                        <div className="flex flex-col items-start gap-1">
+                                            {emp.activeEntry ? (
+                                                <>
+                                                    <button onClick={() => openModal('manualClockOut', emp)} className="px-2 py-1 text-xs bg-yellow-500 text-white rounded-md hover:bg-yellow-600 w-full text-center">Timbra Uscita</button>
+                                                    {!hasPauseBeenTaken && (
+                                                        <button onClick={() => openModal('applyPredefinedPause', emp)} className="px-2 py-1 text-xs bg-orange-500 text-white rounded-md hover:bg-orange-600 w-full text-center mt-1">
+                                                            Applica Pausa
+                                                        </button>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                <button onClick={() => openModal('manualClockIn', emp)} className="px-2 py-1 text-xs bg-blue-500 text-white rounded-md hover:bg-blue-600 w-full text-center">Timbra Entrata</button>
+                                            )}
+                                            {currentUserRole === 'admin' && (
+                                                <>
+                                                    <div className="flex flex-wrap gap-2 w-full justify-start mt-1">
+                                                        <button onClick={() => handleGenerateEmployeeReportPDF(emp)} className="text-xs text-blue-600 hover:text-blue-900">Report</button>
+                                                        <button onClick={() => openModal('assignArea', emp)} className="text-xs text-indigo-600 hover:text-indigo-900">Aree</button>
+                                                        <button onClick={() => openModal('editEmployee', emp)} className="text-xs text-green-600 hover:text-green-900">Modifica</button>
+                                                        <button onClick={() => openModal('deleteEmployee', emp)} className="text-xs text-red-600 hover:text-red-900">Elimina</button>
+                                                    </div>
+                                                    {emp.deviceIds && emp.deviceIds.length > 0 && <button onClick={() => openModal('resetDevice', emp)} className="text-xs text-yellow-600 hover:text-yellow-900 mt-1">Resetta Disp.</button>}
+                                                </>
+                                            )}
+                                        </div>
+                                    </td>
+                                </tr>
+                            );
+                        })}
                     </tbody>
                 </table>
             </div>
@@ -229,7 +240,7 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
     );
 };
 
-const ReportView = ({ reports, title, user }) => (
+const ReportView = ({ reports, title, user, handleExportExcel, handleExportXml }) => (
     <div>
         <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 flex-wrap gap-4">
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">{title || 'Report'}</h1>
@@ -270,32 +281,6 @@ const ReportView = ({ reports, title, user }) => (
         </div>
     </div>
 );
-
-
-// --- FUNZIONI GLOBALI DI ESPORTAZIONE ---
-const handleExportExcel = (data) => {
-    if (data.length === 0) return;
-    const ws = utils.json_to_sheet(data);
-    const wb = utils.book_new();
-    utils.book_append_sheet(wb, ws, "Report Timbrature");
-    writeFile(wb, "Report_Marcatempo.xlsx");
-};
-
-const handleExportXml = (data) => {
-    if (data.length === 0) return;
-    let xmlString = '<?xml version="1.0" encoding="UTF-8"?>\n<ReportTimbrature>\n';
-    data.forEach(entry => {
-        xmlString += '  <Timbratura>\n';
-        Object.keys(entry).forEach(key => {
-            const sanitizedKey = key.replace(/[^a-zA-Z0-9_]/g, '');
-            xmlString += `    <${sanitizedKey}>${entry[key] || ''}</${sanitizedKey}>\n`;
-        });
-        xmlString += '  </Timbratura>\n';
-    });
-    xmlString += '</ReportTimbrature>';
-    const blob = new Blob([xmlString], { type: "application/xml;charset=utf-8" });
-    saveAs(blob, "Report_Marcatempo.xml");
-};
 
 
 // --- COMPONENTE PRINCIPALE ---
@@ -683,6 +668,67 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         }
     };
     
+    const handleExportExcel = (data) => {
+        if (!data || data.length === 0) {
+            alert("Nessun dato da esportare.");
+            return;
+        }
+        const ws = utils.json_to_sheet(data);
+        const wb = utils.book_new();
+        utils.book_append_sheet(wb, ws, "Report Timbrature");
+        writeFile(wb, "Report_Marcatempo.xlsx");
+    };
+
+    const handleExportXml = (data) => {
+        if (!data || data.length === 0) {
+            alert("Nessun dato da esportare.");
+            return;
+        }
+        let xmlString = '<?xml version="1.0" encoding="UTF-8"?>\n<ReportTimbrature>\n';
+        data.forEach(entry => {
+            xmlString += '  <Timbratura>\n';
+            Object.keys(entry).forEach(key => {
+                const sanitizedKey = key.replace(/[^a-zA-Z0-9_]/g, '');
+                xmlString += `    <${sanitizedKey}>${entry[key] || ''}</${sanitizedKey}>\n`;
+            });
+            xmlString += '  </Timbratura>\n';
+        });
+        xmlString += '</ReportTimbrature>';
+        const blob = new Blob([xmlString], { type: "application/xml;charset=utf-8" });
+        saveAs(blob, "Report_Marcatempo.xml");
+    };
+    
+    const handleGenerateEmployeeReportPDF = (employee) => {
+        if (!employee || reports.length === 0) {
+            alert("Per generare un report per un dipendente, prima genera un report generale con il periodo desiderato.");
+            return;
+        }
+        const employeeReports = reports.filter(r => r.employeeId === employee.id);
+        if (employeeReports.length === 0) {
+            alert(`Nessuna timbratura trovata per ${employee.name} ${employee.surname} nel periodo del report attuale.`);
+            return;
+        }
+        const doc = new jsPDF();
+        doc.setFontSize(18);
+        doc.text(`Report Timbrature per ${employee.name} ${employee.surname}`, 14, 22);
+        doc.setFontSize(11);
+        doc.setTextColor(100);
+        doc.text(`Periodo: ${reportTitle.replace('Report ', '')}`, 14, 30);
+        doc.autoTable({
+            startY: 40,
+            head: [['Data', 'Area', 'Entrata', 'Uscita', 'Ore', 'Note']],
+            body: employeeReports.map(entry => [
+                entry.clockInDate,
+                entry.areaName,
+                entry.clockInTimeFormatted,
+                entry.clockOutTimeFormatted,
+                entry.duration !== null ? entry.duration.toFixed(2) : 'N/A',
+                entry.note || ''
+            ]),
+        });
+        doc.save(`Report_${employee.surname}_${employee.name}.pdf`);
+    };
+
     const requestSort = (key) => {
         let direction = 'ascending';
         if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
@@ -784,10 +830,10 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 )}
                 <main>
                     {view === 'dashboard' && <DashboardView totalEmployees={managedEmployees.length} activeEmployeesDetails={activeEmployeesDetails} totalDayHours={totalDayHours} />}
-                    {view === 'employees' && <EmployeeManagementView employees={sortedAndFilteredEmployees} openModal={openModal} currentUserRole={currentUserRole} requestSort={requestSort} sortConfig={sortConfig} searchTerm={searchTerm} setSearchTerm={setSearchTerm} />}
+                    {view === 'employees' && <EmployeeManagementView employees={sortedAndFilteredEmployees} openModal={openModal} currentUserRole={currentUserRole} requestSort={requestSort} sortConfig={sortConfig} searchTerm={searchTerm} setSearchTerm={setSearchTerm} handleGenerateEmployeeReportPDF={handleGenerateEmployeeReportPDF} />}
                     {view === 'areas' && <AreaManagementView workAreas={areasWithLivePresenze} openModal={openModal} currentUserRole={currentUserRole} />}
                     {view === 'admins' && <AdminManagementView admins={admins} openModal={openModal} user={user} superAdminEmail={superAdminEmail} currentUserRole={currentUserRole} />}
-                    {view === 'reports' && <ReportView reports={reports} title={reportTitle} user={user} />}
+                    {view === 'reports' && <ReportView reports={reports} title={reportTitle} user={user} handleExportExcel={handleExportExcel} handleExportXml={handleExportXml} />}
                 </main>
             </div>
             {showModal && <AdminModal 
