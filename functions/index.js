@@ -1,6 +1,5 @@
-const { onDocumentUpdated } = require("firebase-functions/v2/firestore");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
-const { onDocumentCreated } = require("firebase-functions/v2/firestore");
+const { onDocumentCreated, onDocumentUpdated } = require("firebase-functions/v2/firestore");
 const { onUserDeleted } = require("firebase-functions/v2/auth");
 const admin = require("firebase-admin");
 const logger = require("firebase-functions/logger");
@@ -13,107 +12,79 @@ const db = admin.firestore();
 // FUNZIONI PER LA TIMBRATURA DEL DIPENDENTE
 // =================================================================================
 
-/**
- * Permette a un dipendente autenticato di timbrare l'entrata.
- */
 exports.clockEmployeeIn = onCall(async (request) => {
-    if (!request.auth) {
-        throw new HttpsError('unauthenticated', 'Devi essere autenticato.');
-    }
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Devi essere autenticato.');
     const employeeId = request.auth.uid;
     const { areaId } = request.data;
-    if (!areaId) {
-        throw new HttpsError('invalid-argument', 'Devi specificare un\'area di lavoro.');
-    }
+    if (!areaId) throw new HttpsError('invalid-argument', 'Devi specificare un\'area di lavoro.');
 
     const activeEntryQuery = await db.collection('time_entries').where('employeeId', '==', employeeId).where('status', '==', 'clocked-in').get();
-    if (!activeEntryQuery.empty) {
-        throw new HttpsError('already-exists', 'Hai già una timbratura di entrata attiva.');
-    }
+    if (!activeEntryQuery.empty) throw new HttpsError('already-exists', 'Hai già una timbratura di entrata attiva.');
 
     const newEntry = {
-        employeeId: employeeId,
-        workAreaId: areaId,
-        clockInTime: Timestamp.now(),
-        clockOutTime: null,
-        status: 'clocked-in',
-        pauses: [],
-        createdBy: employeeId
+        employeeId: employeeId, workAreaId: areaId, clockInTime: Timestamp.now(),
+        clockOutTime: null, status: 'clocked-in', pauses: [], createdBy: employeeId
     };
-
     await db.collection('time_entries').add(newEntry);
     logger.info(`Timbratura entrata per ${employeeId} nell'area ${areaId}`);
     return { success: true, message: 'Entrata registrata con successo.' };
 });
 
-/**
- * Permette a un dipendente autenticato di timbrare l'uscita.
- */
 exports.clockEmployeeOut = onCall(async (request) => {
-    if (!request.auth) {
-        throw new HttpsError('unauthenticated', 'Devi essere autenticato.');
-    }
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Devi essere autenticato.');
     const employeeId = request.auth.uid;
     
     const activeEntrySnapshot = await db.collection('time_entries').where('employeeId', '==', employeeId).where('status', '==', 'clocked-in').get();
-
-    if (activeEntrySnapshot.empty) {
-        throw new HttpsError('not-found', 'Nessuna timbratura attiva da chiudere.');
-    }
+    if (activeEntrySnapshot.empty) throw new HttpsError('not-found', 'Nessuna timbratura attiva da chiudere.');
+    
     const entryDoc = activeEntrySnapshot.docs[0];
     const entryData = entryDoc.data();
-
     if (entryData.pauses && entryData.pauses.some(p => !p.end)) {
-        throw new HttpsError('failed-precondition', 'Non puoi timbrare l\'uscita mentre sei in pausa.');
+        throw new HttpsError('failed-precondition', 'Non puoi timbrare l\'uscita mentre sei in pausa. Termina prima la pausa.');
     }
 
-    await entryDoc.ref.update({
-        status: 'clocked-out',
-        clockOutTime: Timestamp.now()
-    });
-    
+    await entryDoc.ref.update({ status: 'clocked-out', clockOutTime: Timestamp.now() });
     logger.info(`Timbratura uscita per ${employeeId}`);
     return { success: true, message: 'Uscita registrata con successo.' };
 });
 
-/**
- * Permette a un dipendente di timbrare una pausa di durata predefinita.
- */
 exports.clockEmployeePause = onCall(async (request) => {
-    if (!request.auth) {
-        throw new HttpsError('unauthenticated', 'Devi essere autenticato.');
-    }
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Devi essere autenticato.');
     const employeeId = request.auth.uid;
 
     const querySnapshot = await db.collection('time_entries').where('employeeId', '==', employeeId).where('status', '==', 'clocked-in').get();
-    if (querySnapshot.empty) {
-        throw new HttpsError('not-found', 'Nessuna timbratura attiva trovata.');
-    }
+    if (querySnapshot.empty) throw new HttpsError('not-found', 'Nessuna timbratura attiva trovata.');
     
     const activeEntryDoc = querySnapshot.docs[0];
     const activeEntryData = activeEntryDoc.data();
-    const workAreaDoc = await db.collection('work_areas').doc(activeEntryData.workAreaId).get();
 
+    // --- CONTROLLO DI SICUREZZA AGGIUNTO ---
+    if (activeEntryData.pauses && activeEntryData.pauses.length > 0) {
+        throw new HttpsError('already-exists', 'Una pausa è già stata registrata per questa sessione di lavoro.');
+    }
+    // --- FINE CONTROLLO ---
+
+    const workAreaDoc = await db.collection('work_areas').doc(activeEntryData.workAreaId).get();
     if (!workAreaDoc.exists || !workAreaDoc.data().pauseDuration || workAreaDoc.data().pauseDuration === 0) {
         throw new HttpsError('failed-precondition', 'Nessuna durata di pausa predefinita impostata per questa area di lavoro.');
     }
+    
     const pauseDurationInMinutes = workAreaDoc.data().pauseDuration;
     const currentPauses = activeEntryData.pauses || [];
     const startTime = new Date();
     const endTime = new Date(startTime.getTime() + pauseDurationInMinutes * 60000);
     const newPause = {
-        start: Timestamp.fromDate(startTime),
-        end: Timestamp.fromDate(endTime),
-        duration: pauseDurationInMinutes,
-        createdBy: employeeId
+        start: Timestamp.fromDate(startTime), end: Timestamp.fromDate(endTime),
+        duration: pauseDurationInMinutes, createdBy: employeeId
     };
     await activeEntryDoc.ref.update({ pauses: [...currentPauses, newPause] });
     logger.info(`Pausa di ${pauseDurationInMinutes} min registrata per ${employeeId}`);
     return { success: true, message: `Pausa di ${pauseDurationInMinutes} minuti registrata correttamente.` };
 });
 
+
 // =================================================================================
-// FUNZIONI DI GESTIONE UTENTI
+// FUNZIONI DI GESTIONE UTENTI E PROFILI
 // =================================================================================
 exports.createNewUser = onCall(async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'La funzione può essere chiamata solo da utenti autenticati.');
@@ -199,39 +170,28 @@ exports.syncAdminProfileToEmployees = onDocumentCreated("users/{userId}", (event
         .then(() => logger.info(`Profilo 'employee' per ${userId} creato.`))
         .catch(error => logger.error(`Errore creazione profilo 'employee' per ${userId}:`, error));
 });
-// =================================================================================
-// TRIGGER: AGGIORNA I NOMI DELLE AREE QUANDO GLI ID CAMBIANO IN UN DIPENDENTE
-// =================================================================================
+
 exports.updateEmployeeWorkAreaNames = onDocumentUpdated("employees/{employeeId}", async (event) => {
     const beforeData = event.data.before.data();
     const afterData = event.data.after.data();
 
-    // Esegui la funzione solo se il campo workAreaIds è effettivamente cambiato
     if (JSON.stringify(beforeData.workAreaIds) === JSON.stringify(afterData.workAreaIds)) {
-        logger.info(`Nessuna modifica a workAreaIds per l'impiegato ${event.params.employeeId}.`);
         return null;
     }
 
-    // Se non ci sono più ID, svuota anche l'array dei nomi
     if (!afterData.workAreaIds || afterData.workAreaIds.length === 0) {
-        logger.info(`Svuoto workAreaNames per l'impiegato ${event.params.employeeId}.`);
         return event.data.after.ref.update({ workAreaNames: [] });
     }
 
     try {
-        // Prendi tutti i documenti delle aree in una sola volta per efficienza
         const workAreasSnapshot = await db.collection('work_areas').get();
         const allAreas = workAreasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-        // "Traduci" gli ID nei nomi corrispondenti
         const areaNames = afterData.workAreaIds.map(id => {
             const area = allAreas.find(a => a.id === id);
             return area ? area.name : null;
-        }).filter(Boolean); // Rimuove eventuali risultati null se un'area è stata cancellata
+        }).filter(Boolean);
 
         logger.info(`Aggiorno workAreaNames per ${event.params.employeeId} con: ${areaNames.join(', ')}`);
-        
-        // Aggiorna il documento dell'impiegato con l'array dei nomi
         return event.data.after.ref.update({ workAreaNames: areaNames });
     } catch (error) {
         logger.error(`Errore durante l'aggiornamento di workAreaNames per ${event.params.employeeId}:`, error);
