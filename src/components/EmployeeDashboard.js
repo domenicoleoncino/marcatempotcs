@@ -1,304 +1,181 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
-import { 
-    doc, getDoc, collection, addDoc, getDocs, query, where, 
-    updateDoc, onSnapshot, orderBy, Timestamp
-} from 'firebase/firestore';
+import { collection, query, where, onSnapshot, getDoc, doc, getDocs, orderBy } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import CompanyLogo from './CompanyLogo';
-import Clock from './Clock';
-
-// NUOVA FUNZIONE DI ARROTONDAMENTO
-const roundTimeWithCustomRules = (date, type) => {
-    const newDate = new Date(date.getTime());
-    const minutes = newDate.getMinutes();
-    if (type === 'entrata') {
-        if (minutes >= 46) {
-            newDate.setHours(newDate.getHours() + 1);
-            newDate.setMinutes(0);
-        } else if (minutes >= 16) {
-            newDate.setMinutes(30);
-        } else {
-            newDate.setMinutes(0);
-        }
-    } else if (type === 'uscita') {
-        if (minutes >= 30) {
-            newDate.setMinutes(30);
-        } else {
-            newDate.setMinutes(0);
-        }
-    }
-    newDate.setSeconds(0);
-    newDate.setMilliseconds(0);
-    return newDate;
-};
-
-// Funzione di utilità per la geolocalizzazione
-const getDistance = (coords1, coords2) => {
-    const toRad = (x) => (x * Math.PI) / 180;
-    const R = 6371; // Raggio della Terra in km
-    const dLat = toRad(coords2.latitude - coords1.latitude);
-    const dLon = toRad(coords2.longitude - coords1.longitude);
-    const lat1 = toRad(coords1.latitude);
-    const lat2 = toRad(coords2.latitude);
-    const a =
-        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-        Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c * 1000; // in metri
-};
-
 
 const EmployeeDashboard = ({ user, handleLogout }) => {
-    const [employeeData, setEmployeeData] = useState(null);
-    const [workAreas, setWorkAreas] = useState([]);
-    const [currentPosition, setCurrentPosition] = useState(null);
-    const [locationError, setLocationError] = useState('');
-    const [status, setStatus] = useState({ clockedIn: false, area: null, entryId: null, isOnBreak: false });
-    const [canClockIn, setCanClockIn] = useState(false);
-    const [clockingInProgress, setClockingInProgress] = useState(false);
-    const [history, setHistory] = useState([]);
-    const [isLoadingHistory, setIsLoadingHistory] = useState(true);
+    const [currentTime, setCurrentTime] = useState(new Date());
+    const [employeeProfile, setEmployeeProfile] = useState(null);
+    const [activeEntry, setActiveEntry] = useState(null);
+    const [todaysEntries, setTodaysEntries] = useState([]);
+    const [workAreaName, setWorkAreaName] = useState('');
+    const [allWorkAreas, setAllWorkAreas] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isProcessing, setIsProcessing] = useState(false);
+
+    const functions = getFunctions();
+    const clockIn = httpsCallable(functions, 'clockEmployeeIn');
+    const clockOut = httpsCallable(functions, 'clockEmployeeOut');
+    const clockPause = httpsCallable(functions, 'clockEmployeePause');
 
     useEffect(() => {
-        const q = query(collection(db, "employees"), where("userId", "==", user.uid));
-        const unsubscribe = onSnapshot(q, async (querySnapshot) => {
-            if (!querySnapshot.empty) {
-                const empDoc = querySnapshot.docs[0];
-                const empData = { id: empDoc.id, ...empDoc.data() };
-                setEmployeeData(empData);
-                if (empData.workAreaIds && empData.workAreaIds.length > 0) {
-                    const areasQuery = query(collection(db, "work_areas"), where("__name__", "in", empData.workAreaIds));
-                    const areasSnapshot = await getDocs(areasQuery);
-                    setWorkAreas(areasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-                } else {
-                    setWorkAreas([]);
-                }
-            }
-        });
-        return () => unsubscribe();
-    }, [user.uid]);
-
-    useEffect(() => {
-        const watchId = navigator.geolocation.watchPosition(
-            (pos) => {
-                setCurrentPosition(pos.coords);
-                setLocationError('');
-            },
-            (err) => {
-                setLocationError('Impossibile ottenere la posizione. Assicurati di aver concesso i permessi.');
-                console.error(err);
-            },
-            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-        );
-        return () => navigator.geolocation.clearWatch(watchId);
+        const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+        return () => clearInterval(timer);
     }, []);
-    
+
+    // Carica il profilo del dipendente e tutte le aree di lavoro
     useEffect(() => {
-        if (!employeeData) return;
-        const q = query(collection(db, "time_entries"), 
-            where("employeeId", "==", employeeData.id),
-            where("status", "==", "clocked-in")
-        );
-        const unsubscribe = onSnapshot(q, async (snapshot) => {
-            if (!snapshot.empty) {
-                const entryDoc = snapshot.docs[0];
-                const entryData = entryDoc.data();
-                const areaDoc = await getDoc(doc(db, "work_areas", entryData.workAreaId));
-                const isOnBreak = entryData.pauses?.some(p => !p.end) || false;
-                setStatus({ clockedIn: true, area: areaDoc.exists() ? areaDoc.data().name : 'Sconosciuta', entryId: entryDoc.id, isOnBreak });
+        if (!user) return;
+        setIsLoading(true);
+
+        const fetchInitialData = async () => {
+            // Carica profilo
+            const employeeRef = doc(db, "employees", user.uid);
+            const employeeSnap = await getDoc(employeeRef);
+            if (employeeSnap.exists()) {
+                setEmployeeProfile({ id: employeeSnap.id, ...employeeSnap.data() });
             } else {
-                setStatus({ clockedIn: false, area: null, entryId: null, isOnBreak: false });
+                setEmployeeProfile(null);
             }
-        });
-        return () => unsubscribe();
-    }, [employeeData]);
 
+            // Carica tutte le aree
+            const areasSnapshot = await getDocs(collection(db, "work_areas"));
+            setAllWorkAreas(areasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            
+            setIsLoading(false);
+        };
+        fetchInitialData();
+    }, [user]);
+
+    // Ascolta le timbrature
     useEffect(() => {
-        if (currentPosition && workAreas.length > 0 && !status.clockedIn) {
-            const isInsideAnyArea = workAreas.some(area => {
-                const distance = getDistance(currentPosition, area);
-                return distance <= area.radius;
-            });
-            setCanClockIn(isInsideAnyArea);
-        } else {
-            setCanClockIn(false);
-        }
-    }, [currentPosition, workAreas, status.clockedIn]);
-
-    useEffect(() => {
-        if (!employeeData) return;
-        const qHistory = query(collection(db, "time_entries"), where("employeeId", "==", employeeData.id), orderBy("clockInTime", "desc"));
-        const unsubscribeHistory = onSnapshot(qHistory, async (snapshot) => {
-            const allAreas = await getDocs(collection(db, "work_areas"));
-            const areasMap = new Map(allAreas.docs.map(doc => [doc.id, doc.data().name]));
-            const entriesData = snapshot.docs.map(docSnapshot => {
-                const entry = { id: docSnapshot.id, ...docSnapshot.data() };
-                return {
-                    ...entry,
-                    areaName: areasMap.get(entry.workAreaId) || "Area Sconosciuta"
-                };
-            });
-            setHistory(entriesData);
-            setIsLoadingHistory(false);
-        }, (error) => {
-            console.error("Errore nel caricare la cronologia:", error);
-            setIsLoadingHistory(false);
-        });
-        return () => unsubscribeHistory();
-    }, [employeeData]);
-
-
-    const handleClockIn = async () => {
-        if (!canClockIn || !currentPosition || !employeeData) return;
-        setClockingInProgress(true);
-        let areaToClockIn = null;
-        for (const area of workAreas) {
-            if (getDistance(currentPosition, area) <= area.radius) {
-                areaToClockIn = area;
-                break;
-            }
-        }
-        if (areaToClockIn) {
-            try {
-                await addDoc(collection(db, "time_entries"), {
-                    employeeId: employeeData.id,
-                    workAreaId: areaToClockIn.id,
-                    clockInTime: roundTimeWithCustomRules(new Date(), 'entrata'),
-                    clockOutTime: null,
-                    status: 'clocked-in',
-                    createdBy: user.uid,
-                    pauses: []
-                });
-            } catch (err) { console.error("Error clocking in: ", err); }
-        }
-        setClockingInProgress(false);
-    };
-
-    const handleClockOut = async () => {
-        if (!status.entryId) return;
-        setClockingInProgress(true);
-        try {
-            await updateDoc(doc(db, "time_entries", status.entryId), {
-                clockOutTime: roundTimeWithCustomRules(new Date(), 'uscita'),
-                status: 'clocked-out',
-                createdBy: user.uid
-            });
-        } catch (err) { console.error("Error clocking out: ", err); }
-        setClockingInProgress(false);
-    };
-
-    const handlePause = async () => {
-        if (!status.entryId) return;
-        setClockingInProgress(true);
-        try {
-            const entryRef = doc(db, "time_entries", status.entryId);
-            const entryDoc = await getDoc(entryRef);
-            const currentPauses = entryDoc.data().pauses || [];
-            if (status.isOnBreak) { // L'utente sta finendo la pausa
-                const lastPauseIndex = currentPauses.length - 1;
-                if (lastPauseIndex >= 0 && !currentPauses[lastPauseIndex].end) {
-                    currentPauses[lastPauseIndex].end = Timestamp.fromDate(new Date());
-                    await updateDoc(entryRef, { pauses: currentPauses });
+        if (!user) return;
+        
+        const qActive = query(collection(db, "time_entries"), where("employeeId", "==", user.uid), where("status", "==", "clocked-in"));
+        const unsubscribeActive = onSnapshot(qActive, async (snapshot) => {
+            if (!snapshot.empty) {
+                const entryData = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
+                setActiveEntry(entryData);
+                if (entryData.workAreaId) {
+                    const areaDoc = await getDoc(doc(db, "work_areas", entryData.workAreaId));
+                    if (areaDoc.exists()) setWorkAreaName(areaDoc.data().name);
                 }
-            } else { // L'utente sta iniziando la pausa
-                const newPause = { start: Timestamp.fromDate(new Date()), end: null };
-                await updateDoc(entryRef, { pauses: [...currentPauses, newPause] });
+            } else {
+                setActiveEntry(null);
+                setWorkAreaName('');
             }
-        } catch (err) { console.error("Error handling pause: ", err); }
-        setClockingInProgress(false);
+        });
+
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
+        const qTodays = query(collection(db, "time_entries"), where("employeeId", "==", user.uid), where("clockInTime", ">=", startOfDay), orderBy("clockInTime", "desc"));
+        const unsubscribeTodays = onSnapshot(qTodays, (snapshot) => {
+            const entries = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setTodaysEntries(entries);
+        });
+
+        return () => {
+            unsubscribeActive();
+            unsubscribeTodays();
+        };
+    }, [user]);
+
+    const handleAction = async (action, areaId = null) => {
+        if (isProcessing) return;
+        setIsProcessing(true);
+        try {
+            let result;
+            if (action === 'clockIn') {
+                if (!areaId) throw new Error("Seleziona un'area prima di timbrare.");
+                result = await clockIn({ areaId });
+            } else if (action === 'clockOut') {
+                result = await clockOut();
+            } else if (action === 'clockPause') {
+                result = await clockPause();
+            }
+            alert(result.data.message);
+        } catch (error) {
+            alert(`Errore: ${error.message}`);
+        } finally {
+            setIsProcessing(false);
+        }
     };
     
-    return (
-        <div className="min-h-screen bg-gray-100 w-full">
-            <header className="bg-white shadow-md p-4 flex justify-between items-center w-full">
-                <CompanyLogo />
-                <div className="flex items-center space-x-4">
-                    <span className="text-gray-600 hidden sm:block">Dipendente: {employeeData ? `${employeeData.name} ${employeeData.surname}` : user.email}</span>
-                    <button onClick={handleLogout} className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600">Logout</button>
-                </div>
-            </header>
-            <main className="p-4 md:p-8 max-w-4xl mx-auto space-y-8 w-full">
-                <Clock />
-                <div className="bg-white p-6 rounded-xl shadow-lg text-center space-y-4">
-                    <h2 className="text-2xl font-bold text-gray-800">Stato Timbratura</h2>
-                    {status.clockedIn ? (
-                        <div className="p-4 bg-green-100 border-l-4 border-green-500 text-green-700 rounded-lg">
-                            <p className="font-bold">Timbratura ATTIVA</p>
-                            <p>Area: {status.area}</p>
-                            {status.isOnBreak && <p className="font-semibold text-yellow-600">In Pausa</p>}
-                        </div>
-                    ) : (
-                        <div className="p-4 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 rounded-lg">
-                            <p className="font-bold">Timbratura NON ATTIVA</p>
-                        </div>
-                    )}
-                    <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
-                        {status.clockedIn && (
-                            <button
-                                onClick={handlePause}
-                                disabled={clockingInProgress}
-                                className={`w-full sm:w-auto py-3 px-5 text-white font-bold rounded-lg shadow-lg transition duration-300 ${status.isOnBreak ? 'bg-green-500 hover:bg-green-600' : 'bg-yellow-500 hover:bg-yellow-600'}`}
-                            >
-                                {status.isOnBreak ? 'TERMINA PAUSA' : 'INIZIA PAUSA'}
-                            </button>
-                        )}
-                        {status.clockedIn ? (
-                            <button 
-                                onClick={handleClockOut}
-                                disabled={clockingInProgress || status.isOnBreak}
-                                className="w-full sm:w-auto py-4 px-6 bg-red-600 hover:bg-red-700 text-white font-bold text-xl rounded-lg shadow-lg transition duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed"
-                            >
-                                {clockingInProgress ? '...' : 'TIMBRA USCITA'}
-                            </button>
-                        ) : (
-                            <button 
-                                onClick={handleClockIn}
-                                disabled={!canClockIn || clockingInProgress}
-                                className="w-full md:w-1/2 py-4 px-6 bg-green-600 hover:bg-green-700 text-white font-bold text-xl rounded-lg shadow-lg transition duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed"
-                            >
-                                 {clockingInProgress ? '...' : 'TIMBRA ENTRATA'}
-                            </button>
-                        )}
-                    </div>
-                    {!status.clockedIn && !canClockIn && (
-                        <p className="text-red-500 mt-2 text-sm">
-                            {locationError ? locationError : "Non sei in un'area di lavoro autorizzata per la timbratura."}
-                        </p>
-                    )}
-                </div>
+    // Lista delle aree assegnate al dipendente per il menu a tendina
+    const employeeWorkAreas = useMemo(() => {
+        if (!employeeProfile || !employeeProfile.workAreaIds) return [];
+        return allWorkAreas.filter(area => employeeProfile.workAreaIds.includes(area.id));
+    }, [employeeProfile, allWorkAreas]);
 
-                <div className="bg-white p-6 rounded-xl shadow-lg">
-                    <h3 className="text-xl font-bold text-gray-800 mb-4">Cronologia Timbrature</h3>
-                    {isLoadingHistory ? ( <p>Caricamento...</p> ) : history.length > 0 ? (
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-50">
-                                    <tr>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Area</th>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entrata</th>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Uscita</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                    {history.map(entry => {
-                                        const clockIn = entry.clockInTime.toDate();
-                                        const clockOut = entry.clockOutTime ? entry.clockOutTime.toDate() : null;
-                                        return (
-                                            <tr key={entry.id}>
-                                                <td className="px-4 py-4 whitespace-nowrap text-sm">{clockIn.toLocaleDateString('it-IT')}</td>
-                                                <td className="px-4 py-4 whitespace-nowrap text-sm">{entry.areaName}</td>
-                                                <td className="px-4 py-4 whitespace-nowrap text-sm">{clockIn.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</td>
-                                                <td className="px-4 py-4 whitespace-nowrap text-sm">{clockOut ? clockOut.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : 'In corso...'}</td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
+    // NUOVA CONDIZIONE: controlla se è già stata registrata una pausa
+    const hasPauseBeenTaken = activeEntry?.pauses && activeEntry.pauses.length > 0;
+
+    if (isLoading) return <div className="min-h-screen flex items-center justify-center">Caricamento...</div>;
+    if (!employeeProfile) return <div className="min-h-screen flex items-center justify-center">Profilo non trovato. Contatta l'amministratore. <button onClick={handleLogout}>Logout</button></div>;
+
+    return (
+        <div className="p-4 max-w-lg mx-auto font-sans">
+            <CompanyLogo />
+            <div className="text-center my-4">
+                <p>Dipendente: {employeeProfile.name} {employeeProfile.surname}</p>
+                <p className="text-3xl font-bold">{currentTime.toLocaleTimeString('it-IT')}</p>
+                <p className="text-sm text-gray-500">{currentTime.toLocaleDateString('it-IT', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+            </div>
+
+            <div className="bg-white p-4 rounded-lg shadow-md">
+                <h2 className="text-xl font-bold mb-2">Stato Timbratura</h2>
+                {activeEntry ? (
+                    <div>
+                        <p className="text-green-600 font-semibold">Timbratura ATTIVA</p>
+                        <p>Area: {workAreaName}</p>
+                        <div className="flex gap-2 mt-4">
+                            {/* IL PULSANTE APPARE SOLO SE NON È STATA PRESA LA PAUSA */}
+                            {!hasPauseBeenTaken && (
+                                <button onClick={() => handleAction('clockPause')} disabled={isProcessing} className="flex-1 px-4 py-2 bg-yellow-500 text-white rounded-md hover:bg-yellow-600">
+                                    Timbra Pausa
+                                </button>
+                            )}
+                            <button onClick={() => handleAction('clockOut')} disabled={isProcessing} className="flex-1 px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600">
+                                Timbra Uscita
+                            </button>
                         </div>
-                    ) : ( <p className="text-gray-500">Nessuna timbratura trovata.</p> )}
+                    </div>
+                ) : (
+                    <div>
+                        <p className="text-red-600 font-semibold">Timbratura NON ATTIVA</p>
+                        <select id="areaSelect" className="w-full p-2 border rounded mt-2" defaultValue="">
+                            <option value="" disabled>Seleziona la tua area...</option>
+                            {employeeWorkAreas.map(area => (
+                                <option key={area.id} value={area.id}>{area.name}</option>
+                            ))}
+                        </select>
+                        <button onClick={() => handleAction('clockIn', document.getElementById('areaSelect').value)} disabled={isProcessing} className="w-full mt-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">
+                            Timbra Entrata
+                        </button>
+                    </div>
+                )}
+            </div>
+
+            <div className="mt-6">
+                <h2 className="text-xl font-bold mb-2">Cronologia Timbrature di Oggi</h2>
+                <div className="bg-white p-4 rounded-lg shadow-md space-y-2">
+                    {todaysEntries.length > 0 ? todaysEntries.map(entry => (
+                        <div key={entry.id} className="text-sm border-b pb-1">
+                            <p>
+                                <strong>Entrata:</strong> {entry.clockInTime.toDate().toLocaleTimeString('it-IT', { hour:'2-digit', minute:'2-digit' })} - 
+                                <strong> Uscita:</strong> {entry.clockOutTime ? entry.clockOutTime.toDate().toLocaleTimeString('it-IT', { hour:'2-digit', minute:'2-digit' }) : 'In corso'}
+                            </p>
+                            {entry.pauses && entry.pauses.length > 0 && (
+                                <p className="text-xs text-gray-500 pl-2">
+                                    {entry.pauses.length} pausa/e registrata/e.
+                                </p>
+                            )}
+                        </div>
+                    )) : <p className="text-sm text-gray-500">Nessuna timbratura trovata per oggi.</p>}
                 </div>
-            </main>
+            </div>
+             <button onClick={handleLogout} className="w-full mt-6 px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600">Logout</button>
         </div>
     );
 };

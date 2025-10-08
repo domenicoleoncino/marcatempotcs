@@ -12,20 +12,12 @@ const roundTimeWithCustomRules = (date, type) => {
     const newDate = new Date(date.getTime());
     const minutes = newDate.getMinutes();
     if (type === 'entrata') {
-        if (minutes >= 46) {
-            newDate.setHours(newDate.getHours() + 1);
-            newDate.setMinutes(0);
-        } else if (minutes >= 16) {
-            newDate.setMinutes(30);
-        } else {
-            newDate.setMinutes(0);
-        }
+        if (minutes >= 46) { newDate.setHours(newDate.getHours() + 1); newDate.setMinutes(0); } 
+        else if (minutes >= 16) { newDate.setMinutes(30); }
+        else { newDate.setMinutes(0); }
     } else if (type === 'uscita') {
-        if (minutes >= 30) {
-            newDate.setMinutes(30);
-        } else {
-            newDate.setMinutes(0);
-        }
+        if (minutes >= 30) { newDate.setMinutes(30); }
+        else { newDate.setMinutes(0); }
     }
     newDate.setSeconds(0);
     newDate.setMilliseconds(0);
