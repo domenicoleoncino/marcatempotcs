@@ -162,8 +162,7 @@ const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
                 <thead className="bg-gray-50">
                     <tr>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome Area</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Presenze Attuali</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ore da Report</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ore Totali (nel report)</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pausa (min)</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Azioni</th>
                     </tr>
@@ -172,9 +171,8 @@ const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
                     {workAreas.map(area => (
                         <tr key={area.id}>
                             <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{area.name}</td>
-                            <td className="px-4 py-2 whitespace-nowrap text-sm font-bold text-center">{area.presenzeAttuali ?? 0}</td>
-                            <td className="px-4 py-2 whitespace-nowrap text-sm font-bold text-center">{area.totalHours ? `${area.totalHours}h` : 'N/D'}</td>
-                            <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-700 text-center">{area.pauseDuration || 0}</td>
+                            <td className="px-4 py-2 whitespace-nowrap text-sm font-bold">{area.totalHours ? `${area.totalHours}h` : 'N/D'}</td>
+                            <td className="px-4 py-2 whitespace-nowrap text-sm font-bold text-gray-700">{area.pauseDuration || 0}</td>
                             <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
                                 <div className="flex items-center gap-4">
                                     {(currentUserRole === 'admin' || currentUserRole === 'preposto') && <button onClick={() => openModal('editArea', area)} className="text-green-600 hover:text-green-900">Modifica</button>}
@@ -240,7 +238,27 @@ const ReportView = ({ reports, title, handleExportXml, user }) => (
         <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 flex-wrap gap-4">
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">{title || 'Report'}</h1>
             <div className="flex items-center space-x-2">
-                <button disabled={reports.length === 0} className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 text-sm">Esporta Excel</button>
+                <button onClick={() => {
+                    // Implement Excel Export Logic
+                    if (typeof window.XLSX === 'undefined') { 
+                        alert("La libreria di esportazione non è ancora stata caricata. Riprova tra un momento."); 
+                        return; 
+                    }
+                    const dataToExport = reports.map(entry => ({ 
+                        'Dipendente': entry.employeeName, 
+                        'Area': entry.areaName, 
+                        'Data': entry.clockInDate, 
+                        'Entrata': entry.clockInTimeFormatted, 
+                        'Uscita': entry.clockOutTimeFormatted, 
+                        'Ore Lavorate': (entry.duration !== null) ? parseFloat(entry.duration.toFixed(2)) : "In corso", 
+                        'Note': entry.note 
+                    }));
+                    const ws = window.XLSX.utils.json_to_sheet(dataToExport);
+                    const wb = window.XLSX.utils.book_new();
+                    window.XLSX.utils.book_append_sheet(wb, ws, "Report Ore");
+                    ws['!cols'] = [{ wch: 30 }, { wch: 20 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 40 }];
+                    window.XLSX.writeFile(wb, `${title.replace(/ /g, '_')}.xlsx`);
+                }} disabled={reports.length === 0} className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 text-sm">Esporta Excel</button>
                 <button onClick={handleExportXml} disabled={reports.length === 0} className="px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:bg-gray-400 text-sm">Esporta XML</button>
             </div>
         </div>
@@ -347,32 +365,11 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         fetchData();
     }, [fetchData]);
 
-    const managedEmployees = useMemo(() => {
-        if (currentUserRole !== 'preposto' || !userData?.managedAreaIds) {
-            return allEmployees;
-        }
-        const managedAreaIds = userData.managedAreaIds;
-        return allEmployees.filter(emp =>
-            (emp.workAreaIds && emp.workAreaIds.some(areaId => managedAreaIds.includes(areaId))) ||
-            emp.userId === user.uid
-        );
-    }, [allEmployees, currentUserRole, userData, user]);
-
-    const managedAreas = useMemo(() => {
-        if (currentUserRole !== 'preposto' || !userData?.managedAreaIds) {
-            return allWorkAreas;
-        }
-        return allWorkAreas.filter(area => 
-            userData.managedAreaIds.includes(area.id)
-        );
-    }, [allWorkAreas, currentUserRole, userData]);
-
     useEffect(() => {
         if (!allEmployees.length || !allWorkAreas.length) return;
         const q = query(collection(db, "time_entries"), where("status", "==", "clocked-in"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const activeEntriesList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            
             if (currentUserRole === 'preposto' && adminEmployeeProfile) {
                 const adminActiveEntryData = activeEntriesList.find(entry => entry.employeeId === adminEmployeeProfile.id);
                 if (adminActiveEntryData) {
@@ -382,34 +379,25 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                     setAdminActiveEntry(null);
                 }
             }
-
-            let visibleEntries = activeEntriesList;
-            if (currentUserRole === 'preposto') {
-                const managedEmployeeIds = managedEmployees.map(emp => emp.id);
-                visibleEntries = activeEntriesList.filter(entry => 
-                    managedEmployeeIds.includes(entry.employeeId)
-                );
-            }
-
-            const details = visibleEntries.map(entry => {
-                const employee = allEmployees.find(emp => emp.id === entry.employeeId);
-                const area = allWorkAreas.find(ar => ar.id === entry.workAreaId);
-                const isOnBreak = entry.pauses?.some(p => !p.end) || false;
-                return {
-                    id: entry.id,
-                    workAreaId: entry.workAreaId,
-                    employeeId: entry.employeeId,
-                    employeeName: employee ? `${employee.name} ${employee.surname}` : 'Sconosciuto',
-                    areaName: area ? area.name : 'Sconosciuta',
-                    clockInTimeFormatted: entry.clockInTime.toDate().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
-                    status: isOnBreak ? 'In Pausa' : 'Al Lavoro'
-                };
-            }).sort((a, b) => a.employeeName.localeCompare(b.employeeName));
-            
+            const details = activeEntriesList
+                .filter(entry => entry.clockInTime)
+                .map(entry => {
+                    const employee = allEmployees.find(emp => emp.id === entry.employeeId);
+                    const area = allWorkAreas.find(ar => ar.id === entry.workAreaId);
+                    const isOnBreak = entry.pauses?.some(p => !p.end) || false;
+                    return {
+                        id: entry.id,
+                        employeeId: entry.employeeId,
+                        employeeName: employee ? `${employee.name} ${employee.surname}` : 'Sconosciuto',
+                        areaName: area ? area.name : 'Sconosciuta',
+                        clockInTimeFormatted: entry.clockInTime.toDate().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
+                        status: isOnBreak ? 'In Pausa' : 'Al Lavoro'
+                    };
+                }).sort((a, b) => a.employeeName.localeCompare(b.employeeName));
             setActiveEmployeesDetails(details);
         });
         return () => unsubscribe();
-    }, [allEmployees, allWorkAreas, adminEmployeeProfile, currentUserRole, managedEmployees]);
+    }, [allEmployees, allWorkAreas, adminEmployeeProfile, currentUserRole]);
     
     useEffect(() => {
         const startOfDay = new Date();
@@ -420,6 +408,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             const now = new Date();
             snapshot.docs.forEach(doc => {
                 const entry = doc.data();
+                if (!entry.clockInTime) return;
                 const clockIn = entry.clockInTime.toDate();
                 const clockOut = entry.clockOutTime ? entry.clockOutTime.toDate() : (entry.status === 'clocked-in' ? now : clockIn);
                 const pauseDurationMs = (entry.pauses || []).reduce((acc, p) => {
@@ -436,43 +425,28 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         return () => unsubscribe();
     }, []);
     
-const sortedAndFilteredEmployees = useMemo(() => {
-    const employeesWithDetails = managedEmployees.map(emp => {
-        // Per ogni dipendente, traduci gli ID delle aree nei nomi corrispondenti
-        const areaNames = (emp.workAreaIds || []).map(id => {
-            const area = allWorkAreas.find(a => a.id === id);
-            return area ? area.name : null;
-        }).filter(Boolean); // Rimuove eventuali aree non trovate
-
-        return {
-            ...emp,
-            workAreaNames: areaNames, // Crea o sovrascrive il campo con i nomi corretti
-            activeEntry: activeEmployeesDetails.find(detail => detail.employeeId === emp.id) || null,
-        };
-    });
-
-    let sortableItems = [...employeesWithDetails];
-    if (searchTerm) {
-        const lowercasedFilter = searchTerm.toLowerCase();
-        sortableItems = sortableItems.filter(emp =>
-            `${emp.name} ${emp.surname}`.toLowerCase().includes(lowercasedFilter)
-        );
-    }
-    return sortableItems;
-}, [managedEmployees, activeEmployeesDetails, searchTerm, allWorkAreas]); // NOTA: Ho aggiunto 'allWorkAreas'
-
-    const areasWithLivePresenze = useMemo(() => {
-        let areasInScope = workAreasWithHours;
-        if (currentUserRole === 'preposto' && userData?.managedAreaIds) {
-            areasInScope = workAreasWithHours.filter(area => 
-                userData.managedAreaIds.includes(area.id)
+    const sortedAndFilteredEmployees = useMemo(() => {
+        let employeesInScope = allEmployees;
+        if (currentUserRole === 'preposto' && userData.managedAreaIds) {
+            const managedAreaIds = userData.managedAreaIds;
+            employeesInScope = allEmployees.filter(emp =>
+                (emp.workAreaIds && emp.workAreaIds.some(areaId => managedAreaIds.includes(areaId))) ||
+                emp.userId === user.uid
             );
         }
-        return areasInScope.map(area => ({
-            ...area,
-            presenzeAttuali: activeEmployeesDetails.filter(d => d.workAreaId === area.id).length
+        const employeesWithStatus = employeesInScope.map(emp => ({
+            ...emp,
+            activeEntry: activeEmployeesDetails.find(detail => detail.employeeId === emp.id) || null,
         }));
-    }, [workAreasWithHours, activeEmployeesDetails, currentUserRole, userData]);
+        let sortableItems = [...employeesWithStatus];
+        if (searchTerm) {
+            const lowercasedFilter = searchTerm.toLowerCase();
+            sortableItems = sortableItems.filter(emp =>
+                `${emp.name} ${emp.surname}`.toLowerCase().includes(lowercasedFilter)
+            );
+        }
+        return sortableItems;
+    }, [allEmployees, activeEmployeesDetails, currentUserRole, userData, user, searchTerm]);
 
     const handleAdminClockIn = async (areaId, timestamp) => {
         if (!adminEmployeeProfile) return;
@@ -592,7 +566,7 @@ const sortedAndFilteredEmployees = useMemo(() => {
             const querySnapshot = await getDocs(q);
             const entries = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-            const areasWithCalculatedHours = allWorkAreas.map(area => {
+            const areasWithHours = allWorkAreas.map(area => {
                 const entriesForArea = entries.filter(entry => entry.workAreaId === area.id && entry.clockOutTime);
                 const totalMillis = entriesForArea.reduce((sum, entry) => {
                     let duration = entry.clockOutTime.toMillis() - entry.clockInTime.toMillis();
@@ -607,11 +581,12 @@ const sortedAndFilteredEmployees = useMemo(() => {
                 const totalHours = totalMillis / 3600000;
                 return { ...area, totalHours: totalHours.toFixed(2) };
             });
-            setWorkAreasWithHours(areasWithCalculatedHours);
+            setWorkAreasWithHours(areasWithHours);
 
             const reportData = entries.map(entry => {
                 const employee = allEmployees.find(e => e.id === entry.employeeId);
                 const area = allWorkAreas.find(a => a.id === entry.workAreaId);
+                if (!entry.clockInTime) return null;
                 const clockIn = entry.clockInTime.toDate();
                 const clockOut = entry.clockOutTime ? entry.clockOutTime.toDate() : null;
                 let duration = null;
@@ -635,7 +610,7 @@ const sortedAndFilteredEmployees = useMemo(() => {
                     createdBy: entry.createdBy || null,
                     employeeId: entry.employeeId,
                 };
-            });
+            }).filter(Boolean);
             setReports(reportData);
             setReportTitle(`Report dal ${dateRange.start} al ${dateRange.end}`);
             setView('reports');
@@ -733,14 +708,14 @@ const sortedAndFilteredEmployees = useMemo(() => {
                                 <label htmlFor="areaFilter" className="w-28 text-sm font-medium text-gray-700 text-left">Area:</label>
                                 <select id="areaFilter" value={reportAreaFilter} onChange={e => setReportAreaFilter(e.target.value)} className="p-1 border border-gray-300 rounded-md w-full">
                                     <option value="all">Tutte le Aree</option>
-                                    {managedAreas.map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}
+                                    {allWorkAreas.map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}
                                 </select>
                             </div>
                             <div className="flex items-center justify-between md:justify-start">
                                 <label htmlFor="employeeFilter" className="w-28 text-sm font-medium text-gray-700 text-left">Dipendente:</label>
                                 <select id="employeeFilter" value={reportEmployeeFilter} onChange={e => setReportEmployeeFilter(e.target.value)} className="p-1 border border-gray-300 rounded-md w-full">
                                     <option value="all">Tutti i Dipendenti</option>
-                                    {managedEmployees.sort((a,b) => `${a.name} ${a.surname}`.localeCompare(`${b.name} ${b.surname}`)).map(emp => (<option key={emp.id} value={emp.id}>{emp.name} {emp.surname}</option>))}
+                                    {allEmployees.sort((a,b) => `${a.name} ${a.surname}`.localeCompare(`${b.name} ${b.surname}`)).map(emp => (<option key={emp.id} value={emp.id}>{emp.name} {emp.surname}</option>))}
                                 </select>
                             </div>
                             <button onClick={generateReport} className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm w-full md:w-auto md:ml-auto">Genera Report</button>
@@ -748,9 +723,9 @@ const sortedAndFilteredEmployees = useMemo(() => {
                    </div>
                 )}
                 <main>
-                    {view === 'dashboard' && <DashboardView totalEmployees={managedEmployees.length} activeEmployeesDetails={activeEmployeesDetails} totalDayHours={totalDayHours} />}
+                    {view === 'dashboard' && <DashboardView totalEmployees={allEmployees.length} activeEmployeesDetails={activeEmployeesDetails} totalDayHours={totalDayHours} />}
                     {view === 'employees' && <EmployeeManagementView employees={sortedAndFilteredEmployees} openModal={openModal} currentUserRole={currentUserRole} requestSort={requestSort} sortConfig={sortConfig} searchTerm={searchTerm} setSearchTerm={setSearchTerm} />}
-                    {view === 'areas' && <AreaManagementView workAreas={areasWithLivePresenze} openModal={openModal} currentUserRole={currentUserRole} />}
+                    {view === 'areas' && <AreaManagementView workAreas={workAreasWithHours} openModal={openModal} currentUserRole={currentUserRole} />}
                     {view === 'admins' && <AdminManagementView admins={admins} openModal={openModal} user={user} superAdminEmail={superAdminEmail} currentUserRole={currentUserRole} />}
                     {view === 'reports' && <ReportView reports={reports} title={reportTitle} handleExportXml={handleExportXml} user={user} />}
                 </main>
