@@ -19,7 +19,7 @@ function App() {
     const [user, setUser] = useState(null);
     const [userData, setUserData] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [isAppActive, setIsAppActive] = useState(false);
+    const [isAppActive, setIsAppActive] = useState(true); // Default a true per evitare blocco se config non esiste
 
     const handleLogout = useCallback(async () => {
         try {
@@ -31,14 +31,13 @@ function App() {
         }
     }, []);
     
-    // MODIFICA: Logica del timer di inattività migliorata
+    // Logica del timer di inattività
     useEffect(() => {
         let logoutTimer;
-
         const resetTimer = () => {
             clearTimeout(logoutTimer);
             logoutTimer = setTimeout(() => {
-                if (auth.currentUser) { // Controlla se l'utente è ancora loggato prima di agire
+                if (auth.currentUser) {
                     console.log("Logout per inattività.");
                     handleLogout();
                 }
@@ -46,58 +45,75 @@ function App() {
         };
 
         const events = ['mousedown', 'mousemove', 'keypress', 'touchstart', 'scroll'];
-
         const setupActivityListeners = () => {
             events.forEach(event => window.addEventListener(event, resetTimer));
             resetTimer();
         };
-
         const cleanupActivityListeners = () => {
             clearTimeout(logoutTimer);
             events.forEach(event => window.removeEventListener(event, resetTimer));
         };
 
-        // Il monitoraggio si attiva solo quando c'è un utente
         if (user) {
             setupActivityListeners();
         }
 
-        // Funzione di pulizia
         return cleanupActivityListeners;
     }, [user, handleLogout]);
 
 
+    // Logica di autenticazione e caricamento dati utente
     useEffect(() => {
         const checkAppStatusAndAuth = async () => {
+            // Controlla lo stato dell'app (manutenzione)
             try {
                 const configDocRef = doc(db, 'app_config', 'status');
                 const configDocSnap = await getDoc(configDocRef);
-
-                if (configDocSnap.exists() && configDocSnap.data().isAttiva === true) {
-                    setIsAppActive(true);
-                } else {
+                if (configDocSnap.exists() && configDocSnap.data().isAttiva === false) {
                     setIsAppActive(false);
                     setIsLoading(false);
                     return;
                 }
             } catch (error) {
-                console.error("Errore nel controllo dello stato dell'app:", error);
-                setIsAppActive(false);
-                setIsLoading(false);
-                return;
+                console.error("Errore nel controllo stato app, l'app continuerà:", error);
             }
+            setIsAppActive(true);
 
+            // Ascolta i cambiamenti di stato dell'autenticazione
             const unsubscribe = onAuthStateChanged(auth, async (authenticatedUser) => {
+                setIsLoading(true);
                 if (authenticatedUser) {
+                    let userProfile = null;
+
+                    // 1. Cerca prima tra gli utenti admin/preposti
                     const userDocRef = doc(db, 'users', authenticatedUser.uid);
                     const userDocSnap = await getDoc(userDocRef);
+
                     if (userDocSnap.exists()) {
-                        setUserData(userDocSnap.data());
+                        userProfile = userDocSnap.data();
+                    } else {
+                        // 2. Se non trovato, cerca tra i dipendenti
+                        const employeeDocRef = doc(db, 'employees', authenticatedUser.uid);
+                        const employeeDocSnap = await getDoc(employeeDocRef);
+
+                        if (employeeDocSnap.exists()) {
+                            userProfile = employeeDocSnap.data();
+                        }
+                    }
+
+                    if (userProfile) {
+                        // Utente trovato in 'users' o 'employees'
+                        setUserData(userProfile);
                         setUser(authenticatedUser);
                     } else {
+                        // Utente autenticato ma non presente in nessuna collezione -> logout forzato
+                        console.error("Utente autenticato ma non trovato in Firestore. Eseguo logout.");
                         await signOut(auth);
+                        setUser(null);
+                        setUserData(null);
                     }
                 } else {
+                    // L'utente non è loggato
                     setUser(null);
                     setUserData(null);
                 }
@@ -133,7 +149,8 @@ function App() {
         if (userData.role === 'admin' || userData.role === 'preposto') {
             return <AdminDashboard user={user} userData={userData} handleLogout={handleLogout} />;
         } else if (userData.role === 'employee') {
-            return <EmployeeDashboard user={user} userData={userData} handleLogout={handleLogout} />;
+            // Passa anche userData a EmployeeDashboard se necessario
+            return <EmployeeDashboard user={user} handleLogout={handleLogout} />;
         }
     }
     
