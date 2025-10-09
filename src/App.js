@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, getDocs } from 'firebase/firestore'; // Aggiungi getDocs e collection
 import LoginScreen from './components/LoginScreen';
 import AdminDashboard from './components/AdminDashboard';
 import EmployeeDashboard from './components/EmployeeDashboard';
@@ -19,7 +19,8 @@ function App() {
     const [user, setUser] = useState(null);
     const [userData, setUserData] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [isAppActive, setIsAppActive] = useState(true); // Default a true per evitare blocco se config non esiste
+    const [isAppActive, setIsAppActive] = useState(true);
+    const [allWorkAreas, setAllWorkAreas] = useState([]); // Stato per le aree di lavoro
 
     const handleLogout = useCallback(async () => {
         try {
@@ -31,19 +32,17 @@ function App() {
         }
     }, []);
     
-    // Logica del timer di inattività
+    // Timer di inattività
     useEffect(() => {
         let logoutTimer;
         const resetTimer = () => {
             clearTimeout(logoutTimer);
             logoutTimer = setTimeout(() => {
                 if (auth.currentUser) {
-                    console.log("Logout per inattività.");
                     handleLogout();
                 }
             }, 600000); // 10 minuti
         };
-
         const events = ['mousedown', 'mousemove', 'keypress', 'touchstart', 'scroll'];
         const setupActivityListeners = () => {
             events.forEach(event => window.addEventListener(event, resetTimer));
@@ -53,28 +52,32 @@ function App() {
             clearTimeout(logoutTimer);
             events.forEach(event => window.removeEventListener(event, resetTimer));
         };
-
         if (user) {
             setupActivityListeners();
         }
-
         return cleanupActivityListeners;
     }, [user, handleLogout]);
 
-
-    // Logica di autenticazione e caricamento dati utente
+    // Logica di autenticazione e caricamento dati
     useEffect(() => {
         const checkAppStatusAndAuth = async () => {
             try {
+                // Carica la configurazione dell'app e le aree di lavoro in parallelo
                 const configDocRef = doc(db, 'app_config', 'status');
-                const configDocSnap = await getDoc(configDocRef);
+                const [configDocSnap, areasSnapshot] = await Promise.all([
+                    getDoc(configDocRef),
+                    getDocs(collection(db, "work_areas"))
+                ]);
+
+                setAllWorkAreas(areasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+
                 if (configDocSnap.exists() && configDocSnap.data().isAttiva === false) {
                     setIsAppActive(false);
                     setIsLoading(false);
                     return;
                 }
             } catch (error) {
-                console.error("Errore nel controllo stato app, l'app continuerà:", error);
+                console.error("Errore nel caricamento dati iniziali, l'app continuerà:", error);
             }
             setIsAppActive(true);
 
@@ -82,18 +85,14 @@ function App() {
                 setIsLoading(true);
                 if (authenticatedUser) {
                     let userProfile = null;
-                    
-                    // 1. Cerca prima tra gli utenti admin/preposti
                     const userDocRef = doc(db, 'users', authenticatedUser.uid);
                     const userDocSnap = await getDoc(userDocRef);
 
                     if (userDocSnap.exists()) {
                         userProfile = userDocSnap.data();
                     } else {
-                        // 2. Se non trovato, cerca tra i dipendenti
                         const employeeDocRef = doc(db, 'employees', authenticatedUser.uid);
                         const employeeDocSnap = await getDoc(employeeDocRef);
-
                         if (employeeDocSnap.exists()) {
                             userProfile = employeeDocSnap.data();
                         }
@@ -114,7 +113,6 @@ function App() {
                 }
                 setIsLoading(false);
             });
-
             return () => unsubscribe();
         };
 
@@ -141,15 +139,13 @@ function App() {
         if (userData.requiresPasswordChange) {
             return <ChangePassword onPasswordChanged={handlePasswordChanged} />;
         }
-        // Switch per gestire i ruoli in modo pulito
         switch (userData.role) {
             case 'admin':
             case 'preposto':
                 return <AdminDashboard user={user} userData={userData} handleLogout={handleLogout} />;
             case 'employee':
-                return <EmployeeDashboard user={user} employeeData={userData} handleLogout={handleLogout} />;
+                return <EmployeeDashboard user={user} employeeData={userData} handleLogout={handleLogout} allWorkAreas={allWorkAreas} />;
             default:
-                // Se il ruolo non è riconosciuto, forza il logout per sicurezza
                 handleLogout();
                 return <LoginScreen />;
         }

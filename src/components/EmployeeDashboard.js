@@ -21,13 +21,11 @@ function getDistanceInMeters(lat1, lon1, lat2, lon2) {
 }
 
 
-const EmployeeDashboard = ({ user, employeeData, handleLogout }) => {
+const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) => {
     const [currentTime, setCurrentTime] = useState(new Date());
     const [activeEntry, setActiveEntry] = useState(null);
     const [todaysEntries, setTodaysEntries] = useState([]);
     const [workAreaName, setWorkAreaName] = useState('');
-    const [allWorkAreas, setAllWorkAreas] = useState([]);
-    const [isLoading, setIsLoading] = useState(true);
     const [isProcessing, setIsProcessing] = useState(false);
 
     // Nuovi stati per la geolocalizzazione
@@ -44,19 +42,9 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout }) => {
         return () => clearInterval(timer);
     }, []);
 
-    // Carica tutte le aree di lavoro all'avvio
-    useEffect(() => {
-        const fetchAreas = async () => {
-            const areasSnapshot = await getDocs(collection(db, "work_areas"));
-            setAllWorkAreas(areasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-            setIsLoading(false);
-        };
-        fetchAreas();
-    }, []);
-
     // Lista delle aree assegnate al dipendente
     const employeeWorkAreas = useMemo(() => {
-        if (!employeeData || !employeeData.workAreaIds) return [];
+        if (!employeeData || !employeeData.workAreaIds || !allWorkAreas) return [];
         return allWorkAreas.filter(area => employeeData.workAreaIds.includes(area.id));
     }, [employeeData, allWorkAreas]);
 
@@ -105,9 +93,9 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout }) => {
             if (!snapshot.empty) {
                 const entryData = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
                 setActiveEntry(entryData);
-                if (entryData.workAreaId) {
-                    const areaDoc = await getDoc(doc(db, "work_areas", entryData.workAreaId));
-                    if (areaDoc.exists()) setWorkAreaName(areaDoc.data().name);
+                if (entryData.workAreaId && allWorkAreas.length > 0) {
+                    const area = allWorkAreas.find(a => a.id === entryData.workAreaId);
+                    if (area) setWorkAreaName(area.name);
                 }
             } else {
                 setActiveEntry(null);
@@ -124,7 +112,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout }) => {
         });
 
         return () => { unsubscribeActive(); unsubscribeTodays(); };
-    }, [user]);
+    }, [user, allWorkAreas]);
 
     const handleAction = async (action) => {
         if (isProcessing) return;
@@ -149,7 +137,6 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout }) => {
     
     const hasPauseBeenTaken = activeEntry?.pauses && activeEntry.pauses.length > 0;
 
-    if (isLoading) return <div className="min-h-screen flex items-center justify-center">Caricamento...</div>;
     if (!employeeData) return <div className="min-h-screen flex items-center justify-center">Profilo non trovato. Contatta l'amministratore. <button onClick={handleLogout}>Logout</button></div>;
 
     return (
