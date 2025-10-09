@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
@@ -10,28 +10,18 @@ import ChangePassword from './components/ChangePassword';
 const App = () => {
     const [user, setUser] = useState(null);
     const [userData, setUserData] = useState(null);
-    const [isLoading, setIsLoading] = useState(true);
     const [allWorkAreas, setAllWorkAreas] = useState([]);
-
-    const fetchAllData = useCallback(async () => {
-        try {
-            const areasSnapshot = await getDocs(collection(db, "work_areas"));
-            const areas = areasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setAllWorkAreas(areas);
-        } catch (error) {
-            console.error("Errore nel caricamento delle aree di lavoro:", error);
-        }
-    }, []);
+    const [authChecked, setAuthChecked] = useState(false); // Nuovo stato per sapere quando il controllo iniziale è terminato
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (authenticatedUser) => {
-            setIsLoading(true);
             if (authenticatedUser) {
-                // PRIMA: Trova il profilo dell'utente
+                // L'utente è loggato, carica tutti i dati necessari in sequenza
+                
+                // 1. Carica il profilo utente
                 let userProfile = null;
                 const userDocRef = doc(db, 'users', authenticatedUser.uid);
                 const userDocSnap = await getDoc(userDocRef);
-
                 if (userDocSnap.exists()) {
                     userProfile = userDocSnap.data();
                 } else {
@@ -43,55 +33,80 @@ const App = () => {
                 }
 
                 if (userProfile) {
-                    // DOPO: Se l'utente esiste, SCARICA LE AREE DI LAVORO
-                    await fetchAllData();
+                    // 2. Carica le aree di lavoro
+                    try {
+                        const areasSnapshot = await getDocs(collection(db, "work_areas"));
+                        const areas = areasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                        setAllWorkAreas(areas);
+                    } catch (error) {
+                        console.error("Errore nel caricamento delle aree di lavoro:", error);
+                        setAllWorkAreas([]);
+                    }
+                    
+                    // 3. Imposta lo stato solo quando tutto è pronto
                     setUserData(userProfile);
                     setUser(authenticatedUser);
                 } else {
+                    // L'utente esiste in Auth ma non nel DB, forza il logout
                     console.error("Utente non trovato nel database, logout in corso.");
                     await signOut(auth);
                     setUser(null);
                     setUserData(null);
+                    setAllWorkAreas([]);
                 }
             } else {
+                // L'utente è sloggato, pulisci tutti i dati
                 setUser(null);
                 setUserData(null);
+                setAllWorkAreas([]);
             }
-            setIsLoading(false);
+            
+            // Segna che il controllo di autenticazione iniziale è completato
+            setAuthChecked(true);
         });
         return () => unsubscribe();
-    }, [fetchAllData]); // Aggiungi fetchAllData qui
+    }, []); // Questo effetto viene eseguito solo una volta all'avvio
 
     const handleLogout = async () => {
         await signOut(auth);
-        setUser(null);
-        setUserData(null);
+        // Il listener onAuthStateChanged si occuperà di pulire lo stato
+    };
+    
+    // Funzione da passare all'AdminDashboard per ricaricare i dati
+    const fetchAllWorkAreas = async () => {
+        try {
+            const areasSnapshot = await getDocs(collection(db, "work_areas"));
+            const areas = areasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setAllWorkAreas(areas);
+        } catch (error) {
+            console.error("Errore nel ricaricare le aree di lavoro:", error);
+        }
     };
 
-    if (isLoading) {
-        return <div className="min-h-screen flex items-center justify-center">Caricamento in corso...</div>;
+    // Mostra un indicatore di caricamento globale finché il primo controllo non è terminato
+    if (!authChecked) {
+        return <div className="min-h-screen flex items-center justify-center">Caricamento...</div>;
     }
 
+    // Dopo il controllo, se non c'è utente, mostra il login
     if (!user) {
         return <LoginScreen />;
     }
 
+    // Se l'utente è loggato, procedi con la visualizzazione basata sul ruolo
     if (userData && userData.mustChangePassword) {
         return <ChangePassword user={user} />;
     }
     
     if (userData && (userData.role === 'admin' || userData.role === 'preposto')) {
-        return <AdminDashboard user={user} userData={userData} handleLogout={handleLogout} allWorkAreas={allWorkAreas} fetchAllData={fetchAllData} />;
+        return <AdminDashboard user={user} userData={userData} handleLogout={handleLogout} allWorkAreas={allWorkAreas} fetchAllData={fetchAllWorkAreas} />;
     }
 
     if (userData && userData.role === 'employee') {
-        // Questa condizione interna in EmployeeDashboard gestirà il caricamento se le aree non sono ancora pronte
-        if (allWorkAreas.length === 0) {
-            return <div className="min-h-screen flex items-center justify-center">Caricamento aree...</div>;
-        }
         return <EmployeeDashboard user={user} employeeData={userData} handleLogout={handleLogout} allWorkAreas={allWorkAreas} />;
     }
 
+    // Messaggio di fallback se l'utente è loggato ma il ruolo è sconosciuto
     return (
         <div className="min-h-screen flex flex-col items-center justify-center">
             <p>Ruolo utente non riconosciuto o dati non disponibili.</p>
@@ -103,3 +118,4 @@ const App = () => {
 };
 
 export default App;
+
