@@ -11,14 +11,14 @@ const App = () => {
     const [user, setUser] = useState(null);
     const [userData, setUserData] = useState(null);
     const [allWorkAreas, setAllWorkAreas] = useState([]);
-    const [authChecked, setAuthChecked] = useState(false); // Nuovo stato per sapere quando il controllo iniziale è terminato
+    const [authChecked, setAuthChecked] = useState(false);
 
     useEffect(() => {
+        console.log("--- APP AVVIATA: Inizio controllo autenticazione ---");
         const unsubscribe = onAuthStateChanged(auth, async (authenticatedUser) => {
             if (authenticatedUser) {
-                // L'utente è loggato, carica tutti i dati necessari in sequenza
+                console.log("1. Utente autenticato:", authenticatedUser.uid);
                 
-                // 1. Carica il profilo utente
                 let userProfile = null;
                 const userDocRef = doc(db, 'users', authenticatedUser.uid);
                 const userDocSnap = await getDoc(userDocRef);
@@ -33,46 +33,41 @@ const App = () => {
                 }
 
                 if (userProfile) {
-                    // 2. Carica le aree di lavoro
+                    console.log("2. Profilo utente trovato:", userProfile);
                     try {
                         const areasSnapshot = await getDocs(collection(db, "work_areas"));
                         const areas = areasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                        console.log("3. Aree di lavoro caricate:", areas);
                         setAllWorkAreas(areas);
                     } catch (error) {
-                        console.error("Errore nel caricamento delle aree di lavoro:", error);
+                        console.error("ERRORE nel caricamento delle aree di lavoro:", error);
                         setAllWorkAreas([]);
                     }
                     
-                    // 3. Imposta lo stato solo quando tutto è pronto
                     setUserData(userProfile);
                     setUser(authenticatedUser);
                 } else {
-                    // L'utente esiste in Auth ma non nel DB, forza il logout
-                    console.error("Utente non trovato nel database, logout in corso.");
+                    console.error("ERRORE: Utente non trovato nel database, logout in corso.");
                     await signOut(auth);
                     setUser(null);
                     setUserData(null);
-                    setAllWorkAreas([]);
                 }
             } else {
-                // L'utente è sloggato, pulisci tutti i dati
+                console.log("Nessun utente autenticato.");
                 setUser(null);
                 setUserData(null);
-                setAllWorkAreas([]);
             }
             
-            // Segna che il controllo di autenticazione iniziale è completato
+            console.log("--- FINE CONTROLLO ---");
             setAuthChecked(true);
         });
         return () => unsubscribe();
-    }, []); // Questo effetto viene eseguito solo una volta all'avvio
+    }, []);
 
     const handleLogout = async () => {
         await signOut(auth);
-        // Il listener onAuthStateChanged si occuperà di pulire lo stato
     };
     
-    // Funzione da passare all'AdminDashboard per ricaricare i dati
     const fetchAllWorkAreas = async () => {
         try {
             const areasSnapshot = await getDocs(collection(db, "work_areas"));
@@ -83,17 +78,14 @@ const App = () => {
         }
     };
 
-    // Mostra un indicatore di caricamento globale finché il primo controllo non è terminato
     if (!authChecked) {
         return <div className="min-h-screen flex items-center justify-center">Caricamento...</div>;
     }
 
-    // Dopo il controllo, se non c'è utente, mostra il login
     if (!user) {
         return <LoginScreen />;
     }
 
-    // Se l'utente è loggato, procedi con la visualizzazione basata sul ruolo
     if (userData && userData.mustChangePassword) {
         return <ChangePassword user={user} />;
     }
@@ -106,7 +98,6 @@ const App = () => {
         return <EmployeeDashboard user={user} employeeData={userData} handleLogout={handleLogout} allWorkAreas={allWorkAreas} />;
     }
 
-    // Messaggio di fallback se l'utente è loggato ma il ruolo è sconosciuto
     return (
         <div className="min-h-screen flex flex-col items-center justify-center">
             <p>Ruolo utente non riconosciuto o dati non disponibili.</p>
