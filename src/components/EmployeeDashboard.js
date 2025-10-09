@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, a, useEffect, useMemo } from 'react';
 import { db } from '../firebase';
 import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
@@ -39,14 +39,21 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
         return () => clearInterval(timer);
     }, []);
 
+    // Filtra le aree di lavoro totali per ottenere solo quelle assegnate a questo dipendente
     const employeeWorkAreas = useMemo(() => {
         if (!employeeData || !employeeData.workAreaIds || !allWorkAreas) return [];
         return allWorkAreas.filter(area => employeeData.workAreaIds.includes(area.id));
     }, [employeeData, allWorkAreas]);
 
-    // Gestione della geolocalizzazione
+    // ===================================================================
+    // ## QUI C'È IL "COMANDO" CHE AVVIA IL GPS ##
+    // ===================================================================
     useEffect(() => {
-        if (activeEntry || employeeWorkAreas.length === 0) return;
+        // CONDIZIONI DI BLOCCO: se l'utente è già timbrato o non ha aree, non fare nulla.
+        if (activeEntry || employeeWorkAreas.length === 0) {
+            setInRangeArea(null); // Assicura che non ci sia un'area selezionata
+            return;
+        }
 
         if (!navigator.geolocation) {
             setLocationError("La geolocalizzazione non è supportata da questo browser.");
@@ -61,11 +68,11 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                     const distance = getDistanceInMeters(latitude, longitude, area.latitude, area.longitude);
                     if (distance <= area.radius) {
                         foundArea = area;
-                        break;
+                        break; // Trovata un'area, ferma il ciclo
                     }
                 }
             }
-            setInRangeArea(foundArea);
+            setInRangeArea(foundArea); // Aggiorna lo stato con l'area trovata (o null)
             setLocationError(null);
         };
 
@@ -76,9 +83,11 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
 
         const options = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 };
         const watcher = navigator.geolocation.watchPosition(success, error, options);
+        
+        // Pulisce il watcher quando il componente non è più necessario
         return () => navigator.geolocation.clearWatch(watcher);
-    }, [employeeWorkAreas, activeEntry]);
-
+    }, [employeeWorkAreas, activeEntry]); // Questo effetto si riattiva solo se cambiano le aree o lo stato della timbratura
+    
     // Ascolta le timbrature del dipendente
     useEffect(() => {
         if (!user || allWorkAreas.length === 0) return;
