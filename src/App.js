@@ -1,157 +1,106 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc, collection, getDocs } from 'firebase/firestore'; // Aggiungi getDocs e collection
+import { doc, getDoc, collection, getDocs } from 'firebase/firestore'; // Assicurati che getDocs e collection siano importati
 import LoginScreen from './components/LoginScreen';
 import AdminDashboard from './components/AdminDashboard';
 import EmployeeDashboard from './components/EmployeeDashboard';
 import ChangePassword from './components/ChangePassword';
 
-// Componente per la schermata di blocco
-const AppBlockedScreen = () => (
-    <div className="min-h-screen flex flex-col justify-center items-center bg-gray-100 p-4 text-center">
-        <h1 className="text-2xl font-bold text-red-600 mb-4">Servizio momentaneamente non disponibile</h1>
-        <p className="text-gray-700">L'applicazione è in fase di manutenzione. Si prega di riprovare più tardi.</p>
-    </div>
-);
-
-function App() {
+const AppShell = () => {
     const [user, setUser] = useState(null);
     const [userData, setUserData] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [isAppActive, setIsAppActive] = useState(true);
-    const [allWorkAreas, setAllWorkAreas] = useState([]); // Stato per le aree di lavoro
+    const [allWorkAreas, setAllWorkAreas] = useState([]); // Stato per memorizzare le aree
 
-    const handleLogout = useCallback(async () => {
+    // Funzione per caricare TUTTE le aree di lavoro
+    const fetchAllData = useCallback(async () => {
         try {
-            await signOut(auth);
-            setUser(null);
-            setUserData(null);
+            const areasSnapshot = await getDocs(collection(db, "work_areas"));
+            const areas = areasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setAllWorkAreas(areas);
         } catch (error) {
-            console.error("Errore durante il logout:", error);
+            console.error("Errore nel caricamento delle aree di lavoro:", error);
         }
     }, []);
-    
-    // Timer di inattività
+
+    // Esegui il caricamento dei dati quando il componente si avvia
     useEffect(() => {
-        let logoutTimer;
-        const resetTimer = () => {
-            clearTimeout(logoutTimer);
-            logoutTimer = setTimeout(() => {
-                if (auth.currentUser) {
-                    handleLogout();
-                }
-            }, 600000); // 10 minuti
-        };
-        const events = ['mousedown', 'mousemove', 'keypress', 'touchstart', 'scroll'];
-        const setupActivityListeners = () => {
-            events.forEach(event => window.addEventListener(event, resetTimer));
-            resetTimer();
-        };
-        const cleanupActivityListeners = () => {
-            clearTimeout(logoutTimer);
-            events.forEach(event => window.removeEventListener(event, resetTimer));
-        };
-        if (user) {
-            setupActivityListeners();
-        }
-        return cleanupActivityListeners;
-    }, [user, handleLogout]);
+        fetchAllData();
+    }, [fetchAllData]);
 
-    // Logica di autenticazione e caricamento dati
+    // Gestione dello stato di autenticazione dell'utente
     useEffect(() => {
-        const checkAppStatusAndAuth = async () => {
-            try {
-                // Carica la configurazione dell'app e le aree di lavoro in parallelo
-                const configDocRef = doc(db, 'app_config', 'status');
-                const [configDocSnap, areasSnapshot] = await Promise.all([
-                    getDoc(configDocRef),
-                    getDocs(collection(db, "work_areas"))
-                ]);
+        const unsubscribe = onAuthStateChanged(auth, async (authenticatedUser) => {
+            setIsLoading(true);
+            if (authenticatedUser) {
+                let userProfile = null;
+                const userDocRef = doc(db, 'users', authenticatedUser.uid);
+                const userDocSnap = await getDoc(userDocRef);
 
-                setAllWorkAreas(areasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-
-                if (configDocSnap.exists() && configDocSnap.data().isAttiva === false) {
-                    setIsAppActive(false);
-                    setIsLoading(false);
-                    return;
-                }
-            } catch (error) {
-                console.error("Errore nel caricamento dati iniziali, l'app continuerà:", error);
-            }
-            setIsAppActive(true);
-
-            const unsubscribe = onAuthStateChanged(auth, async (authenticatedUser) => {
-                setIsLoading(true);
-                if (authenticatedUser) {
-                    let userProfile = null;
-                    const userDocRef = doc(db, 'users', authenticatedUser.uid);
-                    const userDocSnap = await getDoc(userDocRef);
-
-                    if (userDocSnap.exists()) {
-                        userProfile = userDocSnap.data();
-                    } else {
-                        const employeeDocRef = doc(db, 'employees', authenticatedUser.uid);
-                        const employeeDocSnap = await getDoc(employeeDocRef);
-                        if (employeeDocSnap.exists()) {
-                            userProfile = employeeDocSnap.data();
-                        }
-                    }
-
-                    if (userProfile) {
-                        setUserData(userProfile);
-                        setUser(authenticatedUser);
-                    } else {
-                        console.error("Utente autenticato ma non trovato in Firestore. Eseguo logout.");
-                        await signOut(auth);
-                        setUser(null);
-                        setUserData(null);
-                    }
+                if (userDocSnap.exists()) {
+                    userProfile = userDocSnap.data();
                 } else {
+                    const employeeDocRef = doc(db, 'employees', authenticatedUser.uid);
+                    const employeeDocSnap = await getDoc(employeeDocRef);
+                    if (employeeDocSnap.exists()) {
+                        userProfile = { ...employeeDocSnap.data(), role: 'employee' };
+                    }
+                }
+
+                if (userProfile) {
+                    setUserData(userProfile);
+                    setUser(authenticatedUser);
+                } else {
+                    console.error("Utente non trovato nel database, logout in corso.");
+                    await signOut(auth);
                     setUser(null);
                     setUserData(null);
                 }
-                setIsLoading(false);
-            });
-            return () => unsubscribe();
-        };
-
-        checkAppStatusAndAuth();
+            } else {
+                setUser(null);
+                setUserData(null);
+            }
+            setIsLoading(false);
+        });
+        return () => unsubscribe();
     }, []);
-    
-    const handlePasswordChanged = () => {
-        setUserData(prevUserData => ({ ...prevUserData, requiresPasswordChange: false }));
+
+    const handleLogout = async () => {
+        await signOut(auth);
+        setUser(null);
+        setUserData(null);
     };
 
     if (isLoading) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-gray-100">
-                <p>Caricamento applicazione...</p>
-            </div>
-        );
-    }
-    
-    if (!isAppActive) {
-        return <AppBlockedScreen />;
+        return <div className="min-h-screen flex items-center justify-center">Caricamento in corso...</div>;
     }
 
-    if (user && userData) {
-        if (userData.requiresPasswordChange) {
-            return <ChangePassword onPasswordChanged={handlePasswordChanged} />;
-        }
-        switch (userData.role) {
-            case 'admin':
-            case 'preposto':
-                return <AdminDashboard user={user} userData={userData} handleLogout={handleLogout} />;
-            case 'employee':
-                return <EmployeeDashboard user={user} employeeData={userData} handleLogout={handleLogout} allWorkAreas={allWorkAreas} />;
-            default:
-                handleLogout();
-                return <LoginScreen />;
-        }
+    if (!user) {
+        return <LoginScreen />;
+    }
+
+    if (userData && userData.mustChangePassword) {
+        return <ChangePassword user={user} />;
     }
     
-    return <LoginScreen />;
-}
+    // Passiamo 'allWorkAreas' ai componenti figli
+    if (userData && (userData.role === 'admin' || userData.role === 'preposto')) {
+        return <AdminDashboard user={user} userData={userData} handleLogout={handleLogout} allWorkAreas={allWorkAreas} fetchAllData={fetchAllData} />;
+    }
+
+    if (userData && userData.role === 'employee') {
+        return <EmployeeDashboard user={user} employeeData={userData} handleLogout={handleLogout} allWorkAreas={allWorkAreas} />;
+    }
+
+    return (
+        <div className="min-h-screen flex flex-col items-center justify-center">
+            <p>Ruolo utente non riconosciuto o dati non disponibili.</p>
+            <button onClick={handleLogout} className="mt-4 px-4 py-2 bg-gray-500 text-white rounded">
+                Logout
+            </button>
+        </div>
+    );
+};
 
 export default App;
