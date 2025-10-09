@@ -11,7 +11,6 @@ const db = admin.firestore();
 // =================================================================================
 // FUNZIONI PER LA TIMBRATURA DEL DIPENDENTE
 // =================================================================================
-
 exports.clockEmployeeIn = onCall(async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Devi essere autenticato.');
     const employeeId = request.auth.uid;
@@ -58,11 +57,9 @@ exports.clockEmployeePause = onCall(async (request) => {
     const activeEntryDoc = querySnapshot.docs[0];
     const activeEntryData = activeEntryDoc.data();
 
-    // --- CONTROLLO DI SICUREZZA AGGIUNTO ---
     if (activeEntryData.pauses && activeEntryData.pauses.length > 0) {
         throw new HttpsError('already-exists', 'Una pausa è già stata registrata per questa sessione di lavoro.');
     }
-    // --- FINE CONTROLLO ---
 
     const workAreaDoc = await db.collection('work_areas').doc(activeEntryData.workAreaId).get();
     if (!workAreaDoc.exists || !workAreaDoc.data().pauseDuration || workAreaDoc.data().pauseDuration === 0) {
@@ -148,7 +145,7 @@ exports.onUserDeletedCleanup = onUserDeleted(async (event) => {
     batch.delete(db.collection('employees').doc(uid));
     try {
         await batch.commit();
-        logger.info(`Documenti per l'utente ${uid} cancellati con successo.`);
+        logger.info(`Documenti per l'utente ${uid} cancellati con successo da Firestore.`);
     } catch (error) {
         logger.error(`Errore durante la cancellazione dei documenti per l'utente ${uid}:`, error);
     }
