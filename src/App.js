@@ -65,7 +65,6 @@ function App() {
     // Logica di autenticazione e caricamento dati utente
     useEffect(() => {
         const checkAppStatusAndAuth = async () => {
-            // Controlla lo stato dell'app (manutenzione)
             try {
                 const configDocRef = doc(db, 'app_config', 'status');
                 const configDocSnap = await getDoc(configDocRef);
@@ -79,12 +78,11 @@ function App() {
             }
             setIsAppActive(true);
 
-            // Ascolta i cambiamenti di stato dell'autenticazione
             const unsubscribe = onAuthStateChanged(auth, async (authenticatedUser) => {
                 setIsLoading(true);
                 if (authenticatedUser) {
                     let userProfile = null;
-
+                    
                     // 1. Cerca prima tra gli utenti admin/preposti
                     const userDocRef = doc(db, 'users', authenticatedUser.uid);
                     const userDocSnap = await getDoc(userDocRef);
@@ -102,18 +100,15 @@ function App() {
                     }
 
                     if (userProfile) {
-                        // Utente trovato in 'users' o 'employees'
                         setUserData(userProfile);
                         setUser(authenticatedUser);
                     } else {
-                        // Utente autenticato ma non presente in nessuna collezione -> logout forzato
                         console.error("Utente autenticato ma non trovato in Firestore. Eseguo logout.");
                         await signOut(auth);
                         setUser(null);
                         setUserData(null);
                     }
                 } else {
-                    // L'utente non è loggato
                     setUser(null);
                     setUserData(null);
                 }
@@ -146,11 +141,17 @@ function App() {
         if (userData.requiresPasswordChange) {
             return <ChangePassword onPasswordChanged={handlePasswordChanged} />;
         }
-        if (userData.role === 'admin' || userData.role === 'preposto') {
-            return <AdminDashboard user={user} userData={userData} handleLogout={handleLogout} />;
-        } else if (userData.role === 'employee') {
-            // Passa anche userData a EmployeeDashboard se necessario
-            return <EmployeeDashboard user={user} handleLogout={handleLogout} />;
+        // Switch per gestire i ruoli in modo pulito
+        switch (userData.role) {
+            case 'admin':
+            case 'preposto':
+                return <AdminDashboard user={user} userData={userData} handleLogout={handleLogout} />;
+            case 'employee':
+                return <EmployeeDashboard user={user} employeeData={userData} handleLogout={handleLogout} />;
+            default:
+                // Se il ruolo non è riconosciuto, forza il logout per sicurezza
+                handleLogout();
+                return <LoginScreen />;
         }
     }
     
