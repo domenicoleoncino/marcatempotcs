@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../firebase';
-import { collection, query, where, onSnapshot, getDoc, doc, getDocs, orderBy } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import CompanyLogo from './CompanyLogo';
 
