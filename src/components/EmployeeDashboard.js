@@ -4,19 +4,15 @@ import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestor
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import CompanyLogo from './CompanyLogo';
 
-// Funzione per calcolare la distanza tra due punti GPS
+// Funzione per calcolare la distanza, invariata
 function getDistanceInMeters(lat1, lon1, lat2, lon2) {
-    const R = 6371e3; // Raggio della Terra in metri
+    const R = 6371e3;
     const p1 = lat1 * Math.PI / 180;
     const p2 = lat2 * Math.PI / 180;
     const deltaP = (lat2 - lat1) * Math.PI / 180;
     const deltaL = (lon2 - lon1) * Math.PI / 180;
-
-    const a = Math.sin(deltaP / 2) * Math.sin(deltaP / 2) +
-              Math.cos(p1) * Math.cos(p2) *
-              Math.sin(deltaL / 2) * Math.sin(deltaL / 2);
+    const a = Math.sin(deltaP / 2) * Math.sin(deltaP / 2) + Math.cos(p1) * Math.cos(p2) * Math.sin(deltaL / 2) * Math.sin(deltaL / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
     return R * c;
 }
 
@@ -28,7 +24,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     const [isProcessing, setIsProcessing] = useState(false);
     const [locationError, setLocationError] = useState(null);
     const [inRangeArea, setInRangeArea] = useState(null);
-
+    
     const functions = getFunctions();
     const clockIn = httpsCallable(functions, 'clockEmployeeIn');
     const clockOut = httpsCallable(functions, 'clockEmployeeOut');
@@ -39,59 +35,73 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
         return () => clearInterval(timer);
     }, []);
 
-    // Filtra le aree di lavoro totali per ottenere solo quelle assegnate a questo dipendente
     const employeeWorkAreas = useMemo(() => {
-        if (!employeeData || !employeeData.workAreaIds || !allWorkAreas) return [];
-        return allWorkAreas.filter(area => employeeData.workAreaIds.includes(area.id));
+        console.log("%c--- FILTRO AREE DI LAVORO ---", "color: blue; font-weight: bold;");
+        console.log("Dati in input per il filtro:", { employeeData, allWorkAreas });
+
+        if (!employeeData || !employeeData.workAreaIds || !allWorkAreas) {
+            console.log("Filtro: Dati insufficienti, ritorno array vuoto.");
+            return [];
+        }
+        
+        console.log("ID Aree assegnate al dipendente:", employeeData.workAreaIds);
+        console.log("ID di tutte le aree disponibili:", allWorkAreas.map(a => a.id));
+
+        const filtered = allWorkAreas.filter(area => employeeData.workAreaIds.includes(area.id));
+
+        console.log("%cRisultato del filtro: Aree valide per questo dipendente:", "color: blue;", filtered);
+        return filtered;
     }, [employeeData, allWorkAreas]);
 
-    // ===================================================================
-    // ## QUI C'È IL "COMANDO" CHE AVVIA IL GPS ##
-    // ===================================================================
     useEffect(() => {
-        // CONDIZIONI DI BLOCCO: se l'utente è già timbrato o non ha aree, non fare nulla.
+        console.log("%c--- CONTROLLO AVVIO GPS ---", "color: green; font-weight: bold;");
+        console.log("Stato timbratura (activeEntry):", activeEntry);
+        console.log("Numero aree valide per GPS:", employeeWorkAreas.length);
+
         if (activeEntry || employeeWorkAreas.length === 0) {
-            setInRangeArea(null); // Assicura che non ci sia un'area selezionata
+            console.log("%c!!! GPS NON AVVIATO. Motivo:", "color: red;", { timbraturaAttiva: !!activeEntry, numeroAree: employeeWorkAreas.length });
+            setLocationError(null);
             return;
         }
 
+        console.log("%c>>> GPS IN AVVIO...", "color: green;");
         if (!navigator.geolocation) {
             setLocationError("La geolocalizzazione non è supportata da questo browser.");
             return;
         }
 
-        const success = (position) => {
-            const { latitude, longitude } = position.coords;
-            let foundArea = null;
-            for (const area of employeeWorkAreas) {
-                if (area.latitude && area.longitude && area.radius) {
-                    const distance = getDistanceInMeters(latitude, longitude, area.latitude, area.longitude);
-                    if (distance <= area.radius) {
-                        foundArea = area;
-                        break; // Trovata un'area, ferma il ciclo
+        const getLocation = () => {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const { latitude, longitude } = position.coords;
+                    let foundArea = null;
+                    for (const area of employeeWorkAreas) {
+                        if (area.latitude && area.longitude && area.radius) {
+                            const distance = getDistanceInMeters(latitude, longitude, area.latitude, area.longitude);
+                            if (distance <= area.radius) {
+                                foundArea = area;
+                                break;
+                            }
+                        }
                     }
-                }
-            }
-            setInRangeArea(foundArea); // Aggiorna lo stato con l'area trovata (o null)
-            setLocationError(null);
+                    setInRangeArea(foundArea);
+                    setLocationError(null);
+                },
+                () => {
+                    setLocationError("Impossibile recuperare la posizione. Controlla i permessi e il segnale GPS.");
+                    setInRangeArea(null);
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
         };
 
-        const error = () => {
-            setLocationError("Impossibile recuperare la posizione. Assicurati di aver dato i permessi.");
-            setInRangeArea(null);
-        };
-
-        const options = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 };
-        const watcher = navigator.geolocation.watchPosition(success, error, options);
-        
-        // Pulisce il watcher quando il componente non è più necessario
-        return () => navigator.geolocation.clearWatch(watcher);
-    }, [employeeWorkAreas, activeEntry]); // Questo effetto si riattiva solo se cambiano le aree o lo stato della timbratura
+        getLocation();
+        const intervalId = setInterval(getLocation, 7000);
+        return () => clearInterval(intervalId);
+    }, [employeeWorkAreas, activeEntry]);
     
-    // Ascolta le timbrature del dipendente
     useEffect(() => {
-        if (!user || allWorkAreas.length === 0) return;
-        
+        if (!user || !Array.isArray(allWorkAreas) || allWorkAreas.length === 0) return;
         const qActive = query(collection(db, "time_entries"), where("employeeId", "==", user.uid), where("status", "==", "clocked-in"));
         const unsubscribeActive = onSnapshot(qActive, (snapshot) => {
             if (!snapshot.empty) {
@@ -104,17 +114,15 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 setWorkAreaName('');
             }
         });
-
         const startOfDay = new Date();
         startOfDay.setHours(0, 0, 0, 0);
         const qTodays = query(collection(db, "time_entries"), where("employeeId", "==", user.uid), where("clockInTime", ">=", startOfDay), orderBy("clockInTime", "desc"));
         const unsubscribeTodays = onSnapshot(qTodays, (snapshot) => {
             setTodaysEntries(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         });
-
         return () => { unsubscribeActive(); unsubscribeTodays(); };
     }, [user, allWorkAreas]);
-
+    
     const handleAction = async (action) => {
         if (isProcessing) return;
         setIsProcessing(true);
@@ -138,7 +146,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     
     const hasPauseBeenTaken = activeEntry?.pauses && activeEntry.pauses.length > 0;
 
-    if (!employeeData || allWorkAreas.length === 0) return <div className="min-h-screen flex items-center justify-center">Caricamento...</div>;
+    if (!employeeData) return <div className="min-h-screen flex items-center justify-center">Caricamento dipendente...</div>;
 
     return (
         <div className="p-4 max-w-lg mx-auto font-sans">
@@ -148,7 +156,6 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 <p className="text-3xl font-bold">{currentTime.toLocaleTimeString('it-IT')}</p>
                 <p className="text-sm text-gray-500">{currentTime.toLocaleDateString('it-IT', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
             </div>
-
             <div className="bg-white p-4 rounded-lg shadow-md">
                 <h2 className="text-xl font-bold mb-2">Stato Timbratura</h2>
                 {activeEntry ? (
@@ -187,7 +194,6 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                     </div>
                 )}
             </div>
-
             <div className="mt-6">
                 <h2 className="text-xl font-bold mb-2">Cronologia Timbrature di Oggi</h2>
                 <div className="bg-white p-4 rounded-lg shadow-md space-y-2">
@@ -212,3 +218,4 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
 };
 
 export default EmployeeDashboard;
+
