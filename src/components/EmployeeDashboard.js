@@ -4,7 +4,7 @@ import { collection, query, where, onSnapshot, getDoc, doc, getDocs, orderBy } f
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import CompanyLogo from './CompanyLogo';
 
-// Funzione per calcolare la distanza tra due punti GPS (formula di Haversine)
+// Funzione per calcolare la distanza tra due punti GPS
 function getDistanceInMeters(lat1, lon1, lat2, lon2) {
     const R = 6371e3; // Raggio della Terra in metri
     const p1 = lat1 * Math.PI / 180;
@@ -17,9 +17,8 @@ function getDistanceInMeters(lat1, lon1, lat2, lon2) {
               Math.sin(deltaL / 2) * Math.sin(deltaL / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
-    return R * c; // Distanza in metri
+    return R * c;
 }
-
 
 const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) => {
     const [currentTime, setCurrentTime] = useState(new Date());
@@ -27,10 +26,8 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     const [todaysEntries, setTodaysEntries] = useState([]);
     const [workAreaName, setWorkAreaName] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
-
-    // Nuovi stati per la geolocalizzazione
     const [locationError, setLocationError] = useState(null);
-    const [inRangeArea, setInRangeArea] = useState(null); // L'area in cui si trova l'utente
+    const [inRangeArea, setInRangeArea] = useState(null);
 
     const functions = getFunctions();
     const clockIn = httpsCallable(functions, 'clockEmployeeIn');
@@ -42,7 +39,6 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
         return () => clearInterval(timer);
     }, []);
 
-    // Lista delle aree assegnate al dipendente
     const employeeWorkAreas = useMemo(() => {
         if (!employeeData || !employeeData.workAreaIds || !allWorkAreas) return [];
         return allWorkAreas.filter(area => employeeData.workAreaIds.includes(area.id));
@@ -50,7 +46,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
 
     // Gestione della geolocalizzazione
     useEffect(() => {
-        if (activeEntry || employeeWorkAreas.length === 0) return; // Non cercare la posizione se già al lavoro
+        if (activeEntry || employeeWorkAreas.length === 0) return;
 
         if (!navigator.geolocation) {
             setLocationError("La geolocalizzazione non è supportata da questo browser.");
@@ -60,7 +56,6 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
         const success = (position) => {
             const { latitude, longitude } = position.coords;
             let foundArea = null;
-
             for (const area of employeeWorkAreas) {
                 if (area.latitude && area.longitude && area.radius) {
                     const distance = getDistanceInMeters(latitude, longitude, area.latitude, area.longitude);
@@ -84,19 +79,17 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
         return () => navigator.geolocation.clearWatch(watcher);
     }, [employeeWorkAreas, activeEntry]);
 
-
     // Ascolta le timbrature del dipendente
     useEffect(() => {
-        if (!user) return;
+        if (!user || allWorkAreas.length === 0) return;
+        
         const qActive = query(collection(db, "time_entries"), where("employeeId", "==", user.uid), where("status", "==", "clocked-in"));
-        const unsubscribeActive = onSnapshot(qActive, async (snapshot) => {
+        const unsubscribeActive = onSnapshot(qActive, (snapshot) => {
             if (!snapshot.empty) {
                 const entryData = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
                 setActiveEntry(entryData);
-                if (entryData.workAreaId && allWorkAreas.length > 0) {
-                    const area = allWorkAreas.find(a => a.id === entryData.workAreaId);
-                    if (area) setWorkAreaName(area.name);
-                }
+                const area = allWorkAreas.find(a => a.id === entryData.workAreaId);
+                if (area) setWorkAreaName(area.name);
             } else {
                 setActiveEntry(null);
                 setWorkAreaName('');
@@ -107,8 +100,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
         startOfDay.setHours(0, 0, 0, 0);
         const qTodays = query(collection(db, "time_entries"), where("employeeId", "==", user.uid), where("clockInTime", ">=", startOfDay), orderBy("clockInTime", "desc"));
         const unsubscribeTodays = onSnapshot(qTodays, (snapshot) => {
-            const entries = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setTodaysEntries(entries);
+            setTodaysEntries(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         });
 
         return () => { unsubscribeActive(); unsubscribeTodays(); };
@@ -137,7 +129,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     
     const hasPauseBeenTaken = activeEntry?.pauses && activeEntry.pauses.length > 0;
 
-    if (!employeeData) return <div className="min-h-screen flex items-center justify-center">Profilo non trovato. Contatta l'amministratore. <button onClick={handleLogout}>Logout</button></div>;
+    if (!employeeData || allWorkAreas.length === 0) return <div className="min-h-screen flex items-center justify-center">Caricamento...</div>;
 
     return (
         <div className="p-4 max-w-lg mx-auto font-sans">
@@ -156,11 +148,11 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                         <p>Area: {workAreaName}</p>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
                             {!hasPauseBeenTaken && (
-                                <button onClick={() => handleAction('clockPause')} disabled={isProcessing} className="w-full text-lg font-bold py-4 px-4 rounded-lg shadow-md text-white bg-yellow-500 hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-yellow-400 disabled:bg-gray-400">
+                                <button onClick={() => handleAction('clockPause')} disabled={isProcessing} className="w-full text-lg font-bold py-4 px-4 rounded-lg shadow-md text-white bg-yellow-500 hover:bg-yellow-600 disabled:bg-gray-400">
                                     TIMBRA PAUSA
                                 </button>
                             )}
-                            <button onClick={() => handleAction('clockOut')} disabled={isProcessing} className="w-full text-lg font-bold py-4 px-4 rounded-lg shadow-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:bg-gray-400">
+                            <button onClick={() => handleAction('clockOut')} disabled={isProcessing} className="w-full text-lg font-bold py-4 px-4 rounded-lg shadow-md text-white bg-red-600 hover:bg-red-700 disabled:bg-gray-400">
                                 TIMBRA USCITA
                             </button>
                         </div>
@@ -179,7 +171,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                         <button 
                             onClick={() => handleAction('clockIn')} 
                             disabled={isProcessing || !inRangeArea} 
-                            className="w-full mt-4 text-lg font-bold py-4 px-4 rounded-lg shadow-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:bg-gray-400"
+                            className="w-full mt-4 text-lg font-bold py-4 px-4 rounded-lg shadow-md text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-400"
                         >
                             TIMBRA ENTRATA
                         </button>
