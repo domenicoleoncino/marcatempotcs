@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc, collection, getDocs } from 'firebase/firestore'; // Assicurati che getDocs e collection siano importati
+import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
 import LoginScreen from './components/LoginScreen';
 import AdminDashboard from './components/AdminDashboard';
 import EmployeeDashboard from './components/EmployeeDashboard';
@@ -11,9 +11,8 @@ const App = () => {
     const [user, setUser] = useState(null);
     const [userData, setUserData] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [allWorkAreas, setAllWorkAreas] = useState([]); // Stato per memorizzare le aree
+    const [allWorkAreas, setAllWorkAreas] = useState([]);
 
-    // Funzione per caricare TUTTE le aree di lavoro
     const fetchAllData = useCallback(async () => {
         try {
             const areasSnapshot = await getDocs(collection(db, "work_areas"));
@@ -24,16 +23,11 @@ const App = () => {
         }
     }, []);
 
-    // Esegui il caricamento dei dati quando il componente si avvia
-    useEffect(() => {
-        fetchAllData();
-    }, [fetchAllData]);
-
-    // Gestione dello stato di autenticazione dell'utente
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (authenticatedUser) => {
             setIsLoading(true);
             if (authenticatedUser) {
+                // PRIMA: Trova il profilo dell'utente
                 let userProfile = null;
                 const userDocRef = doc(db, 'users', authenticatedUser.uid);
                 const userDocSnap = await getDoc(userDocRef);
@@ -49,6 +43,8 @@ const App = () => {
                 }
 
                 if (userProfile) {
+                    // DOPO: Se l'utente esiste, SCARICA LE AREE DI LAVORO
+                    await fetchAllData();
                     setUserData(userProfile);
                     setUser(authenticatedUser);
                 } else {
@@ -64,7 +60,7 @@ const App = () => {
             setIsLoading(false);
         });
         return () => unsubscribe();
-    }, []);
+    }, [fetchAllData]); // Aggiungi fetchAllData qui
 
     const handleLogout = async () => {
         await signOut(auth);
@@ -84,12 +80,15 @@ const App = () => {
         return <ChangePassword user={user} />;
     }
     
-    // Passiamo 'allWorkAreas' ai componenti figli
     if (userData && (userData.role === 'admin' || userData.role === 'preposto')) {
         return <AdminDashboard user={user} userData={userData} handleLogout={handleLogout} allWorkAreas={allWorkAreas} fetchAllData={fetchAllData} />;
     }
 
     if (userData && userData.role === 'employee') {
+        // Questa condizione interna in EmployeeDashboard gestirà il caricamento se le aree non sono ancora pronte
+        if (allWorkAreas.length === 0) {
+            return <div className="min-h-screen flex items-center justify-center">Caricamento aree...</div>;
+        }
         return <EmployeeDashboard user={user} employeeData={userData} handleLogout={handleLogout} allWorkAreas={allWorkAreas} />;
     }
 
