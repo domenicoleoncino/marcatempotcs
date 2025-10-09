@@ -16,6 +16,7 @@ function getDistanceInMeters(lat1, lon1, lat2, lon2) {
     return R * c;
 }
 
+
 const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) => {
     const [currentTime, setCurrentTime] = useState(new Date());
     const [activeEntry, setActiveEntry] = useState(null);
