@@ -7,20 +7,12 @@ const roundTimeWithCustomRules = (date, type) => {
     const newDate = new Date(date.getTime());
     const minutes = newDate.getMinutes();
     if (type === 'entrata') {
-        if (minutes >= 46) {
-            newDate.setHours(newDate.getHours() + 1);
-            newDate.setMinutes(0);
-        } else if (minutes >= 16) {
-            newDate.setMinutes(30);
-        } else {
-            newDate.setMinutes(0);
-        }
+        if (minutes >= 46) { newDate.setHours(newDate.getHours() + 1); newDate.setMinutes(0); } 
+        else if (minutes >= 16) { newDate.setMinutes(30); }
+        else { newDate.setMinutes(0); }
     } else if (type === 'uscita') {
-        if (minutes >= 30) {
-            newDate.setMinutes(30);
-        } else {
-            newDate.setMinutes(0);
-        }
+        if (minutes >= 30) { newDate.setMinutes(30); }
+        else { newDate.setMinutes(0); }
     }
     newDate.setSeconds(0);
     newDate.setMilliseconds(0);
@@ -62,13 +54,18 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
             const localDateTime = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
             setFormData({ ...item, timestamp: localDateTime, workAreaId: item?.workAreaIds?.[0] || '', note: item?.activeEntry?.note || '' });
         } else {
-            setFormData(item ? { ...item } : {});
+            // Quando apriamo la modifica di un admin, usiamo 'nome' e 'cognome'
+            if (type === 'editAdmin' && item) {
+                setFormData({ ...item, name: item.nome, surname: item.cognome });
+            } else {
+                setFormData(item ? { ...item } : {});
+            }
         }
     }, [type, item]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (['newEmployee', 'newAdmin'].includes(type) && (!formData.password || formData.password.length < 6)) {
+        if ((['newEmployee', 'newAdmin'].includes(type)) && (!formData.password || formData.password.length < 6)) {
             return setError("La password deve essere di almeno 6 caratteri.");
         }
         if (type === 'deleteAdmin' && item?.id === user.uid) {
@@ -84,8 +81,8 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                 const newUserPayload = {
                     email: formData.email.toLowerCase().trim(),
                     password: formData.password,
-                    nome: formData.name,
-                    cognome: formData.surname,
+                    nome: formData.name, // 'name' dal form diventa 'nome'
+                    cognome: formData.surname, // 'surname' dal form diventa 'cognome'
                     telefono: formData.phone || "",
                     role: type === 'newEmployee' ? 'employee' : (formData.role || 'preposto'),
                 };
@@ -102,6 +99,14 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                 }
             } else {
                  switch (type) {
+                    case 'editAdmin': // <-- NUOVA LOGICA
+                        if (!item?.id) throw new Error("ID utente non trovato.");
+                        await updateDoc(doc(db, "users", item.id), { 
+                            nome: formData.name, 
+                            cognome: formData.surname,
+                            role: formData.role
+                        });
+                        break;
                     case 'adminClockIn':
                         await onAdminClockIn(formData.workAreaId, formData.timestamp);
                         break;
@@ -200,6 +205,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
         deleteArea: 'Elimina Area di Lavoro',
         assignArea: `Assegna Aree a ${item?.name} ${item?.surname}`,
         newAdmin: 'Aggiungi Personale Amministrativo',
+        editAdmin: 'Modifica Personale Amministrativo', // <-- NUOVO TITOLO
         deleteAdmin: 'Elimina Personale Amministrativo',
         assignManagedAreas: `Assegna Aree a Preposto ${item?.name}`,
         manualClockIn: `Timbra Entrata per ${item?.name} ${item?.surname}`,
@@ -227,6 +233,20 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                         </select>
                     )}
                 </div> );
+            // --- INIZIO NUOVO FORM ---
+            case 'editAdmin':
+                return ( <div className="space-y-4">
+                    <p className="text-sm text-gray-500">Stai modificando: {item?.email}</p>
+                    <input name="name" value={formData.name || ''} onChange={handleInputChange} placeholder="Nome" required className="w-full p-2 border rounded" />
+                    <input name="surname" value={formData.surname || ''} onChange={handleInputChange} placeholder="Cognome" required className="w-full p-2 border rounded" />
+                    {currentUserRole === 'admin' && (
+                        <select name="role" value={formData.role || 'preposto'} onChange={handleInputChange} required className="w-full p-2 border rounded">
+                            <option value="preposto">Preposto</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    )}
+                </div> );
+            // --- FINE NUOVO FORM ---
             case 'editEmployee':
                 return ( <div className="space-y-4">
                     <input name="name" value={formData.name || ''} onChange={handleInputChange} placeholder="Nome" required className="w-full p-2 border rounded" />
@@ -352,7 +372,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                 return <p>Sei sicuro di voler applicare la pausa predefinita a <strong>{item.name} {item.surname}</strong>?</p>;
             case 'deleteEmployee': return <p>Sei sicuro di voler eliminare il dipendente <strong>{item.name} {item.surname}</strong>?</p>;
             case 'deleteArea': return <p>Sei sicuro di voler eliminare l'area <strong>{item.name}</strong>?</p>;
-            case 'deleteAdmin': return <p>Sei sicuro di voler eliminare l'utente <strong>{item.name} {item.surname}</strong>?</p>;
+            case 'deleteAdmin': return <p>Sei sicuro di voler eliminare l'utente <strong>{item.nome} {item.cognome}</strong>?</p>;
             case 'resetDevice': return <p>Sei sicuro di voler resettare i dispositivi per <strong>{item.name} {item.surname}</strong>?</p>;
             default: return null;
         }

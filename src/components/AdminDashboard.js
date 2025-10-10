@@ -16,7 +16,7 @@ const roundTimeWithCustomRules = (date, type) => {
     const newDate = new Date(date.getTime());
     const minutes = newDate.getMinutes();
     if (type === 'entrata') {
-        if (minutes >= 46) { newDate.setHours(newDate.getHours() + 1); newDate.setMinutes(0); } 
+        if (minutes >= 46) { newDate.setHours(newDate.getHours() + 1); newDate.setMinutes(0); }
         else if (minutes >= 16) { newDate.setMinutes(30); }
         else { newDate.setMinutes(0); }
     } else if (type === 'uscita') {
@@ -46,7 +46,7 @@ const DashboardView = ({ totalEmployees, activeEmployees, totalDayHours, allWork
              <h2 className="text-xl sm:text-2xl font-bold text-gray-800">Chi è al Lavoro Ora</h2>
              <div>
                 <label htmlFor="area-filter" className="text-sm font-medium text-gray-700 mr-2">Filtra per Area:</label>
-                <select 
+                <select
                     id="area-filter"
                     value={areaFilter}
                     onChange={(e) => setAreaFilter(e.target.value)}
@@ -124,7 +124,7 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                     <tbody className="bg-white divide-y divide-gray-200">
                         {employees.map(emp => {
                             const hasPauseBeenTaken = emp.activeEntry?.pauses && emp.activeEntry.pauses.length > 0;
-                            
+
                             return (
                                 <tr key={emp.id}>
                                     <td className="px-4 py-2 whitespace-nowrap">
@@ -213,9 +213,10 @@ const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
 const AdminManagementView = ({ admins, openModal, user, superAdminEmail, currentUserRole }) => {
     const isSuperAdmin = user.email === superAdminEmail;
     const adminsToDisplay = admins.filter(admin => {
-        if (isSuperAdmin) return admin.id !== user.uid;
-        return admin.id !== user.uid && admin.email !== superAdminEmail;
+        if (isSuperAdmin) return true;
+        return admin.email !== superAdminEmail;
     });
+
     return (
         <div>
             <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
@@ -236,15 +237,18 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
                         {adminsToDisplay.map(admin => (
                             <tr key={admin.id}>
                                 <td className="px-4 py-2 whitespace-nowrap">
-                                    <div className="text-sm font-medium text-gray-900">{admin.name} {admin.surname}</div>
+                                    <div className="text-sm font-medium text-gray-900">{admin.nome} {admin.cognome}</div>
                                     <div className="text-xs text-gray-500 break-all">{admin.email}</div>
                                 </td>
                                 <td className="px-4 py-2 whitespace-nowrap"><span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${admin.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-orange-100 text-orange-800'}`}>{admin.role}</span></td>
                                 <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-500">{admin.managedAreaNames?.join(', ') || (admin.role === 'admin' ? 'Tutte' : 'Nessuna')}</td>
                                 <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
                                     <div className="flex items-center gap-3">
+                                        {currentUserRole === 'admin' && (
+                                             <button onClick={() => openModal('editAdmin', admin)} className="text-xs text-green-600 hover:text-green-900">Modifica</button>
+                                        )}
                                         {currentUserRole === 'admin' && admin.role === 'preposto' && <button onClick={() => openModal('assignManagedAreas', admin)} className="text-xs text-indigo-600 hover:text-indigo-900">Assegna Aree</button>}
-                                        {currentUserRole === 'admin' && <button onClick={() => openModal('deleteAdmin', admin)} className="text-xs text-red-600 hover:text-red-900">Elimina</button>}
+                                        {currentUserRole === 'admin' && admin.id !== user.uid && <button onClick={() => openModal('deleteAdmin', admin)} className="text-xs text-red-600 hover:text-red-900">Elimina</button>}
                                     </div>
                                 </td>
                             </tr>
@@ -384,7 +388,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         if (currentUserRole !== 'preposto' || !userData?.managedAreaIds) {
             return allWorkAreas;
         }
-        return allWorkAreas.filter(area => 
+        return allWorkAreas.filter(area =>
             userData.managedAreaIds.includes(area.id)
         );
     }, [allWorkAreas, currentUserRole, userData]);
@@ -394,7 +398,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         const q = query(collection(db, "time_entries"), where("status", "==", "clocked-in"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const activeEntriesList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            
+
             if (currentUserRole === 'preposto' && adminEmployeeProfile) {
                 const adminActiveEntryData = activeEntriesList.find(entry => entry.employeeId === adminEmployeeProfile.id);
                 if (adminActiveEntryData) {
@@ -408,7 +412,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             let visibleEntries = activeEntriesList;
             if (currentUserRole === 'preposto') {
                 const managedEmployeeIds = managedEmployees.map(emp => emp.id);
-                visibleEntries = activeEntriesList.filter(entry => 
+                visibleEntries = activeEntriesList.filter(entry =>
                     managedEmployeeIds.includes(entry.employeeId)
                 );
             }
@@ -428,12 +432,12 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                     pauses: entry.pauses || []
                 };
             }).sort((a, b) => a.employeeName.localeCompare(b.employeeName));
-            
+
             setActiveEmployeesDetails(details);
         });
         return () => unsubscribe();
     }, [allEmployees, allWorkAreas, adminEmployeeProfile, currentUserRole, managedEmployees]);
-    
+
     useEffect(() => {
         const startOfDay = new Date();
         startOfDay.setHours(0, 0, 0, 0);
@@ -458,14 +462,14 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         });
         return () => unsubscribe();
     }, []);
-    
+
     const sortedAndFilteredEmployees = useMemo(() => {
         const employeesWithDetails = managedEmployees.map(emp => {
             const areaNames = (emp.workAreaIds || []).map(id => {
                 const area = allWorkAreas.find(a => a.id === id);
                 return area ? area.name : null;
             }).filter(Boolean);
-            
+
             const activeEntry = activeEmployeesDetails.find(detail => detail.employeeId === emp.id);
 
             return {
@@ -482,7 +486,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 `${emp.name} ${emp.surname}`.toLowerCase().includes(lowercasedFilter)
             );
         }
-        
+
         if (sortConfig !== null) {
             sortableItems.sort((a, b) => {
                 if (a[sortConfig.key] < b[sortConfig.key]) {
@@ -501,7 +505,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const areasWithLivePresenze = useMemo(() => {
         let areasInScope = workAreasWithHours;
         if (currentUserRole === 'preposto' && userData?.managedAreaIds) {
-            areasInScope = workAreasWithHours.filter(area => 
+            areasInScope = workAreasWithHours.filter(area =>
                 userData.managedAreaIds.includes(area.id)
             );
         }
@@ -534,7 +538,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             alert(`Errore durante la timbratura: ${error.message}`);
         }
     };
-    
+
     const handleAdminClockOut = async () => {
         if (!adminActiveEntry) return;
         try {
@@ -587,7 +591,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             const currentPauses = entryDoc.data().pauses || [];
             const startTime = new Date();
             const endTime = new Date(startTime.getTime() + pauseDurationInMinutes * 60000);
-            const newPause = { 
+            const newPause = {
                 start: Timestamp.fromDate(startTime),
                 end: Timestamp.fromDate(endTime),
                 duration: pauseDurationInMinutes,
@@ -602,7 +606,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             alert(`Si è verificato un errore: ${error.message}`);
         }
     };
-    
+
     const openModal = (type, item = null) => {
         setModalType(type);
         setSelectedItem(item);
@@ -621,7 +625,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             const endDate = new Date(dateRange.end);
             endDate.setHours(23, 59, 59, 999);
 
-            let q = query(collection(db, "time_entries"), 
+            let q = query(collection(db, "time_entries"),
                 where("clockInTime", ">=", Timestamp.fromDate(startDate)),
                 where("clockInTime", "<=", Timestamp.fromDate(endDate))
             );
@@ -632,7 +636,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             if (reportAreaFilter !== 'all') {
                 q = query(q, where("workAreaId", "==", reportAreaFilter));
             }
-            
+
             const querySnapshot = await getDocs(q);
             const entries = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
@@ -691,7 +695,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             setIsLoading(false);
         }
     };
-    
+
     const handleExportExcel = (data) => {
         if (!data || data.length === 0) {
             alert("Nessun dato da esportare.");
@@ -721,7 +725,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         const blob = new Blob([xmlString], { type: "application/xml;charset=utf-8" });
         saveAs(blob, "Report_Marcatempo.xml");
     };
-    
+
     const handleGenerateEmployeeReportPDF = (employee) => {
         if (!employee || reports.length === 0) {
             alert("Per generare un report per un dipendente, prima genera un report generale con il periodo desiderato.");
@@ -760,7 +764,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         }
         setSortConfig({ key, direction });
     };
-    
+
     if (isLoading) { return <div className="min-h-screen flex items-center justify-center bg-gray-100 w-full"><p>Caricamento dati...</p></div>; }
 
     return (
@@ -777,14 +781,14 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                                         {adminActiveEntry.isOnBreak && <p className="text-xs font-semibold text-yellow-600">In Pausa</p>}
                                     </div>
                                     <div className="flex gap-2 justify-center">
-                                        <button 
-                                            onClick={handleAdminPause} 
+                                        <button
+                                            onClick={handleAdminPause}
                                             className={`text-xs px-3 py-1 text-white rounded ${adminActiveEntry.isOnBreak ? 'bg-green-500 hover:bg-green-600' : 'bg-yellow-500 hover:bg-yellow-600'}`}
                                         >
                                             {adminActiveEntry.isOnBreak ? 'Termina Pausa' : 'Inizia Pausa'}
                                         </button>
-                                        <button 
-                                            onClick={handleAdminClockOut} 
+                                        <button
+                                            onClick={handleAdminClockOut}
                                             disabled={adminActiveEntry.isOnBreak}
                                             className="text-xs px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 disabled:bg-gray-400"
                                         >
@@ -860,16 +864,16 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                     {view === 'reports' && <ReportView reports={reports} title={reportTitle} user={user} handleExportExcel={handleExportExcel} handleExportXml={handleExportXml} />}
                 </main>
             </div>
-            {showModal && <AdminModal 
-                type={modalType} 
-                item={selectedItem} 
-                setShowModal={setShowModal} 
-                workAreas={allWorkAreas} 
-                onDataUpdate={fetchData} 
-                user={user} 
-                superAdminEmail={superAdminEmail} 
-                allEmployees={allEmployees} 
-                currentUserRole={currentUserRole} 
+            {showModal && <AdminModal
+                type={modalType}
+                item={selectedItem}
+                setShowModal={setShowModal}
+                workAreas={allWorkAreas}
+                onDataUpdate={fetchData}
+                user={user}
+                superAdminEmail={superAdminEmail}
+                allEmployees={allEmployees}
+                currentUserRole={currentUserRole}
                 userData={userData}
                 onAdminClockIn={handleAdminClockIn}
                 onAdminApplyPause={handleAdminApplyPause}
