@@ -267,7 +267,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                     {workAreas.map(area => (
                         <div key={area.id} className="flex items-center">
                             <input type="checkbox" id={area.id} name={area.id} checked={formData.managedAreaIds?.includes(area.id) || false} onChange={handleManagedAreasChange} className="h-4 w-4" />
-              _setFormData({ ...formData, managedAreaIds: [...currentAreas, name] });_
+                            <label htmlFor={area.id} className="ml-2">{area.name}</label>
                         </div>
                     ))}
                 </div> );
@@ -292,7 +292,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                         <button type="submit" disabled={isLoading} className={`px-4 py-2 text-white rounded-md ${type.includes('delete') || type === 'applyPredefinedPause' ? 'bg-red-600 hover:bg-red-700' : 'bg-indigo-600 hover:bg-indigo-700'} disabled:bg-gray-400 flex items-center gap-2`}>
                             {isLoading ? 'Caricamento...' : (type.includes('delete') || type === 'applyPredefinedPause' ? 'Conferma' : 'Salva')}
                         </button>
-                </div>
+                    </div>
                 </form>
             </div>
         </div>
