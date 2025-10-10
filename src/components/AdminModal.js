@@ -139,7 +139,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                             employeeId: item.id, 
                             workAreaId: formData.workAreaId, 
                             clockInTime: roundTimeWithCustomRules(new Date(formData.timestamp), 'entrata'), 
-                            clockOutTime: null,
+                            clockOutTime: null, 
                             status: 'clocked-in', 
                             note: formData.note || null, 
                             pauses: [],
@@ -256,7 +256,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                                     <div key={area.id} className="flex items-center">
                                         <input type="checkbox" id={area.id} name={area.id} onChange={handleCheckboxChange} className="h-4 w-4" />
                                         <label htmlFor={area.id} className="ml-2">{area.name}</label>
-                              S     </div>
+                                    </div>
                                 ))}
                             </div>
                         </div>
@@ -267,11 +267,10 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                     {workAreas.map(area => (
                         <div key={area.id} className="flex items-center">
                             <input type="checkbox" id={area.id} name={area.id} checked={formData.managedAreaIds?.includes(area.id) || false} onChange={handleManagedAreasChange} className="h-4 w-4" />
-                            <label htmlFor={area.id} className="ml-2">{area.name}</label>
+              _setFormData({ ...formData, managedAreaIds: [...currentAreas, name] });_
                         </div>
                     ))}
                 </div> );
-            // ... il resto del file rimane invariato ...
             default: return null;
         }
     };
@@ -293,7 +292,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                         <button type="submit" disabled={isLoading} className={`px-4 py-2 text-white rounded-md ${type.includes('delete') || type === 'applyPredefinedPause' ? 'bg-red-600 hover:bg-red-700' : 'bg-indigo-600 hover:bg-indigo-700'} disabled:bg-gray-400 flex items-center gap-2`}>
                             {isLoading ? 'Caricamento...' : (type.includes('delete') || type === 'applyPredefinedPause' ? 'Conferma' : 'Salva')}
                         </button>
-              _setFormData({ ...formData, managedAreaIds: currentAreas.filter(id => id !== name) });_
+                </div>
                 </form>
             </div>
         </div>
