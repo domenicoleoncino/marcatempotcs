@@ -34,8 +34,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
 
     const handleInputChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
-    // --- QUESTE FUNZIONI SONO STATE SPOSTATE PIÙ IN BASSO PER CHIAREZZA ---
-
     useEffect(() => {
         if (type === 'manualClockIn' || type === 'manualClockOut' || type === 'adminClockIn') {
             const now = new Date();
@@ -141,8 +139,10 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                             employeeId: item.id, 
                             workAreaId: formData.workAreaId, 
                             clockInTime: roundTimeWithCustomRules(new Date(formData.timestamp), 'entrata'), 
-                            clockOutTime: null, 
-            _setFormData({ ...formData, workAreaIds: currentAreas.filter(id => id !== name) });_
+                            clockOutTime: null,
+                            status: 'clocked-in', 
+                            note: formData.note || null, 
+                            pauses: [],
                             createdBy: user.uid 
                         });
                         break;
@@ -256,7 +256,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                                     <div key={area.id} className="flex items-center">
                                         <input type="checkbox" id={area.id} name={area.id} onChange={handleCheckboxChange} className="h-4 w-4" />
                                         <label htmlFor={area.id} className="ml-2">{area.name}</label>
-                                    </div>
+                              S     </div>
                                 ))}
                             </div>
                         </div>
@@ -293,7 +293,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                         <button type="submit" disabled={isLoading} className={`px-4 py-2 text-white rounded-md ${type.includes('delete') || type === 'applyPredefinedPause' ? 'bg-red-600 hover:bg-red-700' : 'bg-indigo-600 hover:bg-indigo-700'} disabled:bg-gray-400 flex items-center gap-2`}>
                             {isLoading ? 'Caricamento...' : (type.includes('delete') || type === 'applyPredefinedPause' ? 'Conferma' : 'Salva')}
                         </button>
-                    </div>
+              _setFormData({ ...formData, managedAreaIds: currentAreas.filter(id => id !== name) });_
                 </form>
             </div>
         </div>
@@ -301,3 +301,4 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
 };
 
 export default AdminModal;
+
