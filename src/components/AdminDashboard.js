@@ -29,22 +29,38 @@ const roundTimeWithCustomRules = (date, type) => {
 };
 
 // --- SUB-COMPONENTI INTERNI ---
-const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours }) => (
+const DashboardView = ({ totalEmployees, activeEmployees, totalDayHours, allWorkAreas, areaFilter, setAreaFilter }) => (
     <div>
         <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-4">Dashboard</h1>
         <div className="flex flex-col md:grid md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
             <div className="bg-white p-4 rounded-lg shadow-md text-center sm:text-left">
                 <p className="text-sm text-gray-500">Dipendenti Attivi</p>
-                <p className="text-2xl font-bold text-gray-800">{activeEmployeesDetails.length} / {totalEmployees}</p>
+                <p className="text-2xl font-bold text-gray-800">{activeEmployees.length} / {totalEmployees}</p>
             </div>
             <div className="bg-white p-4 rounded-lg shadow-md text-center sm:text-left">
                 <p className="text-sm text-gray-500">Ore Lavorate Oggi (Totali)</p>
                 <p className="text-2xl font-bold text-gray-800">{totalDayHours}</p>
             </div>
         </div>
-        <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-3">Chi è al Lavoro Ora</h2>
+        <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-3 gap-4">
+             <h2 className="text-xl sm:text-2xl font-bold text-gray-800">Chi è al Lavoro Ora</h2>
+             <div>
+                <label htmlFor="area-filter" className="text-sm font-medium text-gray-700 mr-2">Filtra per Area:</label>
+                <select 
+                    id="area-filter"
+                    value={areaFilter}
+                    onChange={(e) => setAreaFilter(e.target.value)}
+                    className="p-2 border border-gray-300 rounded-md bg-white"
+                >
+                    <option value="all">Tutte le Aree</option>
+                    {allWorkAreas.map(area => (
+                        <option key={area.id} value={area.id}>{area.name}</option>
+                    ))}
+                </select>
+             </div>
+        </div>
         <div className="bg-white shadow-md rounded-lg overflow-x-auto">
-            {activeEmployeesDetails.length > 0 ? (
+            {activeEmployees.length > 0 ? (
                 <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                         <tr>
@@ -55,7 +71,7 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours }
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                        {activeEmployeesDetails.map(entry => (
+                        {activeEmployees.map(entry => (
                             <tr key={entry.id}>
                                 <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.employeeName}</td>
                                 <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.areaName}</td>
@@ -67,7 +83,7 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours }
                         ))}
                     </tbody>
                 </table>
-            ) : <p className="p-4 text-sm text-gray-500">Nessun dipendente è attualmente al lavoro.</p>}
+            ) : <p className="p-4 text-sm text-gray-500">Nessun dipendente corrisponde ai filtri selezionati.</p>}
         </div>
     </div>
 );
@@ -308,6 +324,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const [adminActiveEntry, setAdminActiveEntry] = useState(null);
     const [totalDayHours, setTotalDayHours] = useState('0.00');
     const [workAreasWithHours, setWorkAreasWithHours] = useState([]);
+    const [dashboardAreaFilter, setDashboardAreaFilter] = useState('all');
 
     const currentUserRole = userData?.role;
     const superAdminEmail = "domenico.leoncino@tcsitalia.com";
@@ -493,6 +510,13 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             presenzeAttuali: activeEmployeesDetails.filter(d => d.workAreaId === area.id).length
         }));
     }, [workAreasWithHours, activeEmployeesDetails, currentUserRole, userData]);
+
+    const filteredActiveEmployees = useMemo(() => {
+        if (dashboardAreaFilter === 'all') {
+            return activeEmployeesDetails;
+        }
+        return activeEmployeesDetails.filter(emp => emp.workAreaId === dashboardAreaFilter);
+    }, [activeEmployeesDetails, dashboardAreaFilter]);
 
     const handleAdminClockIn = async (areaId, timestamp) => {
         if (!adminEmployeeProfile) return;
@@ -829,7 +853,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                    </div>
                 )}
                 <main>
-                    {view === 'dashboard' && <DashboardView totalEmployees={managedEmployees.length} activeEmployeesDetails={activeEmployeesDetails} totalDayHours={totalDayHours} />}
+                    {view === 'dashboard' && <DashboardView totalEmployees={managedEmployees.length} activeEmployees={filteredActiveEmployees} totalDayHours={totalDayHours} allWorkAreas={allWorkAreas} areaFilter={dashboardAreaFilter} setAreaFilter={setDashboardAreaFilter} />}
                     {view === 'employees' && <EmployeeManagementView employees={sortedAndFilteredEmployees} openModal={openModal} currentUserRole={currentUserRole} requestSort={requestSort} sortConfig={sortConfig} searchTerm={searchTerm} setSearchTerm={setSearchTerm} handleGenerateEmployeeReportPDF={handleGenerateEmployeeReportPDF} />}
                     {view === 'areas' && <AreaManagementView workAreas={areasWithLivePresenze} openModal={openModal} currentUserRole={currentUserRole} />}
                     {view === 'admins' && <AdminManagementView admins={admins} openModal={openModal} user={user} superAdminEmail={superAdminEmail} currentUserRole={currentUserRole} />}
@@ -855,3 +879,4 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 };
 
 export default AdminDashboard;
+
