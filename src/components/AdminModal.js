@@ -34,25 +34,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
 
     const handleInputChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
-    const handleCheckboxChange = (e) => {
-        const { name, checked } = e.target;
-        const currentAreas = formData.workAreaIds || item?.workAreaIds || [];
-        if (checked) {
-            setFormData({ ...formData, workAreaIds: [...currentAreas, name] });
-        } else {
-            setFormData({ ...formData, workAreaIds: currentAreas.filter(id => id !== name) });
-        }
-    };
-
-    const handleManagedAreasChange = (e) => {
-        const { name, checked } = e.target;
-        const currentAreas = formData.managedAreaIds || item?.managedAreaIds || [];
-        if (checked) {
-            setFormData({ ...formData, managedAreaIds: [...currentAreas, name] });
-        } else {
-            setFormData({ ...formData, managedAreaIds: currentAreas.filter(id => id !== name) });
-        }
-    };
+    // --- QUESTE FUNZIONI SONO STATE SPOSTATE PIÙ IN BASSO PER CHIAREZZA ---
 
     useEffect(() => {
         if (type === 'manualClockIn' || type === 'manualClockOut' || type === 'adminClockIn') {
@@ -86,42 +68,28 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
             } else if (type === 'applyPredefinedPause') {
                 await onAdminApplyPause(item);
             } else if (type === 'newEmployee' || type === 'newAdmin') {
-                // --- INIZIO CODICE CORRETTO ---
-                
-                // 1. Definisci l'URL della tua funzione
                 const functionURL = 'https://us-central1-marcatempo-tcs.cloudfunctions.net/createNewUser';
-
-                // 2. Prepara il pacchetto di dati (payload) con i nomi GIUSTI (in italiano)
                 const newUserPayload = {
                     email: formData.email.toLowerCase().trim(),
                     password: formData.password,
-                    nome: formData.name,       // Corretto: invia 'nome'
-                    cognome: formData.surname, // Corretto: invia 'cognome'
-                    telefono: formData.phone || "", // Corretto: invia 'telefono'
+                    nome: formData.name,
+                    cognome: formData.surname,
+                    telefono: formData.phone || "",
                     role: type === 'newEmployee' ? 'employee' : (formData.role || 'preposto'),
                 };
                 
-                // 3. Esegui la chiamata con il metodo standard 'fetch'
                 const response = await fetch(functionURL, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(newUserPayload)
                 });
                 
-                // 4. Controlla se la risposta dal server è positiva
                 if (!response.ok) {
                     const errorData = await response.json();
-                    // Se c'è un errore, lo mostra all'utente
                     throw new Error(errorData.error || 'Si è verificato un errore durante la creazione dell\'utente.');
                 }
-                
-                // --- FINE CODICE CORRETTO ---
-
             } else {
                 switch (type) {
-                    // ... il resto della logica rimane invariato ...
                     case 'assignEmployeeToArea':
                         const empRef = doc(db, "employees", formData.employeeId);
                         const empDoc = await getDoc(empRef);
@@ -174,9 +142,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                             workAreaId: formData.workAreaId, 
                             clockInTime: roundTimeWithCustomRules(new Date(formData.timestamp), 'entrata'), 
                             clockOutTime: null, 
-                            status: 'clocked-in', 
-                            note: formData.note || null, 
-                            pauses: [],
+            _setFormData({ ...formData, workAreaIds: currentAreas.filter(id => id !== name) });_
                             createdBy: user.uid 
                         });
                         break;
@@ -224,6 +190,26 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
         applyPredefinedPause: `Applica Pausa a ${item?.name} ${item?.surname}`,
     };
 
+    const handleCheckboxChange = (e) => {
+        const { name, checked } = e.target;
+        const currentAreas = formData.workAreaIds || item?.workAreaIds || [];
+        if (checked) {
+            setFormData({ ...formData, workAreaIds: [...currentAreas, name] });
+        } else {
+            setFormData({ ...formData, workAreaIds: currentAreas.filter(id => id !== name) });
+        }
+    };
+
+    const handleManagedAreasChange = (e) => {
+        const { name, checked } = e.target;
+        const currentAreas = formData.managedAreaIds || item?.managedAreaIds || [];
+        if (checked) {
+            setFormData({ ...formData, managedAreaIds: [...currentAreas, name] });
+        } else {
+            setFormData({ ...formData, managedAreaIds: currentAreas.filter(id => id !== name) });
+        }
+    };
+
     const renderForm = () => {
         switch (type) {
             case 'newEmployee':
@@ -240,6 +226,50 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                             <option value="admin">Admin</option>
                         </select>
                     )}
+                </div> );
+            case 'assignArea':
+                return ( <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {workAreas.map(area => (
+                        <div key={area.id} className="flex items-center">
+                            <input type="checkbox" id={area.id} name={area.id} checked={formData.workAreaIds?.includes(area.id) || false} onChange={handleCheckboxChange} className="h-4 w-4" />
+                            <label htmlFor={area.id} className="ml-2">{area.name}</label>
+                        </div>
+                    ))}
+                </div> );
+            case 'assignEmployeeToArea':
+                const prepostoAreas = workAreas.filter(area => userData.managedAreaIds.includes(area.id));
+                return (
+                    <div className="space-y-4">
+                        <div>
+                            <label htmlFor="employeeId" className="block text-sm font-medium text-gray-700">Seleziona Dipendente</label>
+                            <select name="employeeId" value={formData.employeeId || ''} onChange={handleInputChange} required className="w-full p-2 border rounded">
+                                <option value="">-- Scegli un dipendente --</option>
+                                {allEmployees.map(emp => (
+                                    <option key={emp.id} value={emp.id}>{emp.name} {emp.surname}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">Seleziona Aree</label>
+                            <div className="space-y-2 max-h-40 overflow-y-auto mt-2 border p-2 rounded-md">
+                                {prepostoAreas.map(area => (
+                                    <div key={area.id} className="flex items-center">
+                                        <input type="checkbox" id={area.id} name={area.id} onChange={handleCheckboxChange} className="h-4 w-4" />
+                                        <label htmlFor={area.id} className="ml-2">{area.name}</label>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                );
+            case 'assignManagedAreas':
+                return ( <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {workAreas.map(area => (
+                        <div key={area.id} className="flex items-center">
+                            <input type="checkbox" id={area.id} name={area.id} checked={formData.managedAreaIds?.includes(area.id) || false} onChange={handleManagedAreasChange} className="h-4 w-4" />
+                            <label htmlFor={area.id} className="ml-2">{area.name}</label>
+                        </div>
+                    ))}
                 </div> );
             // ... il resto del file rimane invariato ...
             default: return null;
@@ -271,4 +301,3 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
 };
 
 export default AdminModal;
-
