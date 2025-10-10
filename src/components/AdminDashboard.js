@@ -97,10 +97,7 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
         <div>
             <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Gestione Dipendenti</h1>
-                <div className="flex gap-2">
-                    {currentUserRole === 'admin' && <button onClick={() => openModal('newEmployee')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">Crea Nuovo Dipendente</button>}
-                    {currentUserRole === 'preposto' && <button onClick={() => openModal('assignEmployeeToArea')} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 w-full sm:w-auto text-sm">Assegna Dipendente a Aree</button>}
-                </div>
+                {currentUserRole === 'admin' && <button onClick={() => openModal('newEmployee')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">Crea Nuovo Dipendente</button>}
             </div>
             <div className="mb-4">
                 <input
@@ -124,7 +121,6 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                     <tbody className="bg-white divide-y divide-gray-200">
                         {employees.map(emp => {
                             const hasPauseBeenTaken = emp.activeEntry?.pauses && emp.activeEntry.pauses.length > 0;
-
                             return (
                                 <tr key={emp.id}>
                                     <td className="px-4 py-2 whitespace-nowrap">
@@ -137,7 +133,7 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                     <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{emp.workAreaNames?.join(', ') || 'N/A'}</td>
                                     <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
                                         <div className="flex flex-col items-start gap-1">
-                                            {emp.activeEntry ? (
+                                            {emp.activeEntry && (
                                                 <>
                                                     <button onClick={() => openModal('manualClockOut', emp)} className="px-2 py-1 text-xs bg-yellow-500 text-white rounded-md hover:bg-yellow-600 w-full text-center">Timbra Uscita</button>
                                                     {!hasPauseBeenTaken && (
@@ -146,20 +142,22 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                                         </button>
                                                     )}
                                                 </>
-                                            ) : (
-                                                <button onClick={() => openModal('manualClockIn', emp)} className="px-2 py-1 text-xs bg-blue-500 text-white rounded-md hover:bg-blue-600 w-full text-center">Timbra Entrata</button>
                                             )}
-                                            {currentUserRole === 'admin' && (
-                                                <>
-                                                    <div className="flex flex-wrap gap-2 w-full justify-start mt-1">
+                                            {!emp.activeEntry && <button onClick={() => openModal('manualClockIn', emp)} className="px-2 py-1 text-xs bg-blue-500 text-white rounded-md hover:bg-blue-600 w-full text-center">Timbra Entrata</button>}
+                                            <div className="flex flex-wrap gap-2 w-full justify-start mt-1">
+                                                {currentUserRole === 'admin' && (
+                                                    <>
                                                         <button onClick={() => handleGenerateEmployeeReportPDF(emp)} className="text-xs text-blue-600 hover:text-blue-900">Report</button>
                                                         <button onClick={() => openModal('assignArea', emp)} className="text-xs text-indigo-600 hover:text-indigo-900">Aree</button>
                                                         <button onClick={() => openModal('editEmployee', emp)} className="text-xs text-green-600 hover:text-green-900">Modifica</button>
                                                         <button onClick={() => openModal('deleteEmployee', emp)} className="text-xs text-red-600 hover:text-red-900">Elimina</button>
-                                                    </div>
-                                                    {emp.deviceIds && emp.deviceIds.length > 0 && <button onClick={() => openModal('resetDevice', emp)} className="text-xs text-yellow-600 hover:text-yellow-900 mt-1">Resetta Disp.</button>}
-                                                </>
-                                            )}
+                                                    </>
+                                                )}
+                                                {currentUserRole === 'preposto' && (
+                                                    <button onClick={() => openModal('assignArea', emp)} className="px-2 py-1 text-xs bg-indigo-600 text-white rounded-md hover:bg-indigo-700 w-full text-center">Gestisci Aree</button>
+                                                )}
+                                            </div>
+                                            {currentUserRole === 'admin' && emp.deviceIds && emp.deviceIds.length > 0 && <button onClick={() => openModal('resetDevice', emp)} className="text-xs text-yellow-600 hover:text-yellow-900 mt-1">Resetta Disp.</button>}
                                         </div>
                                     </td>
                                 </tr>
@@ -354,7 +352,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 }
             }
 
-            const qAdmins = query(collection(db, "users"), where("role", "in", ["admin", "preposto"]));
+            const qAdmins = query(collection(db, "users"));
             const adminsSnapshot = await getDocs(qAdmins);
             const adminUsers = adminsSnapshot.docs.map(doc => {
                 const data = doc.data();
@@ -372,18 +370,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     useEffect(() => {
         fetchData();
     }, [fetchData]);
-
-    const managedEmployees = useMemo(() => {
-        if (currentUserRole !== 'preposto' || !userData?.managedAreaIds) {
-            return allEmployees;
-        }
-        const managedAreaIds = userData.managedAreaIds;
-        return allEmployees.filter(emp =>
-            (emp.workAreaIds && emp.workAreaIds.some(areaId => managedAreaIds.includes(areaId))) ||
-            emp.userId === user.uid
-        );
-    }, [allEmployees, currentUserRole, userData, user]);
-
+    
     const managedAreas = useMemo(() => {
         if (currentUserRole !== 'preposto' || !userData?.managedAreaIds) {
             return allWorkAreas;
@@ -411,7 +398,9 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
             let visibleEntries = activeEntriesList;
             if (currentUserRole === 'preposto') {
-                const managedEmployeeIds = managedEmployees.map(emp => emp.id);
+                const managedEmployeeIds = allEmployees
+                    .filter(emp => emp.workAreaIds && emp.workAreaIds.some(areaId => userData.managedAreaIds.includes(areaId)))
+                    .map(emp => emp.id);
                 visibleEntries = activeEntriesList.filter(entry =>
                     managedEmployeeIds.includes(entry.employeeId)
                 );
@@ -436,7 +425,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             setActiveEmployeesDetails(details);
         });
         return () => unsubscribe();
-    }, [allEmployees, allWorkAreas, adminEmployeeProfile, currentUserRole, managedEmployees]);
+    }, [allEmployees, allWorkAreas, adminEmployeeProfile, currentUserRole, userData]);
 
     useEffect(() => {
         const startOfDay = new Date();
@@ -464,7 +453,10 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     }, []);
 
     const sortedAndFilteredEmployees = useMemo(() => {
-        const employeesWithDetails = managedEmployees.map(emp => {
+        // L'admin vede tutti. Il preposto vede TUTTI per poterli assegnare.
+        let employeesToDisplay = allEmployees;
+
+        const employeesWithDetails = employeesToDisplay.map(emp => {
             const areaNames = (emp.workAreaIds || []).map(id => {
                 const area = allWorkAreas.find(a => a.id === id);
                 return area ? area.name : null;
@@ -489,18 +481,13 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
         if (sortConfig !== null) {
             sortableItems.sort((a, b) => {
-                if (a[sortConfig.key] < b[sortConfig.key]) {
-                    return sortConfig.direction === 'ascending' ? -1 : 1;
-                }
-                if (a[sortConfig.key] > b[sortConfig.key]) {
-                    return sortConfig.direction === 'ascending' ? 1 : -1;
-                }
+                if (a[sortConfig.key] < b[sortConfig.key]) { return sortConfig.direction === 'ascending' ? -1 : 1; }
+                if (a[sortConfig.key] > b[sortConfig.key]) { return sortConfig.direction === 'ascending' ? 1 : -1; }
                 return 0;
             });
         }
-
         return sortableItems;
-    }, [managedEmployees, activeEmployeesDetails, searchTerm, allWorkAreas, sortConfig]);
+    }, [allEmployees, activeEmployeesDetails, searchTerm, allWorkAreas, sortConfig]);
 
     const areasWithLivePresenze = useMemo(() => {
         let areasInScope = workAreasWithHours;
@@ -849,7 +836,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                                 <label htmlFor="employeeFilter" className="w-28 text-sm font-medium text-gray-700 text-left">Dipendente:</label>
                                 <select id="employeeFilter" value={reportEmployeeFilter} onChange={e => setReportEmployeeFilter(e.target.value)} className="p-1 border border-gray-300 rounded-md w-full">
                                     <option value="all">Tutti i Dipendenti</option>
-                                    {managedEmployees.sort((a,b) => `${a.name} ${a.surname}`.localeCompare(`${b.name} ${b.surname}`)).map(emp => (<option key={emp.id} value={emp.id}>{emp.name} {emp.surname}</option>))}
+                                    {allEmployees.sort((a,b) => `${a.name} ${a.surname}`.localeCompare(`${b.name} ${b.surname}`)).map(emp => (<option key={emp.id} value={emp.id}>{emp.name} {emp.surname}</option>))}
                                 </select>
                             </div>
                             <button onClick={generateReport} className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm w-full md:w-auto md:ml-auto">Genera Report</button>
@@ -857,7 +844,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                    </div>
                 )}
                 <main>
-                    {view === 'dashboard' && <DashboardView totalEmployees={managedEmployees.length} activeEmployees={filteredActiveEmployees} totalDayHours={totalDayHours} allWorkAreas={allWorkAreas} areaFilter={dashboardAreaFilter} setAreaFilter={setDashboardAreaFilter} />}
+                    {view === 'dashboard' && <DashboardView totalEmployees={allEmployees.length} activeEmployees={filteredActiveEmployees} totalDayHours={totalDayHours} allWorkAreas={managedAreas} areaFilter={dashboardAreaFilter} setAreaFilter={setDashboardAreaFilter} />}
                     {view === 'employees' && <EmployeeManagementView employees={sortedAndFilteredEmployees} openModal={openModal} currentUserRole={currentUserRole} requestSort={requestSort} sortConfig={sortConfig} searchTerm={searchTerm} setSearchTerm={setSearchTerm} handleGenerateEmployeeReportPDF={handleGenerateEmployeeReportPDF} />}
                     {view === 'areas' && <AreaManagementView workAreas={areasWithLivePresenze} openModal={openModal} currentUserRole={currentUserRole} />}
                     {view === 'admins' && <AdminManagementView admins={admins} openModal={openModal} user={user} superAdminEmail={superAdminEmail} currentUserRole={currentUserRole} />}

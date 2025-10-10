@@ -7,7 +7,7 @@ const roundTimeWithCustomRules = (date, type) => {
     const newDate = new Date(date.getTime());
     const minutes = newDate.getMinutes();
     if (type === 'entrata') {
-        if (minutes >= 46) { newDate.setHours(newDate.getHours() + 1); newDate.setMinutes(0); } 
+        if (minutes >= 46) { newDate.setHours(newDate.getHours() + 1); newDate.setMinutes(0); }
         else if (minutes >= 16) { newDate.setMinutes(30); }
         else { newDate.setMinutes(0); }
     } else if (type === 'uscita') {
@@ -28,7 +28,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
 
     const handleCheckboxChange = (e) => {
         const { name, checked } = e.target;
-        const currentAreas = formData.workAreaIds || item?.workAreaIds || [];
+        const currentAreas = formData.workAreaIds || [];
         if (checked) {
             setFormData({ ...formData, workAreaIds: [...currentAreas, name] });
         } else {
@@ -38,7 +38,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
 
     const handleManagedAreasChange = (e) => {
         const { name, checked } = e.target;
-        const currentAreas = formData.managedAreaIds || item?.managedAreaIds || [];
+        const currentAreas = formData.managedAreaIds || [];
         if (checked) {
             setFormData({ ...formData, managedAreaIds: [...currentAreas, name] });
         } else {
@@ -47,72 +47,61 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
     };
 
     useEffect(() => {
-        if (['manualClockIn', 'manualClockOut', 'adminClockIn'].includes(type)) {
+        if (type === 'manualClockIn' || type === 'manualClockOut' || type === 'adminClockIn') {
             const now = new Date();
             now.setSeconds(0);
             now.setMilliseconds(0);
             const localDateTime = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
             setFormData({ ...item, timestamp: localDateTime, workAreaId: item?.workAreaIds?.[0] || '', note: item?.activeEntry?.note || '' });
+        } else if (item) {
+            setFormData({ ...item });
         } else {
-            // Quando apriamo la modifica di un admin, usiamo 'nome' e 'cognome'
-            if (type === 'editAdmin' && item) {
-                setFormData({ ...item, name: item.nome, surname: item.cognome });
-            } else {
-                setFormData(item ? { ...item } : {});
-            }
+            setFormData({});
         }
     }, [type, item]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if ((['newEmployee', 'newAdmin'].includes(type)) && (!formData.password || formData.password.length < 6)) {
-            return setError("La password deve essere di almeno 6 caratteri.");
+        if ((type === 'newEmployee' || type === 'newAdmin') && (!formData.password || formData.password.length < 6)) {
+            setError("La password deve essere di almeno 6 caratteri.");
+            return;
         }
-        if (type === 'deleteAdmin' && item?.id === user.uid) {
-            return setError("Non puoi eliminare te stesso.");
+        if (type === 'deleteAdmin' && item.id === user.uid) {
+            setError("Non puoi eliminare te stesso.");
+            return;
         }
 
         setIsLoading(true);
         setError('');
 
         try {
-            if (['newEmployee', 'newAdmin'].includes(type)) {
-                const functionURL = 'https://us-central1-marcatempo-tcs.cloudfunctions.net/createNewUser';
-                const newUserPayload = {
+            if (type === 'adminClockIn') {
+                await onAdminClockIn(formData.workAreaId, formData.timestamp);
+            } else if (type === 'applyPredefinedPause') {
+                await onAdminApplyPause(item);
+            } else if (type === 'newEmployee' || type === 'newAdmin') {
+                const payload = {
                     email: formData.email.toLowerCase().trim(),
                     password: formData.password,
-                    nome: formData.name, // 'name' dal form diventa 'nome'
-                    cognome: formData.surname, // 'surname' dal form diventa 'cognome'
+                    nome: formData.name, // The form uses 'name'
+                    cognome: formData.surname, // The form uses 'surname'
                     telefono: formData.phone || "",
                     role: type === 'newEmployee' ? 'employee' : (formData.role || 'preposto'),
                 };
 
-                const response = await fetch(functionURL, {
+                const response = await fetch('https://us-central1-marcatempo-tcs.cloudfunctions.net/createNewUser', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(newUserPayload)
+                    body: JSON.stringify(payload)
                 });
 
+                const result = await response.json();
                 if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error || 'Errore durante la creazione utente.');
+                    throw new Error(result.error || 'Errore durante la creazione dell\'utente.');
                 }
+
             } else {
-                 switch (type) {
-                    case 'editAdmin': // <-- NUOVA LOGICA
-                        if (!item?.id) throw new Error("ID utente non trovato.");
-                        await updateDoc(doc(db, "users", item.id), { 
-                            nome: formData.name, 
-                            cognome: formData.surname,
-                            role: formData.role
-                        });
-                        break;
-                    case 'adminClockIn':
-                        await onAdminClockIn(formData.workAreaId, formData.timestamp);
-                        break;
-                    case 'applyPredefinedPause':
-                        await onAdminApplyPause(item);
-                        break;
+                switch (type) {
                     case 'assignEmployeeToArea':
                         const empRef = doc(db, "employees", formData.employeeId);
                         const empDoc = await getDoc(empRef);
@@ -150,7 +139,22 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                         await deleteDoc(doc(db, "work_areas", item.id));
                         break;
                     case 'assignArea':
-                        await updateDoc(doc(db, "employees", item.id), { workAreaIds: formData.workAreaIds || [] });
+                        if (currentUserRole === 'preposto') {
+                            const prepostoManagedAreas = userData.managedAreaIds || [];
+                            const employeeCurrentAreas = item.workAreaIds || [];
+                            
+                            const preservedAreas = employeeCurrentAreas.filter(areaId => !prepostoManagedAreas.includes(areaId));
+                            const newSelectionsByPreposto = (formData.workAreaIds || []).filter(areaId => prepostoManagedAreas.includes(areaId));
+                            
+                            const finalAreaIds = [...new Set([...preservedAreas, ...newSelectionsByPreposto])];
+                            
+                            await updateDoc(doc(db, "employees", item.id), { workAreaIds: finalAreaIds });
+                        } else { 
+                            await updateDoc(doc(db, "employees", item.id), { workAreaIds: formData.workAreaIds || [] });
+                        }
+                        break;
+                    case 'editAdmin':
+                         await updateDoc(doc(db, "users", item.id), { nome: formData.nome, cognome: formData.cognome, role: formData.role });
                         break;
                     case 'deleteAdmin':
                         if (item.email === superAdminEmail) { throw new Error("Non puoi eliminare il Super Admin."); }
@@ -203,11 +207,11 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
         newArea: 'Aggiungi Nuova Area',
         editArea: 'Modifica Area di Lavoro',
         deleteArea: 'Elimina Area di Lavoro',
-        assignArea: `Assegna Aree a ${item?.name} ${item?.surname}`,
+        assignArea: `Assegna Aree a ${item?.name || item?.surname}`,
         newAdmin: 'Aggiungi Personale Amministrativo',
-        editAdmin: 'Modifica Personale Amministrativo', // <-- NUOVO TITOLO
+        editAdmin: 'Modifica Personale Amministrativo',
         deleteAdmin: 'Elimina Personale Amministrativo',
-        assignManagedAreas: `Assegna Aree a Preposto ${item?.name}`,
+        assignManagedAreas: `Assegna Aree a Preposto ${item?.nome || ''}`,
         manualClockIn: `Timbra Entrata per ${item?.name} ${item?.surname}`,
         manualClockOut: `Timbra Uscita per ${item?.name} ${item?.surname}`,
         resetDevice: `Resetta Dispositivi di ${item?.name} ${item?.surname}`,
@@ -233,20 +237,17 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                         </select>
                     )}
                 </div> );
-            // --- INIZIO NUOVO FORM ---
             case 'editAdmin':
                 return ( <div className="space-y-4">
-                    <p className="text-sm text-gray-500">Stai modificando: {item?.email}</p>
-                    <input name="name" value={formData.name || ''} onChange={handleInputChange} placeholder="Nome" required className="w-full p-2 border rounded" />
-                    <input name="surname" value={formData.surname || ''} onChange={handleInputChange} placeholder="Cognome" required className="w-full p-2 border rounded" />
-                    {currentUserRole === 'admin' && (
+                    <input name="nome" value={formData.nome || ''} onChange={handleInputChange} placeholder="Nome" required className="w-full p-2 border rounded" />
+                    <input name="cognome" value={formData.cognome || ''} onChange={handleInputChange} placeholder="Cognome" required className="w-full p-2 border rounded" />
+                     {currentUserRole === 'admin' && (
                         <select name="role" value={formData.role || 'preposto'} onChange={handleInputChange} required className="w-full p-2 border rounded">
                             <option value="preposto">Preposto</option>
                             <option value="admin">Admin</option>
                         </select>
                     )}
                 </div> );
-            // --- FINE NUOVO FORM ---
             case 'editEmployee':
                 return ( <div className="space-y-4">
                     <input name="name" value={formData.name || ''} onChange={handleInputChange} placeholder="Nome" required className="w-full p-2 border rounded" />
@@ -270,39 +271,19 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                     </div>
                 </div> );
             case 'assignArea':
-                return ( <div className="space-y-2 max-h-60 overflow-y-auto">
-                    {workAreas.map(area => (
-                        <div key={area.id} className="flex items-center">
-                            <input type="checkbox" id={area.id} name={area.id} checked={formData.workAreaIds?.includes(area.id) || false} onChange={handleCheckboxChange} className="h-4 w-4" />
-                            <label htmlFor={area.id} className="ml-2">{area.name}</label>
-                        </div>
-                    ))}
-                </div> );
-            case 'assignEmployeeToArea':
-                const prepostoAreas = workAreas.filter(area => userData.managedAreaIds.includes(area.id));
-                return (
-                    <div className="space-y-4">
-                        <div>
-                            <label htmlFor="employeeId" className="block text-sm font-medium text-gray-700">Seleziona Dipendente</label>
-                            <select name="employeeId" value={formData.employeeId || ''} onChange={handleInputChange} required className="w-full p-2 border rounded">
-                                <option value="">-- Scegli un dipendente --</option>
-                                {allEmployees.map(emp => (
-                                    <option key={emp.id} value={emp.id}>{emp.name} {emp.surname}</option>
-                                ))}
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Seleziona Aree</label>
-                            <div className="space-y-2 max-h-40 overflow-y-auto mt-2 border p-2 rounded-md">
-                                {prepostoAreas.map(area => (
-                                    <div key={area.id} className="flex items-center">
-                                        <input type="checkbox" id={area.id} name={area.id} onChange={handleCheckboxChange} className="h-4 w-4" />
-                                        <label htmlFor={area.id} className="ml-2">{area.name}</label>
-                                    </div>
-                                ))}
+                const areasToShow = currentUserRole === 'preposto'
+                    ? workAreas.filter(area => userData.managedAreaIds?.includes(area.id))
+                    : workAreas;
+                return ( 
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                        <p className="text-sm text-gray-600 mb-2">Seleziona le aree per <strong>{item?.name} {item?.surname}</strong>.</p>
+                        {areasToShow.map(area => (
+                            <div key={area.id} className="flex items-center">
+                                <input type="checkbox" id={area.id} name={area.id} checked={formData.workAreaIds?.includes(area.id) || false} onChange={handleCheckboxChange} className="h-4 w-4" />
+                                <label htmlFor={area.id} className="ml-2">{area.name}</label>
                             </div>
-                        </div>
-                    </div>
+                        ))}
+                    </div> 
                 );
             case 'assignManagedAreas':
                 return ( <div className="space-y-2 max-h-60 overflow-y-auto">
@@ -347,7 +328,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                             <label htmlFor="workAreaId" className="block text-sm font-medium text-gray-700 mb-1">Area di Lavoro</label>
                             <select name="workAreaId" id="workAreaId" value={formData.workAreaId || ''} onChange={handleInputChange} required className="w-full p-2 border rounded">
                                 <option value="">Seleziona Area</option>
-                                {(item.workAreaIds || []).map(areaId => {
+                                {(userData.managedAreaIds || []).map(areaId => {
                                     const area = workAreas.find(a => a.id === areaId);
                                     return area ? <option key={area.id} value={area.id}>{area.name}</option> : null;
                                 })}
@@ -368,8 +349,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                         </div>
                     </div>
                  );
-            case 'applyPredefinedPause': 
-                return <p>Sei sicuro di voler applicare la pausa predefinita a <strong>{item.name} {item.surname}</strong>?</p>;
+            case 'applyPredefinedPause': return <p>Sei sicuro di voler applicare la pausa predefinita a <strong>{item.name} {item.surname}</strong>?</p>;
             case 'deleteEmployee': return <p>Sei sicuro di voler eliminare il dipendente <strong>{item.name} {item.surname}</strong>?</p>;
             case 'deleteArea': return <p>Sei sicuro di voler eliminare l'area <strong>{item.name}</strong>?</p>;
             case 'deleteAdmin': return <p>Sei sicuro di voler eliminare l'utente <strong>{item.nome} {item.cognome}</strong>?</p>;
