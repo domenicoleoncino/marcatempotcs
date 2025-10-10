@@ -132,7 +132,7 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                         <div className="text-xs text-gray-500 break-all">{emp.email}</div>
                                     </td>
                                     <td className="px-4 py-2 whitespace-nowrap">
-                                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${emp.activeEntry ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{emp.activeEntry ? 'Al Lavoro' : 'Non al Lavoro'}</span>
+                                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${emp.activeEntry ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{emp.activeEntry ? 'Presente' : 'Assente'}</span>
                                     </td>
                                     <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{emp.workAreaNames?.join(', ') || 'N/A'}</td>
                                     <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
