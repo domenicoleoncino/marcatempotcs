@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db } from '../firebase';
 import {
-    doc, collection, getDocs, query, where,
+    doc, collection, addDoc, getDocs, query, where,
     updateDoc, Timestamp, getDoc, onSnapshot, orderBy
 } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions'; // <-- RIGA AGGIUNTA
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { utils, writeFile } from 'xlsx';
 import { saveAs } from 'file-saver';
 import jsPDF from 'jspdf';
@@ -220,7 +220,7 @@ const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
     </div>
 );
 
-const AdminManagementView = ({ admins, openModal, user, superAdminEmail, currentUserRole }) => {
+const AdminManagementView = ({ admins, openModal, user, superAdminEmail, currentUserRole, handleGrantSelfAdminRole }) => {
     const isSuperAdmin = user.email === superAdminEmail;
     const adminsToDisplay = admins.filter(admin => {
         if (isSuperAdmin) return true;
@@ -237,6 +237,20 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
                     {currentUserRole === 'admin' && <button onClick={() => openModal('newAdmin')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">Aggiungi Personale</button>}
                 </div>
             </div>
+
+            {isSuperAdmin && currentUserRole !== 'admin' && (
+                 <div className="bg-green-50 p-4 rounded-lg border border-green-200 my-6">
+                    <h2 className="text-lg font-bold text-green-800">Attivazione Permessi Super Admin</h2>
+                    <p className="text-sm text-green-700 mt-1">Il tuo account Super Admin non ha ancora i permessi attivi. Clicca il pulsante per assegnarti il ruolo di 'admin' e sbloccare tutte le funzionalità.</p>
+                    <button
+                        onClick={handleGrantSelfAdminRole}
+                        className="mt-4 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                    >
+                        Attiva Permessi Super Admin
+                    </button>
+                </div>
+            )}
+
             {currentUserRole === 'admin' && (
                 <div className="bg-orange-50 p-4 rounded-lg border border-orange-200 my-6">
                     <h2 className="text-lg font-bold text-orange-800">Strumento di Manutenzione</h2>
@@ -249,6 +263,7 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
                     </button>
                 </div>
             )}
+
             <div className="bg-white shadow-md rounded-lg overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
@@ -546,10 +561,10 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     }, [activeEmployeesDetails, dashboardAreaFilter]);
 
     const handleAdminClockIn = async (areaId, timestamp) => {
-        const functions = getFunctions(); // <-- RIGA AGGIUNTA
+        const functions = getFunctions();
         if (!adminEmployeeProfile) return;
         try {
-            const clockInFunction = httpsCallable(functions, 'clockEmployeeIn'); // <-- RIGA MODIFICATA
+            const clockInFunction = httpsCallable(functions, 'clockEmployeeIn');
             await clockInFunction({
                 targetEmployeeId: adminEmployeeProfile.id,
                 areaId: areaId,
@@ -626,6 +641,19 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         } catch (error) {
             console.error("Errore durante l'applicazione della pausa:", error);
             alert(`Si è verificato un errore: ${error.message}`);
+        }
+    };
+
+    const handleGrantSelfAdminRole = async () => {
+        try {
+            const functions = getFunctions();
+            const grantAdmin = httpsCallable(functions, 'grantAdminRole');
+            const result = await grantAdmin({ targetUid: user.uid, secret: "TCSItalia2025!" });
+            alert(result.data.message + " Per favore, esegui il logout e accedi di nuovo per rendere effettive le modifiche.");
+            window.location.reload(); // Ricarica la pagina per aggiornare lo stato
+        } catch (error) {
+            console.error("Errore durante l'assegnazione del ruolo admin:", error);
+            alert("Errore: " + error.message);
         }
     };
 
@@ -931,7 +959,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                     {view === 'dashboard' && <DashboardView totalEmployees={allEmployees.length} activeEmployees={filteredActiveEmployees} totalDayHours={totalDayHours} allWorkAreas={managedAreas} areaFilter={dashboardAreaFilter} setAreaFilter={setDashboardAreaFilter} />}
                     {view === 'employees' && <EmployeeManagementView employees={sortedAndFilteredEmployees} openModal={openModal} currentUserRole={currentUserRole} requestSort={requestSort} sortConfig={sortConfig} searchTerm={searchTerm} setSearchTerm={setSearchTerm} handleGenerateEmployeeReportPDF={handleGenerateEmployeeReportPDF} />}
                     {view === 'areas' && <AreaManagementView workAreas={areasWithLivePresenze} openModal={openModal} currentUserRole={currentUserRole} />}
-                    {view === 'admins' && <AdminManagementView admins={admins} openModal={openModal} user={user} superAdminEmail={superAdminEmail} currentUserRole={currentUserRole} />}
+                    {view === 'admins' && <AdminManagementView admins={admins} openModal={openModal} user={user} superAdminEmail={superAdminEmail} currentUserRole={currentUserRole} handleGrantSelfAdminRole={handleGrantSelfAdminRole} />}
                     {view === 'reports' && <ReportView reports={reports} title={reportTitle} user={user} handleExportExcel={handleExportExcel} handleExportXml={handleExportXml} />}
                 </main>
             </div>
