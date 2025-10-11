@@ -73,7 +73,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
         try {
             const functions = getFunctions();
             
-            // Forza l'aggiornamento del token ID per le operazioni critiche
+            // Forza l'aggiornamento del token ID per le operazioni che richiedono permessi di admin
             if (user && (type === 'fixUserRole' || type === 'resetDevice')) {
                 await user.getIdToken(true);
             }
