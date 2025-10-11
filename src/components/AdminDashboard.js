@@ -226,9 +226,25 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
     return (
         <div>
             <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
-                <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Gestione Personale Amministrativo</h1>
-                {currentUserRole === 'admin' && <button onClick={() => openModal('newAdmin')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">Aggiungi Personale</button>}
+                <div>
+                    <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Gestione Personale Amministrativo</h1>
+                </div>
+                <div className="flex gap-2">
+                    {currentUserRole === 'admin' && <button onClick={() => openModal('newAdmin')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">Aggiungi Personale</button>}
+                </div>
             </div>
+            {currentUserRole === 'admin' && (
+                <div className="bg-orange-50 p-4 rounded-lg border border-orange-200 my-6">
+                    <h2 className="text-lg font-bold text-orange-800">Strumento di Manutenzione</h2>
+                    <p className="text-sm text-orange-700 mt-1">Se un dipendente è bloccato al login, usa questo strumento per assegnargli il ruolo corretto e sbloccarlo. Recupera il suo UID dalla console di Firebase (sezione Authentication).</p>
+                    <button
+                        onClick={() => openModal('fixUserRole')}
+                        className="mt-4 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
+                    >
+                        Sblocca Dipendente
+                    </button>
+                </div>
+            )}
             <div className="bg-white shadow-md rounded-lg overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
@@ -378,7 +394,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     useEffect(() => {
         fetchData();
     }, [fetchData]);
-
+    
     const managedAreas = useMemo(() => {
         if (currentUserRole !== 'preposto' || !userData?.managedAreaIds) {
             return allWorkAreas;
