@@ -128,7 +128,15 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                         <div className="text-xs text-gray-500 break-all">{emp.email}</div>
                                     </td>
                                     <td className="px-4 py-2 whitespace-nowrap">
-                                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${emp.activeEntry ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{emp.activeEntry ? 'Presente' : 'Assente'}</span>
+                                        {emp.activeEntry ? (
+                                            <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                                                Presente
+                                            </span>
+                                        ) : (
+                                            <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
+                                                Assente
+                                            </span>
+                                        )}
                                     </td>
                                     <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{emp.workAreaNames?.join(', ') || 'N/A'}</td>
                                     <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
@@ -370,7 +378,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     useEffect(() => {
         fetchData();
     }, [fetchData]);
-    
+
     const managedAreas = useMemo(() => {
         if (currentUserRole !== 'preposto' || !userData?.managedAreaIds) {
             return allWorkAreas;
@@ -453,7 +461,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     }, []);
 
     const sortedAndFilteredEmployees = useMemo(() => {
-        // L'admin vede tutti. Il preposto vede TUTTI per poterli assegnare.
         let employeesToDisplay = allEmployees;
 
         const employeesWithDetails = employeesToDisplay.map(emp => {
