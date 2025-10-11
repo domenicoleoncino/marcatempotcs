@@ -97,7 +97,10 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
         <div>
             <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Gestione Dipendenti</h1>
-                {currentUserRole === 'admin' && <button onClick={() => openModal('newEmployee')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">Crea Nuovo Dipendente</button>}
+                <div className="flex gap-2">
+                    {currentUserRole === 'admin' && <button onClick={() => openModal('newEmployee')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">Crea Nuovo Dipendente</button>}
+                    {currentUserRole === 'preposto' && <button onClick={() => openModal('assignEmployeeToArea')} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 w-full sm:w-auto text-sm">Assegna Dipendente</button>}
+                </div>
             </div>
             <div className="mb-4">
                 <input
@@ -162,7 +165,7 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                                     </>
                                                 )}
                                                 {currentUserRole === 'preposto' && (
-                                                    <button onClick={() => openModal('assignArea', emp)} className="px-2 py-1 text-xs bg-indigo-600 text-white rounded-md hover:bg-indigo-700 w-full text-center">Gestisci Aree</button>
+                                                     <button onClick={() => openModal('assignArea', emp)} className="px-2 py-1 text-xs bg-indigo-600 text-white rounded-md hover:bg-indigo-700 w-full text-center">Gestisci Aree</button>
                                                 )}
                                             </div>
                                             {currentUserRole === 'admin' && emp.deviceIds && emp.deviceIds.length > 0 && <button onClick={() => openModal('resetDevice', emp)} className="text-xs text-yellow-600 hover:text-yellow-900 mt-1">Resetta Disp.</button>}
@@ -404,6 +407,16 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         );
     }, [allWorkAreas, currentUserRole, userData]);
 
+    const managedEmployees = useMemo(() => {
+        if (currentUserRole !== 'preposto' || !userData?.managedAreaIds) {
+            return allEmployees;
+        }
+        const managedAreaIds = userData.managedAreaIds;
+        return allEmployees.filter(emp => 
+            emp.workAreaIds && emp.workAreaIds.some(areaId => managedAreaIds.includes(areaId))
+        );
+    }, [allEmployees, currentUserRole, userData]);
+
     useEffect(() => {
         if (!allEmployees.length || !allWorkAreas.length) return;
         const q = query(collection(db, "time_entries"), where("status", "==", "clocked-in"));
@@ -422,9 +435,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
             let visibleEntries = activeEntriesList;
             if (currentUserRole === 'preposto') {
-                const managedEmployeeIds = allEmployees
-                    .filter(emp => emp.workAreaIds && emp.workAreaIds.some(areaId => userData.managedAreaIds.includes(areaId)))
-                    .map(emp => emp.id);
+                const managedEmployeeIds = managedEmployees.map(emp => emp.id);
                 visibleEntries = activeEntriesList.filter(entry =>
                     managedEmployeeIds.includes(entry.employeeId)
                 );
@@ -449,7 +460,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             setActiveEmployeesDetails(details);
         });
         return () => unsubscribe();
-    }, [allEmployees, allWorkAreas, adminEmployeeProfile, currentUserRole, userData]);
+    }, [allEmployees, allWorkAreas, adminEmployeeProfile, currentUserRole, managedEmployees]);
 
     useEffect(() => {
         const startOfDay = new Date();
@@ -477,7 +488,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     }, []);
 
     const sortedAndFilteredEmployees = useMemo(() => {
-        let employeesToDisplay = allEmployees;
+        const employeesToDisplay = (currentUserRole === 'preposto') ? managedEmployees : allEmployees;
 
         const employeesWithDetails = employeesToDisplay.map(emp => {
             const areaNames = (emp.workAreaIds || []).map(id => {
@@ -510,7 +521,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             });
         }
         return sortableItems;
-    }, [allEmployees, activeEmployeesDetails, searchTerm, allWorkAreas, sortConfig]);
+    }, [allEmployees, managedEmployees, activeEmployeesDetails, searchTerm, allWorkAreas, sortConfig, currentUserRole]);
 
     const areasWithLivePresenze = useMemo(() => {
         let areasInScope = workAreasWithHours;
