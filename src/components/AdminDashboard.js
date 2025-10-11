@@ -395,7 +395,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 }
             }
 
-            const qAdmins = query(collection(db, "users"));
+            const qAdmins = query(collection(db, "users"), where("role", "in", ["admin", "preposto"]));
             const adminsSnapshot = await getDocs(qAdmins);
             const adminUsers = adminsSnapshot.docs.map(doc => {
                 const data = doc.data();
