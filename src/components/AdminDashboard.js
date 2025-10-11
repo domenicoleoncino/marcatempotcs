@@ -4,6 +4,7 @@ import {
     doc, collection, addDoc, getDocs, query, where,
     updateDoc, Timestamp, getDoc, onSnapshot, orderBy
 } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions'; // <-- RIGA AGGIUNTA
 import { utils, writeFile } from 'xlsx';
 import { saveAs } from 'file-saver';
 import jsPDF from 'jspdf';
@@ -545,9 +546,10 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     }, [activeEmployeesDetails, dashboardAreaFilter]);
 
     const handleAdminClockIn = async (areaId, timestamp) => {
+        const functions = getFunctions(); // <-- RIGA AGGIUNTA
         if (!adminEmployeeProfile) return;
         try {
-            const clockInFunction = httpsCallable(functions, 'clockEmployeeIn');
+            const clockInFunction = httpsCallable(functions, 'clockEmployeeIn'); // <-- RIGA MODIFICATA
             await clockInFunction({
                 targetEmployeeId: adminEmployeeProfile.id,
                 areaId: areaId,
