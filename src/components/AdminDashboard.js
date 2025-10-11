@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db } from '../firebase';
 import {
     doc, collection, addDoc, getDocs, query, where,
-    updateDoc, Timestamp, getDoc, onSnapshot
+    updateDoc, Timestamp, getDoc, onSnapshot, orderBy
 } from 'firebase/firestore';
 import { utils, writeFile } from 'xlsx';
 import { saveAs } from 'file-saver';
@@ -409,7 +409,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
     const managedEmployees = useMemo(() => {
         if (currentUserRole !== 'preposto' || !userData?.managedAreaIds) {
-            return []; // Il preposto non vede nessun dipendente di default
+            return [];
         }
         const managedAreaIds = userData.managedAreaIds;
         return allEmployees.filter(emp => 
@@ -547,19 +547,17 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const handleAdminClockIn = async (areaId, timestamp) => {
         if (!adminEmployeeProfile) return;
         try {
-            await addDoc(collection(db, "time_entries"), {
-                employeeId: adminEmployeeProfile.id,
-                workAreaId: areaId,
-                clockInTime: roundTimeWithCustomRules(new Date(timestamp), 'entrata'),
-                clockOutTime: null,
-                status: 'clocked-in',
-                createdBy: user.uid,
-                pauses: []
+            const clockInFunction = httpsCallable(functions, 'clockEmployeeIn');
+            await clockInFunction({
+                targetEmployeeId: adminEmployeeProfile.id,
+                areaId: areaId,
+                timestamp: timestamp
             });
         } catch (error) {
             alert(`Errore durante la timbratura: ${error.message}`);
         }
     };
+    
 
     const handleAdminClockOut = async () => {
         if (!adminActiveEntry) return;
@@ -748,37 +746,88 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         saveAs(blob, "Report_Marcatempo.xml");
     };
 
-    const handleGenerateEmployeeReportPDF = (employee) => {
-        if (!employee || reports.length === 0) {
-            alert("Per generare un report per un dipendente, prima genera un report generale con il periodo desiderato.");
+    const handleGenerateEmployeeReportPDF = async (employee) => {
+        if (!employee) return;
+        if (!dateRange.start || !dateRange.end) {
+            alert("Seleziona un intervallo di date valido nel form del report.");
             return;
         }
-        const employeeReports = reports.filter(r => r.employeeId === employee.id);
-        if (employeeReports.length === 0) {
-            alert(`Nessuna timbratura trovata per ${employee.name} ${employee.surname} nel periodo del report attuale.`);
-            return;
-        }
-        const doc = new jsPDF();
-        doc.setFontSize(18);
-        doc.text(`Report Timbrature per ${employee.name} ${employee.surname}`, 14, 22);
-        doc.setFontSize(11);
-        doc.setTextColor(100);
-        doc.text(`Periodo: ${reportTitle.replace('Report ', '')}`, 14, 30);
-        doc.autoTable({
-            startY: 40,
-            head: [['Data', 'Area', 'Entrata', 'Uscita', 'Ore', 'Note']],
-            body: employeeReports.map(entry => [
-                entry.clockInDate,
-                entry.areaName,
-                entry.clockInTimeFormatted,
-                entry.clockOutTimeFormatted,
-                entry.duration !== null ? entry.duration.toFixed(2) : 'N/A',
-                entry.note || ''
-            ]),
-        });
-        doc.save(`Report_${employee.surname}_${employee.name}.pdf`);
-    };
 
+        alert(`Generazione report per ${employee.name} ${employee.surname}...`);
+
+        try {
+            const startDate = new Date(dateRange.start);
+            startDate.setHours(0, 0, 0, 0);
+            const endDate = new Date(dateRange.end);
+            endDate.setHours(23, 59, 59, 999);
+
+            const q = query(collection(db, "time_entries"),
+                where("employeeId", "==", employee.id),
+                where("clockInTime", ">=", Timestamp.fromDate(startDate)),
+                where("clockInTime", "<=", Timestamp.fromDate(endDate)),
+                orderBy("clockInTime", "asc")
+            );
+
+            const querySnapshot = await getDocs(q);
+
+            if (querySnapshot.empty) {
+                alert(`Nessuna timbratura trovata per ${employee.name} ${employee.surname} nel periodo selezionato.`);
+                return;
+            }
+
+            const employeeReports = querySnapshot.docs.map(doc => {
+                const entry = doc.data();
+                const area = allWorkAreas.find(a => a.id === entry.workAreaId);
+                const clockIn = entry.clockInTime.toDate();
+                const clockOut = entry.clockOutTime ? entry.clockOutTime.toDate() : null;
+                let duration = null;
+                if (clockOut) {
+                    const totalMs = clockOut.getTime() - clockIn.getTime();
+                    const pauseMs = (entry.pauses || []).reduce((acc, p) => {
+                        if (p.start && p.end) return acc + (p.end.toMillis() - p.start.toMillis());
+                        return acc;
+                    }, 0);
+                    let calculatedDuration = (totalMs - pauseMs) / 3600000;
+                    duration = calculatedDuration < 0 ? 0 : calculatedDuration;
+                }
+                return {
+                    areaName: area ? area.name : 'Sconosciuta',
+                    clockInDate: clockIn.toLocaleDateString('it-IT'),
+                    clockInTimeFormatted: clockIn.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
+                    clockOutTimeFormatted: clockOut ? clockOut.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : 'In corso',
+                    duration: duration,
+                    note: entry.note || ''
+                };
+            });
+
+            const doc = new jsPDF();
+            const reportPeriodTitle = `dal ${startDate.toLocaleDateString('it-IT')} al ${endDate.toLocaleDateString('it-IT')}`;
+
+            doc.setFontSize(18);
+            doc.text(`Report Timbrature per ${employee.name} ${employee.surname}`, 14, 22);
+            doc.setFontSize(11);
+            doc.setTextColor(100);
+            doc.text(`Periodo: ${reportPeriodTitle}`, 14, 30);
+            doc.autoTable({
+                startY: 40,
+                head: [['Data', 'Area', 'Entrata', 'Uscita', 'Ore', 'Note']],
+                body: employeeReports.map(entry => [
+                    entry.clockInDate,
+                    entry.areaName,
+                    entry.clockInTimeFormatted,
+                    entry.clockOutTimeFormatted,
+                    entry.duration !== null ? entry.duration.toFixed(2) : 'N/A',
+                    entry.note || ''
+                ]),
+            });
+            doc.save(`Report_${employee.surname}_${employee.name}.pdf`);
+
+        } catch (error) {
+            console.error("Errore generando il report individuale:", error);
+            alert("Si è verificato un errore durante la generazione del report.");
+        }
+    };
+    
     const requestSort = (key) => {
         let direction = 'ascending';
         if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {

@@ -6,9 +6,9 @@ import CompanyLogo from './CompanyLogo';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
-// ... (La funzione getDistanceInMeters rimane invariata)
+// Funzione per calcolare la distanza in metri tra due coordinate GPS
 function getDistanceInMeters(lat1, lon1, lat2, lon2) {
-    const R = 6371e3;
+    const R = 6371e3; // Raggio della Terra in metri
     const p1 = lat1 * Math.PI / 180;
     const p2 = lat2 * Math.PI / 180;
     const deltaP = (lat2 - lat1) * Math.PI / 180;
@@ -20,7 +20,7 @@ function getDistanceInMeters(lat1, lon1, lat2, lon2) {
 
 
 const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) => {
-    // ... (Tutti gli stati che avevamo prima rimangono invariati)
+    // Stati del componente
     const [currentTime, setCurrentTime] = useState(new Date());
     const [activeEntry, setActiveEntry] = useState(null);
     const [todaysEntries, setTodaysEntries] = useState([]);
@@ -28,28 +28,29 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     const [isProcessing, setIsProcessing] = useState(false);
     const [locationError, setLocationError] = useState(null);
     const [inRangeArea, setInRangeArea] = useState(null);
-
-    // NUOVI STATI PER LA SELEZIONE DEL REPORT
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
-    // ... (Le funzioni Firebase e la logica GPS/timbratura rimangono invariate)
+    // Inizializzazione delle Cloud Functions
     const functions = getFunctions();
     const clockIn = httpsCallable(functions, 'clockEmployeeIn');
     const clockOut = httpsCallable(functions, 'clockEmployeeOut');
     const clockPause = httpsCallable(functions, 'clockEmployeePause');
 
+    // Effetto per aggiornare l'orologio ogni secondo
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
         return () => clearInterval(timer);
     }, []);
 
+    // Memoizzazione delle aree di lavoro del dipendente
     const employeeWorkAreas = useMemo(() => {
         if (!employeeData || !employeeData.workAreaIds || !allWorkAreas) return [];
         return allWorkAreas.filter(area => employeeData.workAreaIds.includes(area.id));
     }, [employeeData, allWorkAreas]);
 
+    // Effetto per la geolocalizzazione
     useEffect(() => {
         if (activeEntry || employeeWorkAreas.length === 0) {
             setLocationError(null);
@@ -84,10 +85,11 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             );
         };
         getLocation();
-        const intervalId = setInterval(getLocation, 7000);
+        const intervalId = setInterval(getLocation, 7000); // Controlla la posizione ogni 7 secondi
         return () => clearInterval(intervalId);
     }, [employeeWorkAreas, activeEntry]);
     
+    // Effetto per ascoltare le timbrature attive e giornaliere
     useEffect(() => {
         if (!user || !Array.isArray(allWorkAreas) || allWorkAreas.length === 0) return;
         const qActive = query(collection(db, "time_entries"), where("employeeId", "==", user.uid), where("status", "==", "clocked-in"));
@@ -111,6 +113,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
         return () => { unsubscribeActive(); unsubscribeTodays(); };
     }, [user, allWorkAreas]);
     
+    // Funzione per gestire le azioni di timbratura
     const handleAction = async (action) => {
         if (isProcessing) return;
         setIsProcessing(true);
@@ -132,17 +135,13 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
         }
     };
     
-    // ===================================================================
-    // ## NUOVA FUNZIONE PER GENERARE IL PDF ##
-    // ===================================================================
+    // Funzione per generare il report in PDF
     const generatePdfReport = async () => {
         setIsGeneratingPdf(true);
         try {
-            // Calcola data di inizio e fine del mese selezionato
             const startDate = new Date(selectedYear, selectedMonth, 1);
             const endDate = new Date(selectedYear, selectedMonth + 1, 0, 23, 59, 59);
 
-            // Query a Firestore per le timbrature del mese
             const q = query(
                 collection(db, "time_entries"),
                 where("employeeId", "==", user.uid),
@@ -161,21 +160,20 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             const doc = new jsPDF();
             const monthName = startDate.toLocaleString('it-IT', { month: 'long' });
             
-            // Titolo del PDF
             doc.setFontSize(18);
             doc.text(`Report Mensile Timbrature`, 14, 22);
             doc.setFontSize(11);
             doc.text(`Dipendente: ${employeeData.name} ${employeeData.surname}`, 14, 30);
             doc.text(`Periodo: ${monthName.charAt(0).toUpperCase() + monthName.slice(1)} ${selectedYear}`, 14, 36);
 
-            const tableColumn = ["Data", "Entrata", "Uscita", "Ore Lavorate"];
+            const tableColumn = ["Data", "Area", "Entrata", "Uscita", "Ore Lavorate", "Note"];
             const tableRows = [];
 
-            // Prepara i dati per la tabella
             querySnapshot.forEach(entryDoc => {
                 const data = entryDoc.data();
                 const clockIn = data.clockInTime.toDate();
                 const clockOut = data.clockOutTime ? data.clockOutTime.toDate() : null;
+                const area = allWorkAreas.find(a => a.id === data.workAreaId);
 
                 let totalHours = "N/A";
                 if (clockOut) {
@@ -187,21 +185,21 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
 
                 const entryData = [
                     clockIn.toLocaleDateString('it-IT'),
+                    area ? area.name : 'Sconosciuta',
                     clockIn.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
                     clockOut ? clockOut.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : "In corso",
                     totalHours,
+                    data.note || ''
                 ];
                 tableRows.push(entryData);
             });
 
-            // Crea la tabella nel PDF
             doc.autoTable({
                 head: [tableColumn],
                 body: tableRows,
                 startY: 50,
             });
 
-            // Salva il file
             doc.save(`report_${employeeData.surname}_${selectedMonth + 1}_${selectedYear}.pdf`);
 
         } catch (error) {
@@ -212,7 +210,6 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
         }
     };
 
-
     const hasPauseBeenTaken = activeEntry?.pauses && activeEntry.pauses.length > 0;
     if (!employeeData) return <div className="min-h-screen flex items-center justify-center">Caricamento dipendente...</div>;
 
@@ -221,7 +218,6 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
 
     return (
         <div className="p-4 max-w-lg mx-auto font-sans">
-            {/* ... (La parte superiore con il logo e lo stato timbratura rimane invariata) ... */}
             <CompanyLogo />
             <div className="text-center my-4">
                 <p>Dipendente: {employeeData.name} {employeeData.surname}</p>
@@ -229,32 +225,31 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 <p className="text-sm text-gray-500">{currentTime.toLocaleDateString('it-IT', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
             </div>
             <div className="bg-white p-4 rounded-lg shadow-md">
-                <h2 className="text-xl font-bold mb-2">Stato Timbratura</h2>
-                {/* ... (Logica visualizzazione timbratura attiva/non attiva) ... */}
+                <h2 className="text-xl font-bold mb-2 text-center">Stato Timbratura</h2>
                  {activeEntry ? (
                     <div>
-                        <p className="text-green-600 font-semibold">Timbratura ATTIVA</p>
-                        <p>Area: {workAreaName}</p>
+                        <p className="text-green-600 font-semibold text-center">Timbratura ATTIVA</p>
+                        <p className="text-center">Area: {workAreaName}</p>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
                             {!hasPauseBeenTaken && (
                                 <button onClick={() => handleAction('clockPause')} disabled={isProcessing} className="w-full text-lg font-bold py-4 px-4 rounded-lg shadow-md text-white bg-yellow-500 hover:bg-yellow-600 disabled:bg-gray-400">
                                     TIMBRA PAUSA
                                 </button>
                             )}
-                            <button onClick={() => handleAction('clockOut')} disabled={isProcessing} className="w-full text-lg font-bold py-4 px-4 rounded-lg shadow-md text-white bg-red-600 hover:bg-red-700 disabled:bg-gray-400">
+                            <button onClick={() => handleAction('clockOut')} disabled={isProcessing} className={`w-full text-lg font-bold py-4 px-4 rounded-lg shadow-md text-white bg-red-600 hover:bg-red-700 disabled:bg-gray-400 ${hasPauseBeenTaken ? 'col-span-2' : ''}`}>
                                 TIMBRA USCITA
                             </button>
                         </div>
                     </div>
                 ) : (
                     <div>
-                        <p className="text-red-600 font-semibold">Timbratura NON ATTIVA</p>
-                        {locationError && <p className="text-xs text-red-500 mt-2">{locationError}</p>}
+                        <p className="text-red-600 font-semibold text-center">Timbratura NON ATTIVA</p>
+                        {locationError && <p className="text-xs text-red-500 mt-2 text-center">{locationError}</p>}
                         
                         {inRangeArea ? (
-                            <p className="text-sm text-green-600 mt-2">Area di lavoro rilevata: <strong>{inRangeArea.name}</strong></p>
+                            <p className="text-sm text-green-600 mt-2 text-center">Area di lavoro rilevata: <strong>{inRangeArea.name}</strong></p>
                         ) : (
-                            <p className="text-sm text-gray-500 mt-2">Nessuna area di lavoro nelle vicinanze. Avvicinati a un cantiere per timbrare.</p>
+                            <p className="text-sm text-gray-500 mt-2 text-center">Nessuna area di lavoro nelle vicinanze. Avvicinati a un cantiere per timbrare.</p>
                         )}
                         
                         <button 
@@ -269,7 +264,6 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             </div>
             <div className="mt-6">
                 <h2 className="text-xl font-bold mb-2">Cronologia Timbrature di Oggi</h2>
-                {/* ... (Visualizzazione timbrature di oggi) ... */}
                 <div className="bg-white p-4 rounded-lg shadow-md space-y-2">
                     {todaysEntries.length > 0 ? todaysEntries.map(entry => (
                         <div key={entry.id} className="text-sm border-b pb-1">
@@ -287,9 +281,6 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 </div>
             </div>
 
-            {/* =================================================================== */}
-            {/* ## NUOVA SEZIONE PER I REPORT PDF ## */}
-            {/* =================================================================== */}
             <div className="mt-6">
                 <h2 className="text-xl font-bold mb-2">Report Mensile</h2>
                 <div className="bg-white p-4 rounded-lg shadow-md">
@@ -321,7 +312,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                             </select>
                         </div>
                     </div>
-                     <button
+                       <button
                         onClick={generatePdfReport}
                         disabled={isGeneratingPdf}
                         className="w-full text-lg font-bold py-3 px-4 rounded-lg shadow-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400"
@@ -337,3 +328,4 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
 };
 
 export default EmployeeDashboard;
+
