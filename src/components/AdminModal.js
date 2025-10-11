@@ -147,8 +147,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                         createdBy: user.uid
                     });
                     break;
-
-                // Aggiungi qui gli altri casi esistenti
+                
                 case 'editEmployee':
                      await updateDoc(doc(db, "employees", item.id), { name: formData.name, surname: formData.surname, phone: formData.phone });
                      break;
@@ -183,15 +182,12 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                 case 'resetDevice':
                     await updateDoc(doc(db, "employees", item.id), { deviceIds: [] });
                     break;
-                
                 case 'adminClockIn':
                     await onAdminClockIn(formData.workAreaId, formData.timestamp);
                     break;
-                
                 case 'applyPredefinedPause':
                     await onAdminApplyPause(item);
                     break;
-
                 default:
                     console.log("Azione non gestita:", type);
             }
