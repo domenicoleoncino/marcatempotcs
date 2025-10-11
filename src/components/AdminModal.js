@@ -49,9 +49,8 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
     };
     
     useEffect(() => {
-        // Inizializza il form in base al tipo di modale
         if (type === 'assignEmployeeToArea') {
-            setFormData({}); // Pulisce il form per la nuova assegnazione
+            setFormData({}); 
         } else if (type === 'assignArea') {
              setFormData({ ...item, workAreaIds: item.workAreaIds || [] });
         } else if (type === 'manualClockIn' || type === 'manualClockOut' || type === 'adminClockIn') {
@@ -73,7 +72,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
         try {
             const functions = getFunctions();
             
-            // Forza l'aggiornamento del token ID per le operazioni che richiedono permessi di admin
             if (user && (type === 'fixUserRole' || type === 'resetDevice')) {
                 await user.getIdToken(true);
             }
@@ -88,9 +86,9 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                     const newUserPayload = {
                         email: formData.email,
                         password: formData.password,
-                        nome: formData.name,
-                        cognome: formData.surname,
-                        telefono: formData.phone || '',
+                        nome: formData.nome,
+                        cognome: formData.cognome,
+                        telefono: formData.telefono || '',
                         role: type === 'newEmployee' ? 'employee' : (formData.role || 'preposto'),
                     };
                     await createNewUser(newUserPayload);
@@ -236,11 +234,11 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
             case 'newEmployee':
             case 'newAdmin':
                 return ( <div className="space-y-4">
-                    <input name="name" value={formData.name || ''} onChange={handleInputChange} placeholder="Nome" required className="w-full p-2 border rounded" />
-                    <input name="surname" value={formData.surname || ''} onChange={handleInputChange} placeholder="Cognome" required className="w-full p-2 border rounded" />
+                    <input name="nome" value={formData.nome || ''} onChange={handleInputChange} placeholder="Nome" required className="w-full p-2 border rounded" />
+                    <input name="cognome" value={formData.cognome || ''} onChange={handleInputChange} placeholder="Cognome" required className="w-full p-2 border rounded" />
                     <input type="email" name="email" value={formData.email || ''} onChange={handleInputChange} placeholder="Email" required className="w-full p-2 border rounded" />
                     <input type="password" name="password" value={formData.password || ''} onChange={handleInputChange} placeholder="Password (min. 6 caratteri)" required className="w-full p-2 border rounded" />
-                    <input name="phone" value={formData.phone || ''} onChange={handleInputChange} placeholder="Telefono (opzionale)" className="w-full p-2 border rounded" />
+                    <input name="telefono" value={formData.telefono || ''} onChange={handleInputChange} placeholder="Telefono (opzionale)" className="w-full p-2 border rounded" />
                     {type === 'newAdmin' && currentUserRole === 'admin' && (
                         <select name="role" value={formData.role || 'preposto'} onChange={handleInputChange} required className="w-full p-2 border rounded">
                             <option value="preposto">Preposto</option>
