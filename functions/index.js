@@ -60,6 +60,27 @@ exports.createNewUser = onRequest({ cors: true }, async (req, res) => {
     }
 });
 
+// Funzione di emergenza per assegnare il ruolo di Admin
+exports.grantAdminRole = onCall(async (request) => {
+    const { targetUid, secret } = request.data;
+    const SUPER_SECRET_CODE = "TCSItalia2025!"; // Usa questo codice dal frontend
+
+    if (secret !== SUPER_SECRET_CODE) {
+        throw new HttpsError('permission-denied', 'Codice segreto non valido.');
+    }
+    if (!targetUid) {
+        throw new HttpsError('invalid-argument', "L'UID dell'utente è obbligatorio.");
+    }
+    try {
+        await admin.auth().setCustomUserClaims(targetUid, { role: 'admin' });
+        logger.info(`Ruolo 'admin' assegnato a ${targetUid} tramite funzione di emergenza.`);
+        return { success: true, message: `Ruolo admin assegnato correttamente a ${targetUid}.` };
+    } catch (error) {
+        logger.error(`Errore durante l'assegnazione del ruolo admin a ${targetUid}:`, error);
+        throw new HttpsError('internal', error.message || "Errore sconosciuto.");
+    }
+});
+
 // Funzione per impostare il ruolo a un dipendente esistente (manutenzione)
 exports.setEmployeeRole = onCall(async (request) => {
     if (request.auth?.token?.role !== 'admin') {
@@ -75,8 +96,7 @@ exports.setEmployeeRole = onCall(async (request) => {
         return { success: true, message: `Ruolo impostato correttamente per l'utente ${targetUid}.` };
     } catch (error) {
         logger.error(`Errore durante l'impostazione del ruolo per ${targetUid}:`, error);
-        // MODIFICA: Invia il messaggio di errore specifico al client
-        throw new HttpsError('internal', error.message || "Si è verificato un errore sconosciuto durante l'aggiornamento del ruolo.");
+        throw new HttpsError('internal', error.message || "Errore sconosciuto.");
     }
 });
 
