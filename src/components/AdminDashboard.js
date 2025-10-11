@@ -140,18 +140,18 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                     </td>
                                     <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{emp.workAreaNames?.join(', ') || 'N/A'}</td>
                                     <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
-                                        <div className="flex flex-col items-start gap-1">
+                                        <div className="flex flex-col items-start gap-2">
                                             {emp.activeEntry && (
                                                 <>
-                                                    <button onClick={() => openModal('manualClockOut', emp)} className="px-2 py-1 text-xs bg-yellow-500 text-white rounded-md hover:bg-yellow-600 w-full text-center">Timbra Uscita</button>
+                                                    <button onClick={() => openModal('manualClockOut', emp)} className="px-4 py-2 text-sm bg-yellow-500 text-white rounded-md hover:bg-yellow-600 w-full text-center">Timbra Uscita</button>
                                                     {!hasPauseBeenTaken && (
-                                                        <button onClick={() => openModal('applyPredefinedPause', emp)} className="px-2 py-1 text-xs bg-orange-500 text-white rounded-md hover:bg-orange-600 w-full text-center mt-1">
+                                                        <button onClick={() => openModal('applyPredefinedPause', emp)} className="px-4 py-2 text-sm bg-orange-500 text-white rounded-md hover:bg-orange-600 w-full text-center">
                                                             Applica Pausa
                                                         </button>
                                                     )}
                                                 </>
                                             )}
-                                            {!emp.activeEntry && <button onClick={() => openModal('manualClockIn', emp)} className="px-2 py-1 text-xs bg-blue-500 text-white rounded-md hover:bg-blue-600 w-full text-center">Timbra Entrata</button>}
+                                            {!emp.activeEntry && <button onClick={() => openModal('manualClockIn', emp)} className="px-4 py-2 text-sm bg-blue-500 text-white rounded-md hover:bg-blue-600 w-full text-center">Timbra Entrata</button>}
                                             <div className="flex flex-wrap gap-2 w-full justify-start mt-1">
                                                 {currentUserRole === 'admin' && (
                                                     <>
