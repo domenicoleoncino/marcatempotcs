@@ -73,6 +73,11 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
         try {
             const functions = getFunctions();
             
+            // Forza l'aggiornamento del token ID per le operazioni critiche
+            if (user && (type === 'fixUserRole' || type === 'resetDevice')) {
+                await user.getIdToken(true);
+            }
+            
             switch (type) {
                 case 'newEmployee':
                 case 'newAdmin':
@@ -148,6 +153,12 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                     });
                     break;
                 
+                case 'resetDevice':
+                    const resetDeviceFunction = httpsCallable(functions, 'resetEmployeeDevice');
+                    await resetDeviceFunction({ employeeId: item.id });
+                    alert('Dispositivi resettati con successo.');
+                    break;
+
                 case 'editEmployee':
                      await updateDoc(doc(db, "employees", item.id), { name: formData.name, surname: formData.surname, phone: formData.phone });
                      break;
@@ -178,9 +189,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAd
                     break;
                 case 'assignManagedAreas':
                     await updateDoc(doc(db, "users", item.id), { managedAreaIds: formData.managedAreaIds || [] });
-                    break;
-                case 'resetDevice':
-                    await updateDoc(doc(db, "employees", item.id), { deviceIds: [] });
                     break;
                 case 'adminClockIn':
                     await onAdminClockIn(formData.workAreaId, formData.timestamp);
