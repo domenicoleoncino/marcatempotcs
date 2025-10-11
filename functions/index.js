@@ -1,12 +1,11 @@
-const { onRequest } = require("firebase-functions/v2/https");
-const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onRequest, onCall, HttpsError } = require("firebase-functions/v2/https");
 const { logger } = require("firebase-functions");
 const admin = require("firebase-admin");
 
-// Inizializza l'app di Firebase Admin
 admin.initializeApp();
 const db = admin.firestore();
 
+// Funzione per creare un nuovo utente (Admin, Preposto o Dipendente)
 exports.createNewUser = onRequest({ cors: true }, async (req, res) => {
     if (req.method !== 'POST') {
         return res.status(405).send({ error: 'Method Not Allowed' });
@@ -20,44 +19,32 @@ exports.createNewUser = onRequest({ cors: true }, async (req, res) => {
         
         const displayName = `${nome} ${cognome}`;
 
-        // 1. Crea l'utente in Firebase Authentication
+        // 1. Crea l'utente in Authentication
         const userRecord = await admin.auth().createUser({
             email: email,
             password: password,
             displayName: displayName,
         });
 
-        // 2. Imposta il ruolo custom claim
+        // 2. Imposta il ruolo ("carta d'identità")
         await admin.auth().setCustomUserClaims(userRecord.uid, { role: role });
 
-        // 3. Salva i dati nella collezione corretta in base al ruolo
+        // 3. Salva il profilo nel database corretto
         if (role === 'admin' || role === 'preposto') {
-            const userData = {
-                nome: nome,
-                cognome: cognome,
-                email: email,
-                role: role,
-                createdAt: admin.firestore.FieldValue.serverTimestamp()
-            };
+            const userData = { nome, cognome, email, role, createdAt: admin.firestore.FieldValue.serverTimestamp() };
             if (telefono) userData.telefono = telefono;
-            // Usiamo l'UID come ID del documento per coerenza
             await db.collection("users").doc(userRecord.uid).set(userData);
-
-        } else if (role === 'employee') {
-            const employeeData = {
-                name: nome, // Nota: la collezione employees usa 'name' e 'surname'
+        } else { // 'employee'
+            await db.collection("employees").doc(userRecord.uid).set({
+                name: nome,
                 surname: cognome,
                 email: email,
-                phone: telefono || "",
-                userId: userRecord.uid, // Collega il profilo all'utente di Authentication
-                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                userId: userRecord.uid, // Associa l'UID auth al profilo
                 workAreaIds: []
-            };
-            // Usiamo l'UID come ID del documento per coerenza
-            await db.collection("employees").doc(userRecord.uid).set(employeeData);
+            });
         }
 
-        logger.info(`Utente ${displayName} (UID: ${userRecord.uid}, Ruolo: ${role}) creato con successo.`);
+        logger.info(`Utente ${displayName} (UID: ${userRecord.uid}) creato con ruolo ${role}.`);
         res.status(200).send({ success: true, message: `Utente ${displayName} creato con successo.`, uid: userRecord.uid });
 
     } catch (error) {
@@ -70,8 +57,7 @@ exports.createNewUser = onRequest({ cors: true }, async (req, res) => {
     }
 });
 
-// --- FUNZIONI DI TIMBRATURA COMPLETE ---
-
+// Funzione per la timbratura di entrata
 exports.clockEmployeeIn = onCall(async (request) => {
     if (!request.auth) {
         throw new HttpsError("unauthenticated", "Devi essere autenticato per timbrare.");
@@ -116,6 +102,7 @@ exports.clockEmployeeIn = onCall(async (request) => {
     return { success: true, message: "Timbratura di entrata registrata con successo!" };
 });
 
+// Funzione per la timbratura di uscita
 exports.clockEmployeeOut = onCall(async (request) => {
     if (!request.auth) {
         throw new HttpsError("unauthenticated", "Devi essere autenticato.");
@@ -142,6 +129,7 @@ exports.clockEmployeeOut = onCall(async (request) => {
     return { success: true, message: "Timbratura di uscita registrata con successo!" };
 });
 
+// Funzione per la timbratura della pausa
 exports.clockEmployeePause = onCall(async (request) => {
      if (!request.auth) {
         throw new HttpsError("unauthenticated", "Devi essere autenticato.");
@@ -169,5 +157,32 @@ exports.clockEmployeePause = onCall(async (request) => {
 
     logger.info(`Pausa registrata per ${employeeId}`);
     return { success: true, message: "Pausa registrata con successo!" };
+});
+
+
+// ===================================================================
+// ## FUNZIONE DI MANUTENZIONE PER CORREGGERE I RUOLI ##
+// ===================================================================
+exports.setEmployeeRole = onCall(async (request) => {
+    // 1. Controlla che chi chiama sia un Admin
+    if (request.auth?.token.role !== 'admin') {
+        throw new HttpsError('permission-denied', 'Solo gli admin possono eseguire questa operazione.');
+    }
+
+    // 2. Prendi l'UID del dipendente da correggere
+    const { targetUid } = request.data;
+    if (!targetUid) {
+        throw new HttpsError('invalid-argument', "È necessario fornire l'UID dell'utente da correggere.");
+    }
+
+    try {
+        // 3. Imposta la "carta d'identità" corretta
+        await admin.auth().setCustomUserClaims(targetUid, { role: 'employee' });
+        logger.info(`Ruolo 'employee' impostato correttamente per l'utente ${targetUid} dall'admin ${request.auth.uid}`);
+        return { success: true, message: `Ruolo impostato a 'employee' per l'utente ${targetUid}.` };
+    } catch (error) {
+        logger.error(`Errore nell'impostare il ruolo per ${targetUid}:`, error);
+        throw new HttpsError('internal', "Si è verificato un errore durante l'aggiornamento del ruolo.");
+    }
 });
 
