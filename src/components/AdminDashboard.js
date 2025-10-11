@@ -409,13 +409,14 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
     const managedEmployees = useMemo(() => {
         if (currentUserRole !== 'preposto' || !userData?.managedAreaIds) {
-            return allEmployees;
+            return []; // Il preposto non vede nessun dipendente di default
         }
         const managedAreaIds = userData.managedAreaIds;
         return allEmployees.filter(emp => 
             emp.workAreaIds && emp.workAreaIds.some(areaId => managedAreaIds.includes(areaId))
         );
     }, [allEmployees, currentUserRole, userData]);
+
 
     useEffect(() => {
         if (!allEmployees.length || !allWorkAreas.length) return;
