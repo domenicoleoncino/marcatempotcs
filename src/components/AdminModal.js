@@ -1,274 +1,332 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
-import { doc, updateDoc, addDoc, collection, deleteDoc, getDoc} from 'firebase/firestore';
+import { doc, updateDoc, deleteDoc, collection, writeBatch } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 
-// --- FUNZIONE DI ARROTONDAMENTO ---
-const roundTimeWithCustomRules = (date, type) => {
-    const newDate = new Date(date.getTime());
-    const minutes = newDate.getMinutes();
-    if (type === 'entrata') {
-        if (minutes >= 46) {
-            newDate.setHours(newDate.getHours() + 1);
-            newDate.setMinutes(0);
-        } else if (minutes >= 16) {
-            newDate.setMinutes(30);
-        } else {
-            newDate.setMinutes(0);
-        }
-    } else if (type === 'uscita') {
-        if (minutes >= 30) {
-            newDate.setMinutes(30);
-        } else {
-            newDate.setMinutes(0);
-        }
-    }
-    newDate.setSeconds(0);
-    newDate.setMilliseconds(0);
-    return newDate;
-};
+const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, allEmployees, userData, onAdminClockIn, onAdminApplyPause }) => {
+    // Stati generici per i form
+    const [formData, setFormData] = useState({});
+    const [error, setError] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
 
-const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, superAdminEmail, user, allEmployees, currentUserRole, userData, onAdminClockIn, onAdminApplyPause }) => {
-    const [formData, setFormData] = useState(item || {});
-    const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState('');
+    // Popola i campi del form quando si apre la modale per modificare
+    useEffect(() => {
+        if (item) {
+            if (type === 'editEmployee') {
+                setFormData({ name: item.name, surname: item.surname });
+            } else if (type === 'editArea') {
+                setFormData({ name: item.name, pauseDuration: item.pauseDuration || 0 });
+            } else if (type === 'assignArea') {
+                setFormData({ selectedAreas: item.workAreaIds || [] });
+            } else if (type === 'assignManagedAreas') {
+                setFormData({ selectedAreas: item.managedAreaIds || [] });
+            } else if (type === 'adminClockIn') {
+                // Pre-seleziona la prima area disponibile per il preposto
+                const availableAreas = workAreas.filter(wa => item.workAreaIds?.includes(wa.id));
+                setFormData({ selectedArea: availableAreas.length > 0 ? availableAreas[0].id : '', manualTime: new Date().toISOString().slice(0, 16) });
+            } else if (type === 'manualClockIn') {
+                 const availableAreas = workAreas.filter(wa => item.workAreaIds?.includes(wa.id));
+                 setFormData({ selectedArea: availableAreas.length > 0 ? availableAreas[0].id : '', manualTime: new Date().toISOString().slice(0, 16) });
+            } else if (type === 'manualClockOut') {
+                setFormData({ manualTime: new Date().toISOString().slice(0, 16) });
+            } else {
+                 setFormData({}); // Resetta per altre modali
+            }
+        } else {
+            setFormData({}); // Resetta per modali di creazione
+        }
+    }, [item, type, workAreas]);
 
-    const handleInputChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
-    const handleCheckboxChange = (e) => {
-        const { name, checked } = e.target;
-        const currentAreas = formData.workAreaIds || item?.workAreaIds || [];
-        if (checked) {
-            setFormData({ ...formData, workAreaIds: [...currentAreas, name] });
-        } else {
-            setFormData({ ...formData, workAreaIds: currentAreas.filter(id => id !== name) });
-        }
-    };
+    const functions = getFunctions();
 
-    const handleManagedAreasChange = (e) => {
-        const { name, checked } = e.target;
-        const currentAreas = formData.managedAreaIds || item?.managedAreaIds || [];
-        if (checked) {
-            setFormData({ ...formData, managedAreaIds: [...currentAreas, name] });
-        } else {
-            setFormData({ ...formData, managedAreaIds: currentAreas.filter(id => id !== name) });
-        }
-    };
+    // Gestore generico per i cambiamenti negli input
+    const handleChange = (e) => {
+        const { name, value, type, checked, options } = e.target;
+        if (type === 'checkbox') {
+             setFormData(prev => ({
+                ...prev,
+                [name]: checked 
+                    ? [...(prev[name] || []), value] 
+                    : (prev[name] || []).filter(v => v !== value)
+            }));
+        } else if (type === 'select-multiple') {
+            const values = Array.from(options).filter(option => option.selected).map(option => option.value);
+            setFormData(prev => ({...prev, [name]: values}));
+        } else {
+            setFormData(prev => ({ ...prev, [name]: value }));
+        }
+    };
+    
+    // --- FUNZIONI DI GESTIONE ---
 
-    useEffect(() => {
-        if (type === 'manualClockIn' || type === 'manualClockOut' || type === 'adminClockIn') {
-            const now = new Date();
-            now.setSeconds(0);
-            now.setMilliseconds(0);
-            const localDateTime = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
-            setFormData({ ...item, timestamp: localDateTime, workAreaId: item?.workAreaIds?.[0] || '', note: item?.activeEntry?.note || '' });
-        } else {
-            setFormData(item ? { ...item } : {});
-        }
-    }, [type, item]);
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setIsLoading(true);
+        setError('');
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        if ((type === 'newEmployee' || type === 'newAdmin') && (!formData.password || formData.password.length < 6)) {
-            setError("La password deve essere di almeno 6 caratteri.");
-            return;
-        }
-        if (type === 'deleteAdmin' && item.id === user.uid) {
-            setError("Non puoi eliminare te stesso.");
-            return;
-        }
-
-        setIsLoading(true);
-        setError('');
-
-        try {
-            if (type === 'adminClockIn') {
-                await onAdminClockIn(formData.workAreaId, formData.timestamp);
-            } else if (type === 'applyPredefinedPause') {
-                await onAdminApplyPause(item);
-            } else if (type === 'newEmployee' || type === 'newAdmin') {
-                // --- INIZIO CODICE CORRETTO ---
+        try {
+            switch (type) {
+                case 'newEmployee':
+                    if (!formData.name || !formData.surname || !formData.email || !formData.password) throw new Error('Tutti i campi sono obbligatori.');
+                    const createUser = httpsCallable(functions, 'createUser');
+                    await createUser({ ...formData, role: 'dipendente', createdBy: user.uid });
+                    alert('Dipendente creato con successo!');
+                    break;
                 
-                // 1. Definisci l'URL della tua funzione
-                const functionURL = 'https://us-central1-marcatempo-tcs.cloudfunctions.net/createNewUser';
+                case 'editEmployee':
+                    if (!formData.name || !formData.surname) throw new Error('Nome e cognome sono obbligatori.');
+                    await updateDoc(doc(db, "employees", item.id), { name: formData.name, surname: formData.surname });
+                    alert('Dipendente aggiornato!');
+                    break;
 
-                // 2. Prepara il pacchetto di dati (payload) con i nomi GIUSTI (in italiano)
-                const newUserPayload = {
-                    email: formData.email.toLowerCase().trim(),
-                    password: formData.password,
-                    nome: formData.name,       // Corretto: invia 'nome'
-                    cognome: formData.surname, // Corretto: invia 'cognome'
-                    telefono: formData.phone || "", // Corretto: invia 'telefono'
-                    role: type === 'newEmployee' ? 'employee' : (formData.role || 'preposto'),
-                };
+                case 'deleteEmployee':
+                    if (!window.confirm(`Sei sicuro di voler eliminare ${item.name} ${item.surname}? L'operazione è irreversibile.`)) return;
+                    const deleteUser = httpsCallable(functions, 'deleteUserAndEmployee');
+                    await deleteUser({ userId: item.userId });
+                    alert('Dipendente eliminato.');
+                    break;
+
+                case 'newArea':
+                    if (!formData.name) throw new Error('Il nome dell\'area è obbligatorio.');
+                    const createArea = httpsCallable(functions, 'createWorkArea');
+                    await createArea({ name: formData.name, pauseDuration: Number(formData.pauseDuration || 0) });
+                    alert('Area creata con successo!');
+                    break;
                 
-                // 3. Esegui la chiamata con il metodo standard 'fetch'
-                const response = await fetch(functionURL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(newUserPayload)
-                });
+                case 'editArea':
+                    if (!formData.name) throw new Error('Il nome dell\'area è obbligatorio.');
+                    await updateDoc(doc(db, "work_areas", item.id), { name: formData.name, pauseDuration: Number(formData.pauseDuration || 0) });
+                    alert('Area aggiornata!');
+                    break;
+
+                case 'deleteArea':
+                    if (!window.confirm(`Sei sicuro di voler eliminare l'area "${item.name}"?`)) return;
+                    await deleteDoc(doc(db, "work_areas", item.id));
+                    alert('Area eliminata.');
+                    break;
                 
-                // 4. Controlla se la risposta dal server è positiva
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    // Se c'è un errore, lo mostra all'utente
-                    throw new Error(errorData.error || 'Si è verificato un errore durante la creazione dell\'utente.');
-                }
+                case 'assignArea':
+                    await updateDoc(doc(db, "employees", item.id), { workAreaIds: formData.selectedAreas || [] });
+                    alert('Aree assegnate con successo.');
+                    break;
+
+                case 'assignManagedAreas':
+                    await updateDoc(doc(db, "users", item.id), { managedAreaIds: formData.selectedAreas || [] });
+                    alert('Aree di gestione assegnate.');
+                    break;
+
+                case 'newAdmin':
+                    if (!formData.name || !formData.surname || !formData.email || !formData.password || !formData.role) throw new Error('Tutti i campi sono obbligatori.');
+                     const createAdminFn = httpsCallable(functions, 'createUser');
+                    await createAdminFn({ ...formData, createdBy: user.uid });
+                    alert('Utente amministrativo creato!');
+                    break;
+
+                case 'deleteAdmin':
+                     if (!window.confirm(`Sei sicuro di voler eliminare l'utente ${item.name} ${item.surname}?`)) return;
+                     const deleteAdminFn = httpsCallable(functions, 'deleteUserAndEmployee');
+                     await deleteAdminFn({ userId: item.id }); // L'ID dell'admin è l'UID dell'utente
+                     alert('Utente eliminato.');
+                     break;
                 
-                // --- FINE CODICE CORRETTO ---
+                case 'resetDevice':
+                    if (!window.confirm(`Resettare il dispositivo per ${item.name} ${item.surname}? Dovrà effettuare di nuovo il login.`)) return;
+                    await updateDoc(doc(db, "employees", item.id), { deviceIds: [] });
+                    alert('Dispositivo resettato.');
+                    break;
+                
+                case 'manualClockIn':
+                case 'adminClockIn':
+                    if (!formData.selectedArea || !formData.manualTime) throw new Error('Seleziona un\'area e un orario.');
+                    const clockInFunction = httpsCallable(functions, 'manualClockIn');
+                    await clockInFunction({ employeeId: item.id, workAreaId: formData.selectedArea, timestamp: formData.manualTime, adminId: user.uid });
+                    alert('Timbratura di entrata registrata.');
+                    break;
+                
+                case 'manualClockOut':
+                    if (!formData.manualTime) throw new Error('Seleziona un orario.');
+                    const clockOutFunction = httpsCallable(functions, 'manualClockOut');
+                    await clockOutFunction({ employeeId: item.id, timestamp: formData.manualTime, adminId: user.uid });
+                    alert('Timbratura di uscita registrata.');
+                    break;
+                
+                case 'applyPredefinedPause':
+                    if (!window.confirm(`Applicare la pausa predefinita a ${item.name} ${item.surname}?`)) return;
+                    await onAdminApplyPause(item);
+                    break;
+                
+                case 'assignEmployeeToArea':
+                     if (!formData.employees || formData.employees.length === 0 || !formData.areas || formData.areas.length === 0) throw new Error('Seleziona almeno un dipendente e un\'area.');
+                     const batch = writeBatch(db);
+                     formData.employees.forEach(empId => {
+                         const employeeRef = doc(db, "employees", empId);
+                         batch.update(employeeRef, { workAreaIds: formData.areas });
+                     });
+                     await batch.commit();
+                     alert('Aree assegnate con successo ai dipendenti selezionati.');
+                     break;
 
-            } else {
-                switch (type) {
-                    // ... il resto della logica rimane invariato ...
-                    case 'assignEmployeeToArea':
-                        const empRef = doc(db, "employees", formData.employeeId);
-                        const empDoc = await getDoc(empRef);
-                        if (empDoc.exists()) {
-                            const currentWorkAreaIds = empDoc.data().workAreaIds || [];
-                            const newWorkAreaIds = [...new Set([...currentWorkAreaIds, ...(formData.workAreaIds || [])])];
-                            await updateDoc(empRef, { workAreaIds: newWorkAreaIds });
-                        }
-                        break;
-                    case 'editEmployee':
-                        await updateDoc(doc(db, "employees", item.id), { name: formData.name, surname: formData.surname, phone: formData.phone });
-                        break;
-                    case 'deleteEmployee':
-                        await deleteDoc(doc(db, "employees", item.id));
-                        break;
-                    case 'newArea':
-                        await addDoc(collection(db, "work_areas"), { 
-                            name: formData.name, 
-                            latitude: parseFloat(formData.latitude), 
-                            longitude: parseFloat(formData.longitude), 
-                            radius: parseInt(formData.radius, 10),
-                            pauseDuration: parseInt(formData.pauseDuration || 0, 10)
-                        });
-                        break;
-                    case 'editArea':
-                        await updateDoc(doc(db, "work_areas", item.id), { 
-                            name: formData.name, 
-                            latitude: parseFloat(formData.latitude), 
-                            longitude: parseFloat(formData.longitude), 
-                            radius: parseInt(formData.radius, 10),
-                            pauseDuration: parseInt(formData.pauseDuration || 0, 10)
-                        });
-                        break;
-                    case 'deleteArea':
-                        await deleteDoc(doc(db, "work_areas", item.id));
-                        break;
-                    case 'assignArea':
-                        await updateDoc(doc(db, "employees", item.id), { workAreaIds: formData.workAreaIds || [] });
-                        break;
-                    case 'deleteAdmin':
-                        if (item.email === superAdminEmail) { throw new Error("Non puoi eliminare il Super Admin."); }
-                        await deleteDoc(doc(db, "users", item.id));
-                        break;
-                    case 'assignManagedAreas':
-                        await updateDoc(doc(db, "users", item.id), { managedAreaIds: formData.managedAreaIds || [] });
-                        break;
-                    case 'manualClockIn':
-                        await addDoc(collection(db, "time_entries"), { 
-                            employeeId: item.id, 
-                            workAreaId: formData.workAreaId, 
-                            clockInTime: roundTimeWithCustomRules(new Date(formData.timestamp), 'entrata'), 
-                            clockOutTime: null, 
-                            status: 'clocked-in', 
-                            note: formData.note || null, 
-                            pauses: [],
-                            createdBy: user.uid 
-                        });
-                        break;
-                    case 'manualClockOut':
-                        await updateDoc(doc(db, "time_entries", item.activeEntry.id), { 
-                            clockOutTime: roundTimeWithCustomRules(new Date(formData.timestamp), 'uscita'), 
-                            status: 'clocked-out', 
-                            note: formData.note || item.activeEntry.note || null,
-                            createdBy: user.uid
-                        });
-                        break;
-                    case 'resetDevice':
-                        await updateDoc(doc(db, "employees", item.id), { deviceIds: [] });
-                        break;
-                    default: break;
-                }
-            }
+                default:
+                    throw new Error("Azione non riconosciuta.");
+            }
+            onDataUpdate(); // Aggiorna i dati nella dashboard
+            setShowModal(false); // Chiude la modale
+        } catch (err) {
+            console.error("Errore durante l'operazione:", err);
+            setError(err.message);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+    
+    // --- RENDER DEI CONTENUTI DELLA MODALE ---
 
-            if(onDataUpdate) await onDataUpdate();
-            setShowModal(false);
-        } catch (err) {
-            setError(err.message);
-            console.error("Errore nell'handleSubmit:", err);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-    
-    const titles = {
-        newEmployee: 'Aggiungi Nuovo Dipendente',
-        editEmployee: 'Modifica Dati Dipendente',
-        deleteEmployee: 'Elimina Dipendente',
-        newArea: 'Aggiungi Nuova Area',
-        editArea: 'Modifica Area di Lavoro',
-        deleteArea: 'Elimina Area di Lavoro',
-        assignArea: `Assegna Aree a ${item?.name} ${item?.surname}`,
-        newAdmin: 'Aggiungi Personale Amministrativo',
-        deleteAdmin: 'Elimina Personale Amministrativo',
-        assignManagedAreas: `Assegna Aree a Preposto ${item?.name}`,
-        manualClockIn: `Timbra Entrata per ${item?.name} ${item?.surname}`,
-        manualClockOut: `Timbra Uscita per ${item?.name} ${item?.surname}`,
-        resetDevice: `Resetta Dispositivi di ${item?.name} ${item?.surname}`,
-        adminClockIn: `Timbra Entrata Personale`,
-        assignEmployeeToArea: 'Assegna Dipendente ad Aree',
-        applyPredefinedPause: `Applica Pausa a ${item?.name} ${item?.surname}`,
-    };
+    const renderContent = () => {
+        const title = {
+            newEmployee: 'Aggiungi Nuovo Dipendente',
+            editEmployee: `Modifica ${item?.name} ${item?.surname}`,
+            deleteEmployee: `Elimina ${item?.name} ${item?.surname}`,
+            newArea: 'Aggiungi Nuova Area',
+            editArea: `Modifica Area "${item?.name}"`,
+            deleteArea: `Elimina Area "${item?.name}"`,
+            assignArea: `Assegna Aree a ${item?.name} ${item?.surname}`,
+            newAdmin: 'Aggiungi Personale Amministrativo',
+            deleteAdmin: `Elimina ${item?.name} ${item?.surname}`,
+            resetDevice: `Resetta Dispositivo per ${item?.name}`,
+            manualClockIn: `Timbratura Manuale Entrata`,
+            manualClockOut: `Timbratura Manuale Uscita`,
+            adminClockIn: `Timbra Entrata per te`,
+            assignManagedAreas: `Assegna Aree a ${item?.name}`,
+            applyPredefinedPause: `Applica Pausa a ${item?.name}`,
+            assignEmployeeToArea: 'Assegna Dipendenti a Aree'
+        }[type] || 'Conferma Azione';
 
-    const renderForm = () => {
-        switch (type) {
-            case 'newEmployee':
-            case 'newAdmin':
-                return ( <div className="space-y-4">
-                    <input name="name" value={formData.name || ''} onChange={handleInputChange} placeholder="Nome" required className="w-full p-2 border rounded" />
-                    <input name="surname" value={formData.surname || ''} onChange={handleInputChange} placeholder="Cognome" required className="w-full p-2 border rounded" />
-                    <input type="email" name="email" value={formData.email || ''} onChange={handleInputChange} placeholder="Email" required className="w-full p-2 border rounded" />
-                    <input type="password" name="password" value={formData.password || ''} onChange={handleInputChange} placeholder="Password (min. 6 caratteri)" required className="w-full p-2 border rounded" />
-                    <input name="phone" value={formData.phone || ''} onChange={handleInputChange} placeholder="Telefono (opzionale)" className="w-full p-2 border rounded" />
-                    {type === 'newAdmin' && currentUserRole === 'admin' && (
-                        <select name="role" value={formData.role || 'preposto'} onChange={handleInputChange} required className="w-full p-2 border rounded">
-                            <option value="preposto">Preposto</option>
-                            <option value="admin">Admin</option>
-                        </select>
-                    )}
-                </div> );
-            // ... il resto del file rimane invariato ...
-            default: return null;
-        }
-    };
+        const renderField = (label, name, type = 'text', options = []) => (
+            <div>
+                <label htmlFor={name} className="block text-sm font-medium text-gray-700">{label}</label>
+                {type === 'select' ? (
+                     <select id={name} name={name} value={formData[name] || ''} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                        {options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                     </select>
+                ) : (
+                    <input id={name} name={name} type={type} value={formData[name] || ''} onChange={handleChange} required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" />
+                )}
+            </div>
+        );
+        
+        const renderCheckboxes = (label, name, items) => (
+             <div>
+                <label className="block text-sm font-medium text-gray-700">{label}</label>
+                <div className="mt-2 max-h-60 overflow-y-auto border border-gray-200 rounded-md p-2 space-y-2">
+                    {items.map(area => (
+                        <div key={area.id} className="flex items-center">
+                            <input id={`${name}-${area.id}`} name={name} type="checkbox" value={area.id} checked={(formData[name] || []).includes(area.id)} onChange={handleChange} className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" />
+                            <label htmlFor={`${name}-${area.id}`} className="ml-3 block text-sm text-gray-800">{area.name}</label>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+         
+         const renderMultiSelect = (label, name, items) => (
+             <div>
+                <label htmlFor={name} className="block text-sm font-medium text-gray-700">{label}</label>
+                <select multiple id={name} name={name} value={formData[name] || []} onChange={handleChange} className="mt-1 block w-full h-40 border border-gray-300 rounded-md">
+                     {items.map(i => <option key={i.id} value={i.id}>{i.name} {i.surname || ''}</option>)}
+                </select>
+            </div>
+         );
 
-    return (
-        <div className="fixed z-50 inset-0 overflow-y-auto bg-gray-600 bg-opacity-75 flex items-center justify-center">
-            <div className="bg-white rounded-lg shadow-xl p-6 m-4 max-w-lg w-full">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-medium text-gray-900">{titles[type]}</h3>
-                    <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
-                        <span className="text-2xl">&times;</span>
-                    </button>
-                </div>
-                <form onSubmit={handleSubmit}>
-                    <div className="mb-4">{renderForm()}</div>
-                    {error && <p className="text-sm text-red-600 mb-4">{error}</p>}
-                    <div className="flex justify-end space-x-4">
-                        <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Annulla</button>
-                        <button type="submit" disabled={isLoading} className={`px-4 py-2 text-white rounded-md ${type.includes('delete') || type === 'applyPredefinedPause' ? 'bg-red-600 hover:bg-red-700' : 'bg-indigo-600 hover:bg-indigo-700'} disabled:bg-gray-400 flex items-center gap-2`}>
-                            {isLoading ? 'Caricamento...' : (type.includes('delete') || type === 'applyPredefinedPause' ? 'Conferma' : 'Salva')}
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    );
+        let body;
+        switch (type) {
+            case 'newEmployee':
+                body = <div className="space-y-4">
+                    {renderField('Nome', 'name')}
+                    {renderField('Cognome', 'surname')}
+                    {renderField('Email', 'email', 'email')}
+                    {renderField('Password', 'password', 'password')}
+                </div>;
+                break;
+            case 'editEmployee':
+                body = <div className="space-y-4">
+                    {renderField('Nome', 'name')}
+                    {renderField('Cognome', 'surname')}
+                </div>;
+                break;
+            case 'deleteEmployee': case 'deleteArea': case 'deleteAdmin': case 'resetDevice': case 'applyPredefinedPause':
+                body = <p>Sei sicuro di voler procedere con questa azione?</p>;
+                break;
+            case 'newArea':
+                 body = <div className="space-y-4">
+                    {renderField('Nome Area', 'name')}
+                    {renderField('Durata Pausa (minuti)', 'pauseDuration', 'number')}
+                </div>;
+                break;
+            case 'editArea':
+                body = <div className="space-y-4">
+                    {renderField('Nome Area', 'name')}
+                    {renderField('Durata Pausa (minuti)', 'pauseDuration', 'number')}
+                </div>;
+                break;
+            case 'assignArea': case 'assignManagedAreas':
+                body = renderCheckboxes('Aree', 'selectedAreas', workAreas);
+                break;
+            case 'newAdmin':
+                 body = <div className="space-y-4">
+                    {renderField('Nome', 'name')}
+                    {renderField('Cognome', 'surname')}
+                    {renderField('Email', 'email', 'email')}
+                    {renderField('Password', 'password', 'password')}
+                    {renderField('Ruolo', 'role', 'select', [{value: 'preposto', label: 'Preposto'}])}
+                </div>;
+                break;
+            case 'manualClockIn': case 'adminClockIn':
+                const availableAreas = workAreas.filter(wa => item.workAreaIds?.includes(wa.id));
+                 body = <div className="space-y-4">
+                     {renderField('Orario di Entrata', 'manualTime', 'datetime-local')}
+                     {renderField('Area di Lavoro', 'selectedArea', 'select', availableAreas.map(a => ({value: a.id, label: a.name})))}
+                </div>;
+                break;
+            case 'manualClockOut':
+                 body = renderField('Orario di Uscita', 'manualTime', 'datetime-local');
+                 break;
+            case 'assignEmployeeToArea':
+                 body = <div className="space-y-4">
+                    {renderMultiSelect('Seleziona Dipendenti', 'employees', allEmployees)}
+                    {renderMultiSelect('Assegna ad Aree', 'areas', workAreas)}
+                 </div>;
+                 break;
+            default:
+                body = <p>Contenuto non disponibile.</p>;
+        }
+
+        return (
+            <form onSubmit={handleSubmit}>
+                <h3 className="text-xl font-semibold text-gray-900 mb-4">{title}</h3>
+                {error && <p className="text-red-500 text-sm mb-4 bg-red-100 p-2 rounded">{error}</p>}
+                
+                <div className="mb-6">{body}</div>
+
+                <div className="flex justify-end space-x-3 border-t pt-4">
+                    <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Annulla</button>
+                    <button type="submit" disabled={isLoading} className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:bg-indigo-300">
+                        {isLoading ? 'Salvataggio...' : 'Conferma'}
+                    </button>
+                </div>
+            </form>
+        );
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 transition-opacity duration-300">
+            <div className="bg-white rounded-lg shadow-2xl w-full max-w-lg transform transition-all duration-300 scale-95 hover:scale-100">
+                <div className="p-6">
+                    {renderContent()}
+                </div>
+            </div>
+        </div>
+    );
 };
 
 export default AdminModal;
-
