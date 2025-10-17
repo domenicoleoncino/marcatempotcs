@@ -1,107 +1,192 @@
-const { onRequest } = require("firebase-functions/v2/https");
-const { onCall, HttpsError } = require("firebase-functions/v2/https");
-const { logger } = require("firebase-functions");
+const functions = require("firebase-functions");
 const admin = require("firebase-admin");
+const { Timestamp } = require("firebase-admin/firestore");
 
-// Inizializza l'app di Firebase Admin
 admin.initializeApp();
 const db = admin.firestore();
 
+// --- FUNZIONI DI GESTIONE UTENTI (Solo Admin) ---
+
+exports.createUser = functions.region('europe-west1').https.onCall(async (data, context) => {
+    if (context.auth?.token.role !== 'admin') {
+        throw new functions.https.HttpsError('permission-denied', 'Solo un admin può creare utenti.');
+    }
+    // ... (codice per creare utente, come prima)
+    const { email, password, name, surname, role } = data;
+    if (!email || !password || !name || !surname || !role) {
+        throw new functions.https.HttpsError('invalid-argument', 'Tutti i campi sono obbligatori.');
+    }
+    try {
+        const userRecord = await admin.auth().createUser({ email, password, displayName: `${name} ${surname}` });
+        await admin.auth().setCustomUserClaims(userRecord.uid, { role });
+        await db.collection('users').doc(userRecord.uid).set({ name, surname, email, role });
+        const employeeData = { userId: userRecord.uid, name, surname, email, workAreaIds: [], deviceIds: [] };
+        // Un preposto è anche un "dipendente" ai fini della timbratura
+        if (role === 'dipendente' || role === 'preposto') {
+            await db.collection('employees').doc().set(employeeData);
+        }
+        return { result: `Utente ${email} creato.` };
+    } catch (error) {
+        console.error("Errore creazione utente:", error);
+        throw new functions.https.HttpsError('internal', error.message);
+    }
+});
+
+exports.deleteUserAndEmployee = functions.region('europe-west1').https.onCall(async (data, context) => {
+    if (context.auth?.token.role !== 'admin') {
+        throw new functions.https.HttpsError('permission-denied', 'Solo un admin può eliminare utenti.');
+    }
+    // ... (codice per eliminare utente, come prima)
+    const { userId } = data;
+    if (!userId) {
+        throw new functions.https.HttpsError('invalid-argument', 'userId è obbligatorio.');
+    }
+    try {
+        await admin.auth().deleteUser(userId);
+        await db.collection('users').doc(userId).delete();
+        const employeeQuery = await db.collection('employees').where('userId', '==', userId).get();
+        if (!employeeQuery.empty) {
+            await employeeQuery.docs[0].ref.delete();
+        }
+        return { result: `Utente ${userId} eliminato.` };
+    } catch (error) {
+        console.error("Errore eliminazione utente:", error);
+        throw new functions.https.HttpsError('internal', error.message);
+    }
+});
+
+// --- FUNZIONI DI TIMBRATURA MANUALE DIPENDENTI (Admin/Preposto) ---
+
+exports.manualClockIn = functions.region('europe-west1').https.onCall(async (data, context) => {
+    const callerRole = context.auth?.token.role;
+    if (callerRole !== 'admin' && callerRole !== 'preposto') {
+        throw new functions.https.HttpsError('permission-denied', 'Funzione riservata ad admin e preposti.');
+    }
+    // ... (codice per timbratura manuale entrata, come prima)
+    const { employeeId, workAreaId, timestamp, adminId } = data;
+    if (!employeeId || !workAreaId || !timestamp || !adminId) {
+        throw new functions.https.HttpsError('invalid-argument', 'Dati mancanti per la timbratura.');
+    }
+    try {
+        await db.collection('time_entries').add({
+            employeeId, workAreaId, clockInTime: Timestamp.fromDate(new Date(timestamp)),
+            clockOutTime: null, status: 'clocked-in', createdBy: adminId, pauses: [],
+        });
+        return { result: "Timbratura di entrata manuale registrata." };
+    } catch (error) {
+        console.error("Errore timbratura manuale IN:", error);
+        throw new functions.https.HttpsError('internal', error.message);
+    }
+});
+
+exports.manualClockOut = functions.region('europe-west1').https.onCall(async (data, context) => {
+    const callerRole = context.auth?.token.role;
+    if (callerRole !== 'admin' && callerRole !== 'preposto') {
+        throw new functions.https.HttpsError('permission-denied', 'Funzione riservata ad admin e preposti.');
+    }
+    // ... (codice per timbratura manuale uscita, come prima)
+    const { employeeId, timestamp, adminId } = data;
+    if (!employeeId || !timestamp || !adminId) {
+        throw new functions.https.HttpsError('invalid-argument', 'Dati mancanti per la timbratura.');
+    }
+    try {
+        const q = db.collection('time_entries').where('employeeId', '==', employeeId).where('status', '==', 'clocked-in').limit(1);
+        const snapshot = await q.get();
+        if (snapshot.empty) {
+            throw new functions.https.HttpsError('not-found', 'Nessuna timbratura di entrata attiva trovata per questo dipendente.');
+        }
+        const entryDoc = snapshot.docs[0];
+        await entryDoc.ref.update({ clockOutTime: Timestamp.fromDate(new Date(timestamp)), status: 'clocked-out', lastModifiedBy: adminId });
+        return { result: "Timbratura di uscita manuale registrata." };
+    } catch (error) {
+        console.error("Errore timbratura manuale OUT:", error);
+        if(error.code) throw error;
+        throw new functions.https.HttpsError('internal', error.message);
+    }
+});
+
+
+// --- NUOVE FUNZIONI DI TIMBRATURA PER IL PREPOSTO ---
+
 /**
- * Funzione HTTP v2 (onRequest) per creare un nuovo utente (Admin/Preposto).
- * La gestione CORS è integrata nell'opzione { cors: true }.
+ * Permette a un preposto di timbrare la propria entrata.
  */
-exports.createNewUser = onRequest({ cors: true }, async (req, res) => {
-    // Controlla che il metodo sia POST
-    if (req.method !== 'POST') {
-        res.status(405).send({ error: 'Method Not Allowed' });
-        return;
+exports.prepostoClockIn = functions.region('europe-west1').https.onCall(async (data, context) => {
+    const uid = context.auth?.uid;
+    const callerRole = context.auth?.token.role;
+    if (!uid || callerRole !== 'preposto') {
+        throw new functions.https.HttpsError('permission-denied', 'Funzione riservata ai preposti.');
+    }
+    
+    const { workAreaId, timestamp } = data;
+    if (!workAreaId || !timestamp) {
+        throw new functions.https.HttpsError('invalid-argument', 'Area e orario sono obbligatori.');
     }
 
     try {
-        // NUOVI CAMPI: riceve nome, cognome, e telefono (opzionale)
-        const { email, password, nome, cognome, role, telefono } = req.body;
-
-        // NUOVA VALIDAZIONE: controlla i nuovi campi obbligatori
-        if (!email || !password || !nome || !cognome || !role) {
-            logger.error("Dati mancanti nella richiesta", req.body);
-            res.status(400).send({ error: "Tutti i campi obbligatori (nome, cognome, email, password, ruolo) devono essere forniti." });
-            return;
+        const employeeQuery = await db.collection('employees').where('userId', '==', uid).limit(1).get();
+        if (employeeQuery.empty) {
+            throw new functions.https.HttpsError('not-found', 'Profilo dipendente del preposto non trovato.');
         }
-        
-        const displayName = `${nome} ${cognome}`;
+        const employeeId = employeeQuery.docs[0].id;
 
-        // 1. Crea l'utente in Firebase Authentication
-        const userRecord = await admin.auth().createUser({
-            email: email,
-            password: password,
-            displayName: displayName,
+        await db.collection('time_entries').add({
+            employeeId: employeeId,
+            workAreaId,
+            clockInTime: Timestamp.fromDate(new Date(timestamp)),
+            clockOutTime: null,
+            status: 'clocked-in',
+            createdBy: uid,
+            pauses: [],
         });
+        return { result: "Timbratura entrata preposto registrata." };
+    } catch (error) {
+        console.error("Errore timbratura preposto IN:", error);
+        throw new functions.https.HttpsError('internal', error.message);
+    }
+});
 
-        logger.info(`Utente creato in Authentication con UID: ${userRecord.uid}`);
 
-        // 2. Imposta i custom claims per definire il ruolo
-        await admin.auth().setCustomUserClaims(userRecord.uid, { role: role });
+/**
+ * Gestisce l'inizio/fine della pausa per il preposto.
+ */
+exports.prepostoTogglePause = functions.region('europe-west1').https.onCall(async (data, context) => {
+    const uid = context.auth?.uid;
+    const callerRole = context.auth?.token.role;
+    if (!uid || callerRole !== 'preposto') {
+        throw new functions.https.HttpsError('permission-denied', 'Funzione riservata ai preposti.');
+    }
+
+    try {
+        const employeeQuery = await db.collection('employees').where('userId', '==', uid).limit(1).get();
+        if (employeeQuery.empty) {
+            throw new functions.https.HttpsError('not-found', 'Profilo dipendente del preposto non trovato.');
+        }
+        const employeeId = employeeQuery.docs[0].id;
         
-        // Prepara i dati da salvare in Firestore
-        const userData = {
-            nome: nome,
-            cognome: cognome,
-            email: email,
-            role: role,
-            createdAt: admin.firestore.FieldValue.serverTimestamp()
-        };
-        // Aggiunge il telefono solo se è stato fornito
-        if (telefono) {
-            userData.telefono = telefono;
+        const q = db.collection('time_entries').where('employeeId', '==', employeeId).where('status', '==', 'clocked-in').limit(1);
+        const snapshot = await q.get();
+        if (snapshot.empty) {
+            throw new functions.https.HttpsError('not-found', 'Nessuna timbratura attiva trovata.');
         }
 
-        // 3. Salva le informazioni aggiuntive in Firestore
-        await db.collection("users").doc(userRecord.uid).set(userData);
+        const entryRef = snapshot.docs[0].ref;
+        const entryData = snapshot.docs[0].data();
+        const currentPauses = entryData.pauses || [];
+        const activePause = currentPauses.find(p => !p.end);
 
-        logger.info(`Dati utente salvati in Firestore per UID: ${userRecord.uid}`);
-        
-        // 4. Invia una risposta di successo
-        res.status(200).send({ success: true, message: `Utente ${displayName} creato con successo.`, uid: userRecord.uid });
+        if (activePause) { // Se c'è una pausa attiva, la termino
+            const pauseIndex = currentPauses.findIndex(p => !p.end);
+            currentPauses[pauseIndex].end = Timestamp.now();
+        } else { // Altrimenti, ne inizio una nuova
+            currentPauses.push({ start: Timestamp.now(), end: null });
+        }
+
+        await entryRef.update({ pauses: currentPauses });
+        return { result: `Pausa ${activePause ? 'terminata' : 'iniziata'}.` };
 
     } catch (error) {
-        logger.error("Errore durante la creazione dell'utente:", error);
-        if (error.code === 'auth/email-already-exists') {
-            res.status(409).send({ error: "L'indirizzo email è già in uso." });
-        } else {
-            res.status(500).send({ error: "Errore interno del server durante la creazione dell'utente." });
-        }
+        console.error("Errore gestione pausa preposto:", error);
+        throw new functions.https.HttpsError('internal', error.message);
     }
 });
-
-
-// --- Le tue altre funzioni (onCall v2) per la timbratura ---
-// Assicurati di mantenere la tua logica originale qui.
-
-exports.clockEmployeeIn = onCall(async (request) => {
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "Devi essere autenticato per timbrare.");
-    }
-    // ... INSERISCI QUI LA TUA LOGICA PER LA TIMBRATURA DI ENTRATA ...
-    logger.info(`Timbratura IN per ${request.auth.uid}`);
-    return { success: true, message: "Timbratura di entrata registrata con successo!" };
-});
-
-exports.clockEmployeeOut = onCall(async (request) => {
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "Devi essere autenticato.");
-    }
-    // ... INSERISCI QUI LA TUA LOGICA PER LA TIMBRATURA DI USCITA ...
-    logger.info(`Timbratura OUT per ${request.auth.uid}`);
-    return { success: true, message: "Timbratura di uscita registrata con successo!" };
-});
-
-exports.clockEmployeePause = onCall(async (request) => {
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "Devi essere autenticato.");
-    }
-    // ... INSERISCI QUI LA TUA LOGICA PER LA PAUSA ...
-    logger.info(`Pausa per ${request.auth.uid}`);
-    return { success: true, message: "Pausa registrata!" };
-});
-

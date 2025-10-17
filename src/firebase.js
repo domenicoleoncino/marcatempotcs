@@ -1,19 +1,25 @@
-import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+// src/firebase.js
 
+import { initializeApp } from "firebase/app";
+import { getFirestore } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
+import { getFunctions } from 'firebase/functions';
+
+// Questa è la versione CORRETTA.
+// Legge i valori dal file .env senza assegnarli qui.
 const firebaseConfig = {
-  apiKey: "AIzaSyD9bjpB9LxiixUJsJ_Wq4_dcbn3q9fj-7k",
-  authDomain: "marcatempo-tcs.firebaseapp.com",
-  projectId: "marcatempo-tcs",
-  storageBucket: "marcatempo-tcs.appspot.com",
-  messagingSenderId: "385748349249",
-  appId: "1:385748349249:web:3e80c0dd1a8266f53f71c0",
-  measurementId: "G-04EYMT11Q7"
+  apiKey: process.env.REACT_APP_API_KEY,
+  authDomain: process.env.REACT_APP_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_APP_ID
 };
 
+// Inizializza Firebase
 const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
 
-export { auth, db };
+// Esporta i servizi che useremo
+export const db = getFirestore(app);
+export const auth = getAuth(app);
+export const functions = getFunctions(app, 'europe-west1');
