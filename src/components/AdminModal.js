@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
-import { doc, updateDoc, deleteDoc, writeBatch } from 'firebase/firestore';
+import { doc, updateDoc, deleteDoc } from 'firebase/firestore'; // CORREZIONE: 'writeBatch' rimosso
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
 const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, allEmployees, userData, onAdminClockIn, onAdminApplyPause }) => {
@@ -35,14 +35,14 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                 const availableAreas = workAreas.filter(wa => profile.workAreaIds?.includes(wa.id));
                 setFormData({ selectedArea: availableAreas.length > 0 ? availableAreas[0].id : '', manualTime: new Date().toISOString().slice(0, 16) });
             } else if (type === 'manualClockIn') { // Timbratura manuale per dipendente
-                 const availableAreas = workAreas.filter(wa => item.workAreaIds?.includes(wa.id));
-                 setFormData({ selectedArea: availableAreas.length > 0 ? availableAreas[0].id : '', manualTime: new Date().toISOString().slice(0, 16) });
+                const availableAreas = workAreas.filter(wa => item.workAreaIds?.includes(wa.id));
+                setFormData({ selectedArea: availableAreas.length > 0 ? availableAreas[0].id : '', manualTime: new Date().toISOString().slice(0, 16) });
             } else if (type === 'manualClockOut') { // Timbratura manuale uscita
                 setFormData({ manualTime: new Date().toISOString().slice(0, 16) });
             } else if (type === 'assignEmployeeToPrepostoArea') { // Preposto assegna dipendente alle sue aree
-                 const managedAreaIds = userData?.managedAreaIds || [];
-                 const preExistingAssignments = (item.workAreaIds || []).filter(id => managedAreaIds.includes(id));
-                 setFormData({ selectedPrepostoAreas: preExistingAssignments });
+                const managedAreaIds = userData?.managedAreaIds || [];
+                const preExistingAssignments = (item.workAreaIds || []).filter(id => managedAreaIds.includes(id));
+                setFormData({ selectedPrepostoAreas: preExistingAssignments });
             } 
             
         } else { // Modal di creazione
@@ -55,7 +55,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                     radius: 100 
                 });
             } else if (type === 'newEmployee') {
-                 setFormData({name: '', surname: '', email: '', password: ''});
+                setFormData({name: '', surname: '', email: '', password: ''});
             } else if (type === 'newAdmin') {
                 setFormData({name: '', surname: '', email: '', password: '', phone: '', role: 'preposto'});
             }
@@ -72,16 +72,16 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
         const { name, value, type, checked } = e.target; 
         
         if (type === 'checkbox') {
-             const currentSelection = formData[name] || [];
-             if (checked) { 
-                 setFormData(prev => ({ ...prev, [name]: [...currentSelection, value] }));
-             } else { 
-                 setFormData(prev => ({ ...prev, [name]: currentSelection.filter(id => id !== value) }));
-             }
+            const currentSelection = formData[name] || [];
+            if (checked) { 
+                setFormData(prev => ({ ...prev, [name]: [...currentSelection, value] }));
+            } else { 
+                setFormData(prev => ({ ...prev, [name]: currentSelection.filter(id => id !== value) }));
+            }
         } 
         else if (e.target.multiple) { 
-             const values = Array.from(e.target.selectedOptions).map(option => option.value);
-             setFormData(prev => ({...prev, [name]: values}));
+            const values = Array.from(e.target.selectedOptions).map(option => option.value);
+            setFormData(prev => ({...prev, [name]: values}));
         } 
         else {
             setFormData(prev => ({ ...prev, [name]: value }));
@@ -242,10 +242,10 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                 <label htmlFor={name} className="block text-sm font-medium text-gray-700">{label}</label>
                 {type === 'select' ? (
                      <select 
-                        id={name} name={name} value={formData[name] ?? ''} onChange={handleChange} 
-                        required={required}
-                        className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                    >
+                         id={name} name={name} value={formData[name] ?? ''} onChange={handleChange} 
+                         required={required}
+                         className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                     >
                          {options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                      </select>
                 ) : (
@@ -263,77 +263,77 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
         // Helper per renderizzare checkbox (usato per assegnare aree)
         const renderCheckboxes = (label, name, items, disabled = false) => (
              <div>
-                <label className="block text-sm font-medium text-gray-700">{label}</label>
-                {items && items.length > 0 ? (
-                    <div className="mt-2 max-h-60 overflow-y-auto border border-gray-200 rounded-md p-2 space-y-2 bg-gray-50">
-                        {items
-                          .sort((a, b) => a.name.localeCompare(b.name)) 
-                          .map(it => (
-                            <div key={it.id} className="flex items-center">
-                                <input 
-                                    id={`${name}-${it.id}`} name={name} type="checkbox" value={it.id} 
-                                    checked={(formData[name] || []).includes(it.id)} 
-                                    onChange={handleChange} disabled={disabled}
-                                    className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 disabled:opacity-50" 
-                                />
-                                <label htmlFor={`${name}-${it.id}`} className={`ml-3 block text-sm ${disabled ? 'text-gray-400' : 'text-gray-800'}`}>{it.name}</label>
-                            </div>
-                        ))}
-                    </div>
-                 ) : (
-                    <p className="text-sm text-gray-500 mt-2">{disabled ? 'Nessuna area disponibile.' : 'Nessuna area definita.'}</p>
-                 )}
-            </div>
+                 <label className="block text-sm font-medium text-gray-700">{label}</label>
+                 {items && items.length > 0 ? (
+                     <div className="mt-2 max-h-60 overflow-y-auto border border-gray-200 rounded-md p-2 space-y-2 bg-gray-50">
+                         {items
+                           .sort((a, b) => a.name.localeCompare(b.name)) 
+                           .map(it => (
+                             <div key={it.id} className="flex items-center">
+                                 <input 
+                                     id={`${name}-${it.id}`} name={name} type="checkbox" value={it.id} 
+                                     checked={(formData[name] || []).includes(it.id)} 
+                                     onChange={handleChange} disabled={disabled}
+                                     className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 disabled:opacity-50" 
+                                 />
+                                 <label htmlFor={`${name}-${it.id}`} className={`ml-3 block text-sm ${disabled ? 'text-gray-400' : 'text-gray-800'}`}>{it.name}</label>
+                             </div>
+                         ))}
+                     </div>
+                   ) : (
+                     <p className="text-sm text-gray-500 mt-2">{disabled ? 'Nessuna area disponibile.' : 'Nessuna area definita.'}</p>
+                   )}
+             </div>
         );
-        
-        // --- FUNZIONE renderMultiSelect COMMENTATA PER FIX BUILD CI ---
-        /*
-         const renderMultiSelect = (label, name, items) => (
-             <div>
-                <label htmlFor={name} className="block text-sm font-medium text-gray-700">{label}</label>
-                <select multiple id={name} name={name} value={formData[name] || []} onChange={handleChange} className="mt-1 block w-full h-40 border border-gray-300 rounded-md">
-                     {items.map(i => <option key={i.id} value={i.id}>{i.name} {i.surname || ''}</option>)}
-                </select>
-            </div>
-         );
-        */
 
         // Contenuto specifico del body del modal
         let body;
         switch (type) {
-            // ---- Form Dipendenti ----
-            case 'newEmployee': /* ... come prima ... */ break;
-            case 'editEmployee': /* ... come prima ... */ break;
-            // ---- Form Aree ----
-            case 'newArea': case 'editArea': /* ... come prima ... */ break;
-             // ---- Form Assegnazioni ----
-            case 'assignArea': /* ... come prima ... */ break;
-            case 'assignManagedAreas': /* ... come prima ... */ break;
-             case 'assignEmployeeToPrepostoArea': /* ... come prima ... */ break;
-            // ---- Form Admin/Preposti ----
-            case 'newAdmin': /* ... come prima ... */ break;
-            // ---- Form Timbrature Manuali ----
-            case 'manualClockIn': case 'adminClockIn': /* ... come prima ... */ break;
-            case 'manualClockOut': /* ... come prima ... */ break;
-            // ---- Messaggi di Conferma ----
-            case 'deleteEmployee': case 'deleteArea': case 'deleteAdmin': case 'resetDevice': case 'applyPredefinedPause': /* ... come prima ... */ break;
-            // ---- Default ----
-            default: /* ... come prima ... */ break;
-        }
-
-         // Assegna il body corretto in base al type (codice omesso per brevità, è uguale a prima)
-         switch (type) {
-            case 'newEmployee': body = <div className="space-y-4">{renderField('Nome', 'name')}{renderField('Cognome', 'surname')}{renderField('Email', 'email', 'email')}{renderField('Password (min. 6 caratteri)', 'password', 'password')}</div>; break;
-            case 'editEmployee': body = <div className="space-y-4">{renderField('Nome', 'name')}{renderField('Cognome', 'surname')}</div>; break;
-            case 'newArea': case 'editArea': body = <div className="space-y-4">{renderField('Nome Area', 'name')}{renderField('Durata Pausa Predefinita (minuti)', 'pauseDuration', 'number', [], false)}{renderField('Latitudine', 'latitude', 'number')}{renderField('Longitudine', 'longitude', 'number')}{renderField('Raggio di Tolleranza (metri)', 'radius', 'number')}</div>; break;
-            case 'assignArea': body = renderCheckboxes('Seleziona le aree per questo dipendente', 'selectedAreas', workAreas); break;
-            case 'assignManagedAreas': body = renderCheckboxes('Seleziona le aree che questo preposto gestirà', 'selectedAreas', workAreas); break;
-            case 'assignEmployeeToPrepostoArea': const managedAreas = workAreas.filter(wa => userData?.managedAreaIds?.includes(wa.id)); body = renderCheckboxes('Seleziona le aree di tua competenza per questo dipendente', 'selectedPrepostoAreas', managedAreas, managedAreas.length === 0); if (managedAreas.length === 0 && !isLoading) { setError("Non gestisci nessuna area specifica. Contatta l'amministratore per farti assegnare delle aree."); } break;
-            case 'newAdmin': body = <div className="space-y-4">{renderField('Nome', 'name')}{renderField('Cognome', 'surname')}{renderField('Email', 'email', 'email')}{renderField('Password (min. 6 caratteri)', 'password', 'password')}{renderField('Telefono (Opzionale)', 'phone', 'tel', [], false)}{renderField('Ruolo', 'role', 'select', [{value: 'preposto', label: 'Preposto (Caposquadra)'}, {value: 'admin', label: 'Admin (Amministratore)'}])}</div>; break;
-            case 'manualClockIn': case 'adminClockIn': const employeeWorkAreaIds = item?.workAreaIds || []; const availableAreas = workAreas.filter(wa => employeeWorkAreaIds.includes(wa.id)); body = <div className="space-y-4">{renderField('Orario di Entrata', 'manualTime', 'datetime-local')}{availableAreas.length > 0 ? renderField('Seleziona Area di Lavoro', 'selectedArea', 'select', availableAreas.map(a => ({value: a.id, label: a.name}))) : <p className="text-sm text-red-500">Questo utente non è assegnato a nessuna area.</p>}</div>; if (availableAreas.length === 0) setIsLoading(true); break;
-            case 'manualClockOut': body = renderField('Orario di Uscita', 'manualTime', 'datetime-local'); break;
-            case 'deleteEmployee': case 'deleteArea': case 'deleteAdmin': case 'resetDevice': case 'applyPredefinedPause': body = <p>Sei sicuro di voler procedere? L'azione potrebbe non essere reversibile.</p>; break;
-            default: body = <p>Configurazione modale non valida.</p>; setIsLoading(true); break;
+            case 'newEmployee': 
+                body = <div className="space-y-4">{renderField('Nome', 'name')}{renderField('Cognome', 'surname')}{renderField('Email', 'email', 'email')}{renderField('Password (min. 6 caratteri)', 'password', 'password')}</div>; 
+                break;
+            case 'editEmployee': 
+                body = <div className="space-y-4">{renderField('Nome', 'name')}{renderField('Cognome', 'surname')}</div>; 
+                break;
+            case 'newArea': 
+            case 'editArea': 
+                body = <div className="space-y-4">{renderField('Nome Area', 'name')}{renderField('Durata Pausa Predefinita (minuti)', 'pauseDuration', 'number', [], false)}{renderField('Latitudine', 'latitude', 'number')}{renderField('Longitudine', 'longitude', 'number')}{renderField('Raggio di Tolleranza (metri)', 'radius', 'number')}</div>; 
+                break;
+            case 'assignArea': 
+                body = renderCheckboxes('Seleziona le aree per questo dipendente', 'selectedAreas', workAreas); 
+                break;
+            case 'assignManagedAreas': 
+                body = renderCheckboxes('Seleziona le aree che questo preposto gestirà', 'selectedAreas', workAreas); 
+                break;
+            case 'assignEmployeeToPrepostoArea': 
+                const managedAreas = workAreas.filter(wa => userData?.managedAreaIds?.includes(wa.id)); 
+                body = renderCheckboxes('Seleziona le aree di tua competenza per questo dipendente', 'selectedPrepostoAreas', managedAreas, managedAreas.length === 0); 
+                if (managedAreas.length === 0 && !isLoading) { setError("Non gestisci nessuna area specifica. Contatta l'amministratore per farti assegnare delle aree."); } 
+                break;
+            case 'newAdmin': 
+                body = <div className="space-y-4">{renderField('Nome', 'name')}{renderField('Cognome', 'surname')}{renderField('Email', 'email', 'email')}{renderField('Password (min. 6 caratteri)', 'password', 'password')}{renderField('Telefono (Opzionale)', 'phone', 'tel', [], false)}{renderField('Ruolo', 'role', 'select', [{value: 'preposto', label: 'Preposto (Caposquadra)'}, {value: 'admin', label: 'Admin (Amministratore)'}])}</div>; 
+                break;
+            case 'manualClockIn': 
+            case 'adminClockIn': 
+                const employeeWorkAreaIds = item?.workAreaIds || []; 
+                const availableAreas = workAreas.filter(wa => employeeWorkAreaIds.includes(wa.id)); 
+                body = <div className="space-y-4">{renderField('Orario di Entrata', 'manualTime', 'datetime-local')}{availableAreas.length > 0 ? renderField('Seleziona Area di Lavoro', 'selectedArea', 'select', availableAreas.map(a => ({value: a.id, label: a.name}))) : <p className="text-sm text-red-500">Questo utente non è assegnato a nessuna area.</p>}</div>; 
+                if (availableAreas.length === 0) setIsLoading(true); 
+                break;
+            case 'manualClockOut': 
+                body = renderField('Orario di Uscita', 'manualTime', 'datetime-local'); 
+                break;
+            case 'deleteEmployee': 
+            case 'deleteArea': 
+            case 'deleteAdmin': 
+            case 'resetDevice': 
+            case 'applyPredefinedPause': 
+                body = <p>Sei sicuro di voler procedere? L'azione potrebbe non essere reversibile.</p>; 
+                break;
+            default: 
+                body = <p>Configurazione modale non valida.</p>; 
+                setIsLoading(true); 
+                break;
         }
 
         // --- Render Finale del Form ---
