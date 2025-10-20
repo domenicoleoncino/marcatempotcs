@@ -6,7 +6,8 @@ import LoginScreen from './components/LoginScreen';
 import AdminDashboard from './components/AdminDashboard';
 import EmployeeDashboard from './components/EmployeeDashboard';
 import ChangePassword from './components/ChangePassword';
-
+// Aggiungi questa riga per "spiare" quale progetto sta usando l'app
+console.log("PROGETTO ATTUALMENTE IN USO:", process.env.REACT_APP_PROJECT_ID);
 const App = () => {
     const [user, setUser] = useState(null);
     const [userData, setUserData] = useState(null);
