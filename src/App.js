@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc, collection, getDocs, query, where } from 'firebase/firestore'; // Aggiunti query e where
+import { doc, getDoc, collection, getDocs, query, where, onSnapshot } from 'firebase/firestore'; // Aggiunto onSnapshot
 import LoginScreen from './components/LoginScreen';
 import AdminDashboard from './components/AdminDashboard';
 import EmployeeDashboard from './components/EmployeeDashboard';
@@ -15,8 +15,39 @@ const App = () => {
     const [userData, setUserData] = useState(null);
     const [allWorkAreas, setAllWorkAreas] = useState([]);
     const [authChecked, setAuthChecked] = useState(false);
+    
+    // --- NUOVI STATI PER IL BLOCCO APP ---
+    const [isAppActive, setIsAppActive] = useState(true); // Default: l'app è attiva
+    const [appStatusChecked, setAppStatusChecked] = useState(false); // Sappiamo quando abbiamo controllato lo stato
 
+    // --- NUOVO EFFECT PER CONTROLLARE LO STATO DELL'APP (KILL SWITCH) ---
     useEffect(() => {
+        console.log("--- CONTROLLO STATO APP (KILL SWITCH) ---");
+        const configRef = doc(db, 'app_config', 'status');
+        const unsubscribe = onSnapshot(configRef, (docSnap) => {
+            if (docSnap.exists() && docSnap.data().isAttiva === false) {
+                console.log("APP BLOCCATA DALL'AMMINISTRATORE");
+                setIsAppActive(false);
+            } else {
+                console.log("App è ATTIVA.");
+                setIsAppActive(true);
+            }
+            setAppStatusChecked(true); // Abbiamo controllato, possiamo procedere
+        }, (error) => {
+            console.error("Errore nel leggere la configurazione dell'app:", error);
+            // In caso di errore (es. doc non esiste), lasciamo l'app attiva per sicurezza
+            setIsAppActive(true);
+            setAppStatusChecked(true);
+        });
+
+        return () => unsubscribe();
+    }, []);
+
+    // Effect per l'autenticazione utente
+    useEffect(() => {
+        // Non procedere se non sappiamo ancora se l'app è attiva
+        if (!appStatusChecked) return;
+
         console.log("--- APP AVVIATA: Inizio controllo autenticazione ---");
         const unsubscribe = onAuthStateChanged(auth, async (authenticatedUser) => {
             if (authenticatedUser) {
@@ -74,34 +105,55 @@ const App = () => {
             setAuthChecked(true);
         });
         return () => unsubscribe();
-    }, []);
+    }, [appStatusChecked]); // Riesegui questo check solo quando lo stato dell'app è stato verificato
 
     const handleLogout = async () => {
         await signOut(auth);
     };
 
+    // --- NUOVA LOGICA DI VISUALIZZAZIONE ---
+
+    // 1. Schermata di caricamento iniziale, finché non sappiamo se l'app è attiva
+    if (!appStatusChecked) {
+        return <div className="min-h-screen flex items-center justify-center">Verifica dello stato dell'app in corso...</div>;
+    }
+
+    // 2. Se l'app NON è attiva, mostra la schermata di blocco a tutti
+    if (!isAppActive) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 text-center p-4">
+                 <h1 className="text-2xl font-bold text-red-600 mb-2">Applicazione non attiva</h1>
+                 <p className="text-gray-700">L'applicazione è temporaneamente non disponibile. Contattare l'amministratore per maggiori informazioni.</p>
+            </div>
+        );
+    }
+    
+    // 3. Se l'app è attiva, ma stiamo ancora controllando l'utente
     if (!authChecked) {
         return <div className="min-h-screen flex items-center justify-center">Caricamento...</div>;
     }
 
+    // 4. Se non c'è utente, mostra il Login
     if (!user) {
         return <LoginScreen />;
     }
 
+    // 5. Se l'utente deve cambiare password
     if (userData && userData.mustChangePassword) {
         return <ChangePassword user={user} />;
     }
     
+    // 6. Se è admin o preposto
     if (userData && (userData.role === 'admin' || userData.role === 'preposto')) {
-        // La prop 'allWorkAreas' non è più necessaria qui perché AdminDashboard ora carica i dati in autonomia
         return <AdminDashboard user={user} userData={userData} handleLogout={handleLogout} />;
     }
 
+    // 7. Se è un dipendente
     if (userData && userData.role === 'employee') {
-        // Passiamo allWorkAreas che abbiamo già caricato all'avvio
         return <EmployeeDashboard user={user} employeeData={userData} handleLogout={handleLogout} allWorkAreas={allWorkAreas} />;
     }
 
+    // 8. Se l'utente è loggato ma non ha un ruolo riconosciuto
     return (
         <div className="min-h-screen flex flex-col items-center justify-center">
             <p>Ruolo utente non riconosciuto o dati non disponibili.</p>
@@ -113,4 +165,3 @@ const App = () => {
 };
 
 export default App;
-
