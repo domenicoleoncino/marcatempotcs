@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
+import { doc, getDoc, collection, getDocs, query, where } from 'firebase/firestore'; // Aggiunti query e where
 import LoginScreen from './components/LoginScreen';
 import AdminDashboard from './components/AdminDashboard';
 import EmployeeDashboard from './components/EmployeeDashboard';
 import ChangePassword from './components/ChangePassword';
+
 // Aggiungi questa riga per "spiare" quale progetto sta usando l'app
 console.log("PROGETTO ATTUALMENTE IN USO:", process.env.REACT_APP_PROJECT_ID);
+
 const App = () => {
     const [user, setUser] = useState(null);
     const [userData, setUserData] = useState(null);
@@ -21,16 +23,27 @@ const App = () => {
                 console.log("1. Utente autenticato:", authenticatedUser.uid);
                 
                 let userProfile = null;
+                // Prima cerca l'utente nella collezione 'users' (admin/preposto)
                 const userDocRef = doc(db, 'users', authenticatedUser.uid);
                 const userDocSnap = await getDoc(userDocRef);
+                
                 if (userDocSnap.exists()) {
                     userProfile = userDocSnap.data();
                 } else {
-                    const employeeDocRef = doc(db, 'employees', authenticatedUser.uid);
-                    const employeeDocSnap = await getDoc(employeeDocRef);
-                    if (employeeDocSnap.exists()) {
-                        userProfile = { ...employeeDocSnap.data(), role: 'employee' };
+                    // *** INIZIO CORREZIONE ***
+                    // Se non è admin/preposto, cerca nella collezione 'employees' usando una QUERY
+                    console.log("Utente non trovato in 'users', cerco in 'employees' con una query...");
+                    const employeesCollectionRef = collection(db, 'employees');
+                    const q = query(employeesCollectionRef, where("userId", "==", authenticatedUser.uid));
+                    const employeeQuerySnapshot = await getDocs(q);
+
+                    if (!employeeQuerySnapshot.empty) {
+                        // Trovato! Prendiamo il primo (e unico) risultato
+                        const employeeDocSnap = employeeQuerySnapshot.docs[0];
+                        // Aggiungiamo l'ID del documento e il ruolo al profilo
+                        userProfile = { id: employeeDocSnap.id, ...employeeDocSnap.data(), role: 'employee' };
                     }
+                    // *** FINE CORREZIONE ***
                 }
 
                 if (userProfile) {
@@ -69,6 +82,8 @@ const App = () => {
         await signOut(auth);
     };
     
+    // NOTA: Questa funzione non è più necessaria qui perché i dati vengono già caricati all'avvio
+    // È stata mantenuta per non rompere le props passate ad AdminDashboard, ma potrebbe essere rimossa in futuro.
     const fetchAllWorkAreas = async () => {
         try {
             const areasSnapshot = await getDocs(collection(db, "work_areas"));
@@ -92,10 +107,11 @@ const App = () => {
     }
     
     if (userData && (userData.role === 'admin' || userData.role === 'preposto')) {
-        return <AdminDashboard user={user} userData={userData} handleLogout={handleLogout} allWorkAreas={allWorkAreas} fetchAllData={fetchAllWorkAreas} />;
+        return <AdminDashboard user={user} userData={userData} handleLogout={handleLogout} />;
     }
 
     if (userData && userData.role === 'employee') {
+        // Passiamo allWorkAreas che abbiamo già caricato all'avvio
         return <EmployeeDashboard user={user} employeeData={userData} handleLogout={handleLogout} allWorkAreas={allWorkAreas} />;
     }
 
@@ -110,4 +126,3 @@ const App = () => {
 };
 
 export default App;
-
