@@ -30,9 +30,10 @@ function roundTimeWithCustomRulesServer(date, type) {
 };
 
 // ===============================================
-// --- FUNZIONE DI CREAZIONE UTENTE (CORRETTA) ---
+// --- FUNZIONE DI CREAZIONE UTENTE (AGGIORNATA) ---
 // ===============================================
 exports.createUser = functions.region('europe-west1').https.onCall(async (data, context) => {
+    // Controllo che chi chiama sia un admin
     if (context.auth?.token.role !== 'admin') {
         throw new functions.https.HttpsError('permission-denied', 'Solo un amministratore può creare nuovi utenti.');
     }
@@ -46,6 +47,7 @@ exports.createUser = functions.region('europe-west1').https.onCall(async (data, 
     }
 
     try {
+        // PASSO 1: Crea l'utente in Firebase Authentication
         const userRecord = await admin.auth().createUser({ 
             email, 
             password, 
@@ -53,9 +55,11 @@ exports.createUser = functions.region('europe-west1').https.onCall(async (data, 
         });
         console.log(`Utente Auth creato: ${userRecord.uid}`);
 
+        // PASSO 2: Imposta il suo ruolo tramite Custom Claim
         await admin.auth().setCustomUserClaims(userRecord.uid, { role });
         console.log(`Custom Claim '${role}' impostato per ${userRecord.uid}`);
 
+        // PASSO 3: Crea il documento nella collezione 'users'
         const userDocRef = db.collection('users').doc(userRecord.uid);
         await userDocRef.set({ 
             name, 
@@ -63,10 +67,12 @@ exports.createUser = functions.region('europe-west1').https.onCall(async (data, 
             email, 
             role,
             phone: data.phone || null,
-            createdAt: FieldValue.serverTimestamp()
+            createdAt: FieldValue.serverTimestamp(),
+            mustChangePassword: true // <-- MODIFICA: Aggiunto flag per cambio password obbligatorio
         });
-        console.log(`Documento 'users/${userRecord.uid}' creato.`);
+        console.log(`Documento 'users/${userRecord.uid}' creato con mustChangePassword=true.`);
 
+        // PASSO 4: SE è un dipendente o preposto, crea il profilo in 'employees'
         if (role === 'dipendente' || role === 'preposto') {
             const employeeData = { 
                 userId: userRecord.uid,
@@ -92,8 +98,9 @@ exports.createUser = functions.region('europe-west1').https.onCall(async (data, 
     }
 });
 
+
 // ===============================================
-// --- ALTRE FUNZIONI ---
+// --- ALTRE FUNZIONI (invariate) ---
 // ===============================================
 
 exports.deleteUserAndEmployee = functions.region('europe-west1').https.onCall(async (data, context) => {
@@ -337,5 +344,4 @@ exports.TEMP_fixMyClaim = functions.region('europe-west1').https.onCall(async (d
         throw new functions.https.HttpsError('internal', `Errore server: ${error.message}`);
     }
 });
-
 
