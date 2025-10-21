@@ -5,7 +5,7 @@ import { doc, getDoc, collection, getDocs, query, where, onSnapshot } from 'fire
 import LoginScreen from './components/LoginScreen';
 import AdminDashboard from './components/AdminDashboard';
 import EmployeeDashboard from './components/EmployeeDashboard';
-import ChangePassword from './components/ChangePassword';
+import ChangePassword from './components/ChangePassword'; // Import corretto senza graffe
 
 console.log("PROGETTO ATTUALMENTE IN USO:", process.env.REACT_APP_PROJECT_ID);
 
@@ -18,6 +18,7 @@ const App = () => {
     const [isAppActive, setIsAppActive] = useState(true);
     const [appStatusChecked, setAppStatusChecked] = useState(false);
 
+    // Effect #1: Controlla lo stato globale dell'app (kill switch)
     useEffect(() => {
         const configRef = doc(db, 'app_config', 'status');
         const unsubscribe = onSnapshot(configRef, (docSnap) => {
@@ -27,38 +28,32 @@ const App = () => {
                 setIsAppActive(true);
             }
             setAppStatusChecked(true);
-        }, (error) => {
-            console.error("Errore nel leggere la configurazione dell'app:", error);
+        }, () => {
+            // In caso di errore, l'app rimane attiva per sicurezza
             setIsAppActive(true);
             setAppStatusChecked(true);
         });
-
         return () => unsubscribe();
     }, []);
 
+    // Effect #2: Gestisce l'autenticazione e carica i dati dell'utente
     useEffect(() => {
         if (!appStatusChecked) return;
 
         const unsubscribe = onAuthStateChanged(auth, async (authenticatedUser) => {
-            // Se l'utente fa logout, resetta tutto e segna il check come completato
             if (!authenticatedUser) {
                 setUser(null);
                 setUserData(null);
-                setAuthChecked(true); // Abbiamo finito, l'utente non è loggato
+                setAuthChecked(true);
                 return;
             }
 
-            // Se c'è un utente, iniziamo a caricare i suoi dati
-            console.log("1. Utente autenticato con UID:", authenticatedUser.uid);
-            setUser(authenticatedUser); // Imposta subito l'utente Auth
-
+            setUser(authenticatedUser);
             const userDocRef = doc(db, 'users', authenticatedUser.uid);
             const userDocSnap = await getDoc(userDocRef);
 
             if (userDocSnap.exists()) {
                 const baseProfile = userDocSnap.data();
-                console.log("2. Profilo base trovato in 'users':", baseProfile);
-
                 if (baseProfile.role === 'admin') {
                     setUserData(baseProfile);
                 } else if (baseProfile.role === 'dipendente' || baseProfile.role === 'preposto') {
@@ -67,15 +62,11 @@ const App = () => {
                     
                     if (!employeeQuerySnapshot.empty) {
                         const employeeDoc = employeeQuerySnapshot.docs[0];
-                        const fullProfile = { 
-                            ...baseProfile,
-                            ...employeeDoc.data(),
-                            id: employeeDoc.id
-                        };
+                        const fullProfile = { ...baseProfile, ...employeeDoc.data(), id: employeeDoc.id };
                         setUserData(fullProfile);
                     } else {
                          console.error(`ERRORE: Utente '${baseProfile.role}' non ha un profilo 'employees'.`);
-                         await signOut(auth); // Forza il logout se i dati sono incoerenti
+                         await signOut(auth);
                     }
                 } else {
                     console.error(`ERRORE: Ruolo '${baseProfile.role}' non riconosciuto.`);
@@ -85,24 +76,37 @@ const App = () => {
                 console.error("ERRORE: Utente non trovato in 'users'.");
                 await signOut(auth);
             }
-            // Alla fine di tutto, segna il check come completato
             setAuthChecked(true);
         });
         return () => unsubscribe();
     }, [appStatusChecked]);
 
+    // Effect #3: Carica le aree di lavoro SE l'utente è un dipendente o preposto
+    useEffect(() => {
+        if (userData && (userData.role === 'dipendente' || userData.role === 'preposto')) {
+            const loadWorkAreas = async () => {
+                try {
+                    const areasSnapshot = await getDocs(collection(db, "work_areas"));
+                    setAllWorkAreas(areasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                    console.log("Aree di lavoro caricate per dipendente/preposto.");
+                } catch (error) {
+                    console.error("ERRORE nel caricamento delle aree di lavoro:", error);
+                }
+            };
+            loadWorkAreas();
+        }
+    }, [userData]);
+
     const handleLogout = async () => {
         await signOut(auth);
     };
 
-    // --- NUOVA LOGICA DI VISUALIZZAZIONE PIÙ ROBUSTA ---
+    // --- LOGICA DI VISUALIZZAZIONE ---
 
-    // 1. Mostra caricamento finché non abbiamo controllato lo stato dell'app
-    if (!appStatusChecked) {
-        return <div className="min-h-screen flex items-center justify-center bg-gray-100">Verifica stato app...</div>;
+    if (!appStatusChecked || !authChecked) {
+        return <div className="min-h-screen flex items-center justify-center bg-gray-100">Caricamento...</div>;
     }
 
-    // 2. Se l'app è bloccata, mostra il messaggio
     if (!isAppActive) {
         return (
             <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 text-center p-4">
@@ -112,19 +116,14 @@ const App = () => {
         );
     }
     
-    // 3. Mostra caricamento se stiamo ancora verificando l'utente O se abbiamo l'utente ma non ancora i suoi dati
-    if (!authChecked || (user && !userData)) {
-        return <div className="min-h-screen flex items-center justify-center bg-gray-100">Caricamento utente...</div>;
-    }
-
-    // 4. Se non c'è utente (check completato), mostra Login
     if (!user) {
         return <LoginScreen />;
     }
+    
+    if (!userData) {
+        return <div className="min-h-screen flex items-center justify-center bg-gray-100">Caricamento dati utente...</div>;
+    }
 
-    // A questo punto, abbiamo SIA 'user' CHE 'userData'
-
-    // 5. Se l'utente deve cambiare password
     if (userData.mustChangePassword === true) {
         return <ChangePassword 
                     user={user} 
@@ -132,25 +131,14 @@ const App = () => {
                 />;
     }
 
-    // 6. Mostra le dashboard in base al ruolo
     if (userData.role === 'admin' || userData.role === 'preposto') {
         return <AdminDashboard user={user} userData={userData} handleLogout={handleLogout} />;
     }
 
     if (userData.role === 'dipendente') {
-        const loadWorkAreas = async () => {
-            try {
-                const areasSnapshot = await getDocs(collection(db, "work_areas"));
-                setAllWorkAreas(areasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-            } catch (error) {
-                console.error("ERRORE nel caricamento delle aree di lavoro:", error);
-            }
-        };
-        if (allWorkAreas.length === 0) loadWorkAreas();
         return <EmployeeDashboard user={user} employeeData={userData} handleLogout={handleLogout} allWorkAreas={allWorkAreas} />;
     }
 
-    // 7. Se il ruolo non è valido, mostra errore
     return (
         <div className="min-h-screen flex flex-col items-center justify-center">
             <p className="font-bold text-red-600">Ruolo utente non riconosciuto o dati non disponibili.</p>
@@ -160,6 +148,4 @@ const App = () => {
 };
 
 export default App;
-
-
 
