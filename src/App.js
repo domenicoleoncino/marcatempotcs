@@ -13,7 +13,7 @@ const App = () => {
     const [user, setUser] = useState(null);
     const [userData, setUserData] = useState(null);
     const [allWorkAreas, setAllWorkAreas] = useState([]);
-    const [authChecked, setAuthChecked] = useState(false); // Stato per sapere quando il check iniziale è finito
+    const [authChecked, setAuthChecked] = useState(false);
     
     const [isAppActive, setIsAppActive] = useState(true);
     const [appStatusChecked, setAppStatusChecked] = useState(false);
@@ -40,47 +40,52 @@ const App = () => {
         if (!appStatusChecked) return;
 
         const unsubscribe = onAuthStateChanged(auth, async (authenticatedUser) => {
-            if (authenticatedUser) {
-                const userDocRef = doc(db, 'users', authenticatedUser.uid);
-                const userDocSnap = await getDoc(userDocRef);
-
-                if (userDocSnap.exists()) {
-                    const baseProfile = userDocSnap.data();
-                    if (baseProfile.role === 'admin') {
-                        setUserData(baseProfile);
-                        setUser(authenticatedUser);
-                    } else if (baseProfile.role === 'dipendente' || baseProfile.role === 'preposto') {
-                        const q = query(collection(db, 'employees'), where("userId", "==", authenticatedUser.uid));
-                        const employeeQuerySnapshot = await getDocs(q);
-                        
-                        if (!employeeQuerySnapshot.empty) {
-                            const employeeDoc = employeeQuerySnapshot.docs[0];
-                            const employeeProfile = employeeDoc.data();
-                            const fullProfile = { 
-                                ...baseProfile,
-                                ...employeeProfile,
-                                id: employeeDoc.id
-                            };
-                            setUserData(fullProfile);
-                            setUser(authenticatedUser);
-                        } else {
-                             console.error(`ERRORE CRITICO: Utente con ruolo '${baseProfile.role}' non ha un profilo 'employees'.`);
-                             await signOut(auth);
-                        }
-                    } else {
-                        console.error(`ERRORE: Ruolo '${baseProfile.role}' non riconosciuto.`);
-                        setUserData(baseProfile); // Imposta per mostrare errore
-                        setUser(authenticatedUser);
-                    }
-                } else {
-                    console.error("ERRORE: Utente non trovato in 'users'. Logout in corso.");
-                    await signOut(auth);
-                }
-            } else {
+            // Se l'utente fa logout, resetta tutto e segna il check come completato
+            if (!authenticatedUser) {
                 setUser(null);
                 setUserData(null);
+                setAuthChecked(true); // Abbiamo finito, l'utente non è loggato
+                return;
             }
-            // Segna che il controllo di autenticazione è terminato
+
+            // Se c'è un utente, iniziamo a caricare i suoi dati
+            console.log("1. Utente autenticato con UID:", authenticatedUser.uid);
+            setUser(authenticatedUser); // Imposta subito l'utente Auth
+
+            const userDocRef = doc(db, 'users', authenticatedUser.uid);
+            const userDocSnap = await getDoc(userDocRef);
+
+            if (userDocSnap.exists()) {
+                const baseProfile = userDocSnap.data();
+                console.log("2. Profilo base trovato in 'users':", baseProfile);
+
+                if (baseProfile.role === 'admin') {
+                    setUserData(baseProfile);
+                } else if (baseProfile.role === 'dipendente' || baseProfile.role === 'preposto') {
+                    const q = query(collection(db, 'employees'), where("userId", "==", authenticatedUser.uid));
+                    const employeeQuerySnapshot = await getDocs(q);
+                    
+                    if (!employeeQuerySnapshot.empty) {
+                        const employeeDoc = employeeQuerySnapshot.docs[0];
+                        const fullProfile = { 
+                            ...baseProfile,
+                            ...employeeDoc.data(),
+                            id: employeeDoc.id
+                        };
+                        setUserData(fullProfile);
+                    } else {
+                         console.error(`ERRORE: Utente '${baseProfile.role}' non ha un profilo 'employees'.`);
+                         await signOut(auth); // Forza il logout se i dati sono incoerenti
+                    }
+                } else {
+                    console.error(`ERRORE: Ruolo '${baseProfile.role}' non riconosciuto.`);
+                    setUserData(baseProfile);
+                }
+            } else {
+                console.error("ERRORE: Utente non trovato in 'users'.");
+                await signOut(auth);
+            }
+            // Alla fine di tutto, segna il check come completato
             setAuthChecked(true);
         });
         return () => unsubscribe();
@@ -90,14 +95,14 @@ const App = () => {
         await signOut(auth);
     };
 
-    // --- LOGICA DI VISUALIZZAZIONE CORRETTA ---
+    // --- NUOVA LOGICA DI VISUALIZZAZIONE PIÙ ROBUSTA ---
 
-    // 1. Mostra una schermata di caricamento finché non siamo sicuri dello stato dell'app E dell'utente
-    if (!appStatusChecked || !authChecked) {
-        return <div className="min-h-screen flex items-center justify-center bg-gray-100">Caricamento in corso...</div>;
+    // 1. Mostra caricamento finché non abbiamo controllato lo stato dell'app
+    if (!appStatusChecked) {
+        return <div className="min-h-screen flex items-center justify-center bg-gray-100">Verifica stato app...</div>;
     }
 
-    // 2. Se l'app è bloccata, mostra il messaggio di blocco
+    // 2. Se l'app è bloccata, mostra il messaggio
     if (!isAppActive) {
         return (
             <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 text-center p-4">
@@ -107,48 +112,54 @@ const App = () => {
         );
     }
     
-    // A questo punto, sappiamo se l'utente è loggato o no.
-
-    // 3. Se c'è un utente loggato, controlla se deve cambiare password
-    if (user) {
-        if (userData && userData.mustChangePassword === true) {
-            return <ChangePassword 
-                        user={user} 
-                        onPasswordChanged={() => setUserData(prev => ({ ...prev, mustChangePassword: false }))} 
-                    />;
-        }
-
-        // Se non deve cambiare password, mostra la dashboard corretta
-        if (userData && (userData.role === 'admin' || userData.role === 'preposto')) {
-            return <AdminDashboard user={user} userData={userData} handleLogout={handleLogout} />;
-        }
-
-        if (userData && userData.role === 'dipendente') {
-            const loadWorkAreas = async () => {
-                try {
-                    const areasSnapshot = await getDocs(collection(db, "work_areas"));
-                    const areas = areasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    setAllWorkAreas(areas);
-                } catch (error) {
-                    console.error("ERRORE nel caricamento delle aree di lavoro:", error);
-                }
-            };
-            if (allWorkAreas.length === 0) loadWorkAreas();
-            return <EmployeeDashboard user={user} employeeData={userData} handleLogout={handleLogout} allWorkAreas={allWorkAreas} />;
-        }
-
-        // Se il ruolo non è riconosciuto, mostra l'errore
-        return (
-            <div className="min-h-screen flex flex-col items-center justify-center">
-                <p className="font-bold text-red-600">Ruolo utente non riconosciuto o dati non disponibili.</p>
-                <button onClick={handleLogout} className="mt-4 px-4 py-2 bg-gray-500 text-white rounded">Logout</button>
-            </div>
-        );
+    // 3. Mostra caricamento se stiamo ancora verificando l'utente O se abbiamo l'utente ma non ancora i suoi dati
+    if (!authChecked || (user && !userData)) {
+        return <div className="min-h-screen flex items-center justify-center bg-gray-100">Caricamento utente...</div>;
     }
 
-    // 4. Se non c'è nessun utente loggato, mostra la schermata di login
-    return <LoginScreen />;
+    // 4. Se non c'è utente (check completato), mostra Login
+    if (!user) {
+        return <LoginScreen />;
+    }
+
+    // A questo punto, abbiamo SIA 'user' CHE 'userData'
+
+    // 5. Se l'utente deve cambiare password
+    if (userData.mustChangePassword === true) {
+        return <ChangePassword 
+                    user={user} 
+                    onPasswordChanged={() => setUserData(prev => ({ ...prev, mustChangePassword: false }))} 
+                />;
+    }
+
+    // 6. Mostra le dashboard in base al ruolo
+    if (userData.role === 'admin' || userData.role === 'preposto') {
+        return <AdminDashboard user={user} userData={userData} handleLogout={handleLogout} />;
+    }
+
+    if (userData.role === 'dipendente') {
+        const loadWorkAreas = async () => {
+            try {
+                const areasSnapshot = await getDocs(collection(db, "work_areas"));
+                setAllWorkAreas(areasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            } catch (error) {
+                console.error("ERRORE nel caricamento delle aree di lavoro:", error);
+            }
+        };
+        if (allWorkAreas.length === 0) loadWorkAreas();
+        return <EmployeeDashboard user={user} employeeData={userData} handleLogout={handleLogout} allWorkAreas={allWorkAreas} />;
+    }
+
+    // 7. Se il ruolo non è valido, mostra errore
+    return (
+        <div className="min-h-screen flex flex-col items-center justify-center">
+            <p className="font-bold text-red-600">Ruolo utente non riconosciuto o dati non disponibili.</p>
+            <button onClick={handleLogout} className="mt-4 px-4 py-2 bg-gray-500 text-white rounded">Logout</button>
+        </div>
+    );
 };
 
 export default App;
+
+
 
