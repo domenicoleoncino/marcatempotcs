@@ -30,7 +30,6 @@ const App = () => {
                 if (userDocSnap.exists()) {
                     userProfile = userDocSnap.data();
                 } else {
-                    // *** INIZIO CORREZIONE ***
                     // Se non è admin/preposto, cerca nella collezione 'employees' usando una QUERY
                     console.log("Utente non trovato in 'users', cerco in 'employees' con una query...");
                     const employeesCollectionRef = collection(db, 'employees');
@@ -43,7 +42,6 @@ const App = () => {
                         // Aggiungiamo l'ID del documento e il ruolo al profilo
                         userProfile = { id: employeeDocSnap.id, ...employeeDocSnap.data(), role: 'employee' };
                     }
-                    // *** FINE CORREZIONE ***
                 }
 
                 if (userProfile) {
@@ -81,18 +79,6 @@ const App = () => {
     const handleLogout = async () => {
         await signOut(auth);
     };
-    
-    // NOTA: Questa funzione non è più necessaria qui perché i dati vengono già caricati all'avvio
-    // È stata mantenuta per non rompere le props passate ad AdminDashboard, ma potrebbe essere rimossa in futuro.
-    const fetchAllWorkAreas = async () => {
-        try {
-            const areasSnapshot = await getDocs(collection(db, "work_areas"));
-            const areas = areasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setAllWorkAreas(areas);
-        } catch (error) {
-            console.error("Errore nel ricaricare le aree di lavoro:", error);
-        }
-    };
 
     if (!authChecked) {
         return <div className="min-h-screen flex items-center justify-center">Caricamento...</div>;
@@ -107,6 +93,7 @@ const App = () => {
     }
     
     if (userData && (userData.role === 'admin' || userData.role === 'preposto')) {
+        // La prop 'allWorkAreas' non è più necessaria qui perché AdminDashboard ora carica i dati in autonomia
         return <AdminDashboard user={user} userData={userData} handleLogout={handleLogout} />;
     }
 
@@ -126,3 +113,4 @@ const App = () => {
 };
 
 export default App;
+
