@@ -5,7 +5,7 @@ const { Timestamp, GeoPoint, FieldValue } = require("firebase-admin/firestore");
 admin.initializeApp();
 const db = admin.firestore();
 
-// Funzione di arrotondamento (necessaria per le funzioni manualClockIn/Out)
+// Funzione di arrotondamento
 function roundTimeWithCustomRulesServer(date, type) {
     const newDate = new Date(date.getTime());
     const minutes = newDate.getMinutes();
@@ -30,10 +30,9 @@ function roundTimeWithCustomRulesServer(date, type) {
 };
 
 // ===============================================
-// --- FUNZIONE DI CREAZIONE UTENTE (AGGIORNATA) ---
+// --- FUNZIONE DI CREAZIONE UTENTE (SEMPLIFICATA) ---
 // ===============================================
 exports.createUser = functions.region('europe-west1').https.onCall(async (data, context) => {
-    // Controllo che chi chiama sia un admin
     if (context.auth?.token.role !== 'admin') {
         throw new functions.https.HttpsError('permission-denied', 'Solo un amministratore può creare nuovi utenti.');
     }
@@ -47,43 +46,39 @@ exports.createUser = functions.region('europe-west1').https.onCall(async (data, 
     }
 
     try {
-        // PASSO 1: Crea l'utente in Firebase Authentication
-        const userRecord = await admin.auth().createUser({ 
-            email, 
-            password, 
-            displayName: `${name} ${surname}` 
+        const userRecord = await admin.auth().createUser({
+            email,
+            password,
+            displayName: `${name} ${surname}`
         });
         console.log(`Utente Auth creato: ${userRecord.uid}`);
 
-        // PASSO 2: Imposta il suo ruolo tramite Custom Claim
         await admin.auth().setCustomUserClaims(userRecord.uid, { role });
         console.log(`Custom Claim '${role}' impostato per ${userRecord.uid}`);
 
-        // PASSO 3: Crea il documento nella collezione 'users'
         const userDocRef = db.collection('users').doc(userRecord.uid);
-        await userDocRef.set({ 
-            name, 
-            surname, 
-            email, 
+        await userDocRef.set({
+            name,
+            surname,
+            email,
             role,
             phone: data.phone || null,
             createdAt: FieldValue.serverTimestamp(),
-            mustChangePassword: true // <-- MODIFICA: Aggiunto flag per cambio password obbligatorio
+            // RIMOSSA la riga 'mustChangePassword: true'
         });
-        console.log(`Documento 'users/${userRecord.uid}' creato con mustChangePassword=true.`);
+        console.log(`Documento 'users/${userRecord.uid}' creato.`);
 
-        // PASSO 4: SE è un dipendente o preposto, crea il profilo in 'employees'
         if (role === 'dipendente' || role === 'preposto') {
-            const employeeData = { 
+            const employeeData = {
                 userId: userRecord.uid,
-                name, 
-                surname, 
-                email, 
+                name,
+                surname,
+                email,
                 workAreaIds: [],
                 deviceIds: [],
                 createdAt: FieldValue.serverTimestamp()
             };
-            const employeeDocRef = await db.collection('employees').add(employeeData); 
+            const employeeDocRef = await db.collection('employees').add(employeeData);
             console.log(`Documento 'employees/${employeeDocRef.id}' creato per l'utente ${userRecord.uid}`);
         }
 

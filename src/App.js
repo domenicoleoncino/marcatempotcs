@@ -5,7 +5,7 @@ import { doc, getDoc, collection, getDocs, query, where, onSnapshot } from 'fire
 import LoginScreen from './components/LoginScreen';
 import AdminDashboard from './components/AdminDashboard';
 import EmployeeDashboard from './components/EmployeeDashboard';
-import ChangePassword from './components/ChangePassword'; // Import corretto senza graffe
+// Rimosso l'import di ChangePassword
 
 console.log("PROGETTO ATTUALMENTE IN USO:", process.env.REACT_APP_PROJECT_ID);
 
@@ -29,7 +29,6 @@ const App = () => {
             }
             setAppStatusChecked(true);
         }, () => {
-            // In caso di errore, l'app rimane attiva per sicurezza
             setIsAppActive(true);
             setAppStatusChecked(true);
         });
@@ -81,14 +80,13 @@ const App = () => {
         return () => unsubscribe();
     }, [appStatusChecked]);
 
-    // Effect #3: Carica le aree di lavoro SE l'utente è un dipendente o preposto
+    // Effect #3: Carica le aree di lavoro se necessario
     useEffect(() => {
         if (userData && (userData.role === 'dipendente' || userData.role === 'preposto')) {
             const loadWorkAreas = async () => {
                 try {
                     const areasSnapshot = await getDocs(collection(db, "work_areas"));
                     setAllWorkAreas(areasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-                    console.log("Aree di lavoro caricate per dipendente/preposto.");
                 } catch (error) {
                     console.error("ERRORE nel caricamento delle aree di lavoro:", error);
                 }
@@ -124,12 +122,7 @@ const App = () => {
         return <div className="min-h-screen flex items-center justify-center bg-gray-100">Caricamento dati utente...</div>;
     }
 
-    if (userData.mustChangePassword === true) {
-        return <ChangePassword 
-                    user={user} 
-                    onPasswordChanged={() => setUserData(prev => ({ ...prev, mustChangePassword: false }))} 
-                />;
-    }
+    // RIMOSSO il controllo per mustChangePassword
 
     if (userData.role === 'admin' || userData.role === 'preposto') {
         return <AdminDashboard user={user} userData={userData} handleLogout={handleLogout} />;
