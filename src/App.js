@@ -1,116 +1,154 @@
-import React, { useState } from 'react';
-import { updatePassword } from "firebase/auth";
-import { doc, updateDoc } from "firebase/firestore";
-import { db } from '../firebase'; // Assicurati che il percorso sia corretto
+import React, { useState, useEffect } from 'react';
+import { auth, db } from './firebase';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { doc, getDoc, collection, getDocs, query, where, onSnapshot } from 'firebase/firestore';
+import LoginScreen from './components/LoginScreen';
+import AdminDashboard from './components/AdminDashboard';
+import EmployeeDashboard from './components/EmployeeDashboard';
+import ChangePassword from './components/ChangePassword';
 
-const ChangePassword = ({ user, onPasswordChanged }) => {
-    const [newPassword, setNewPassword] = useState('');
-    const [confirmPassword, setConfirmPassword] = useState('');
-    const [error, setError] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
-    const [success, setSuccess] = useState(false);
+console.log("PROGETTO ATTUALMENTE IN USO:", process.env.REACT_APP_PROJECT_ID);
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setError('');
-        setSuccess(false);
+const App = () => {
+    const [user, setUser] = useState(null);
+    const [userData, setUserData] = useState(null);
+    const [allWorkAreas, setAllWorkAreas] = useState([]);
+    const [authChecked, setAuthChecked] = useState(false); // Stato per sapere quando il check iniziale è finito
+    
+    const [isAppActive, setIsAppActive] = useState(true);
+    const [appStatusChecked, setAppStatusChecked] = useState(false);
 
-        if (newPassword.length < 6) {
-            setError("La nuova password deve essere di almeno 6 caratteri.");
-            return;
-        }
-        if (newPassword !== confirmPassword) {
-            setError("Le password non coincidono.");
-            return;
-        }
+    useEffect(() => {
+        const configRef = doc(db, 'app_config', 'status');
+        const unsubscribe = onSnapshot(configRef, (docSnap) => {
+            if (docSnap.exists() && docSnap.data().isAttiva === false) {
+                setIsAppActive(false);
+            } else {
+                setIsAppActive(true);
+            }
+            setAppStatusChecked(true);
+        }, (error) => {
+            console.error("Errore nel leggere la configurazione dell'app:", error);
+            setIsAppActive(true);
+            setAppStatusChecked(true);
+        });
 
-        setIsLoading(true);
-        try {
-            // 1. Cambia la password in Firebase Authentication
-            await updatePassword(user, newPassword);
-            console.log("Password aggiornata in Firebase Auth per:", user.uid);
+        return () => unsubscribe();
+    }, []);
 
-            // 2. Aggiorna il flag in Firestore per non chiederlo più
-            const userDocRef = doc(db, 'users', user.uid);
-            await updateDoc(userDocRef, {
-                mustChangePassword: false
-            });
-            console.log("Flag 'mustChangePassword' impostato a false in Firestore.");
+    useEffect(() => {
+        if (!appStatusChecked) return;
 
-            setSuccess(true); // Mostra messaggio di successo
-            // Chiama la callback passata da App.js per aggiornare lo stato e mostrare la dashboard
-            // Aggiungiamo un piccolo ritardo per far leggere il messaggio di successo
-            setTimeout(() => {
-                onPasswordChanged();
-            }, 2000); // 2 secondi di ritardo
+        const unsubscribe = onAuthStateChanged(auth, async (authenticatedUser) => {
+            if (authenticatedUser) {
+                const userDocRef = doc(db, 'users', authenticatedUser.uid);
+                const userDocSnap = await getDoc(userDocRef);
 
-        } catch (error) {
-            console.error("Errore durante l'aggiornamento della password:", error);
-            setError(`Errore durante l'aggiornamento: ${error.message}`);
-            setIsLoading(false);
-        }
-        // Non resettare isLoading qui se c'è successo, altrimenti scompare il messaggio
+                if (userDocSnap.exists()) {
+                    const baseProfile = userDocSnap.data();
+                    if (baseProfile.role === 'admin') {
+                        setUserData(baseProfile);
+                        setUser(authenticatedUser);
+                    } else if (baseProfile.role === 'dipendente' || baseProfile.role === 'preposto') {
+                        const q = query(collection(db, 'employees'), where("userId", "==", authenticatedUser.uid));
+                        const employeeQuerySnapshot = await getDocs(q);
+                        
+                        if (!employeeQuerySnapshot.empty) {
+                            const employeeDoc = employeeQuerySnapshot.docs[0];
+                            const employeeProfile = employeeDoc.data();
+                            const fullProfile = { 
+                                ...baseProfile,
+                                ...employeeProfile,
+                                id: employeeDoc.id
+                            };
+                            setUserData(fullProfile);
+                            setUser(authenticatedUser);
+                        } else {
+                             console.error(`ERRORE CRITICO: Utente con ruolo '${baseProfile.role}' non ha un profilo 'employees'.`);
+                             await signOut(auth);
+                        }
+                    } else {
+                        console.error(`ERRORE: Ruolo '${baseProfile.role}' non riconosciuto.`);
+                        setUserData(baseProfile); // Imposta per mostrare errore
+                        setUser(authenticatedUser);
+                    }
+                } else {
+                    console.error("ERRORE: Utente non trovato in 'users'. Logout in corso.");
+                    await signOut(auth);
+                }
+            } else {
+                setUser(null);
+                setUserData(null);
+            }
+            // Segna che il controllo di autenticazione è terminato
+            setAuthChecked(true);
+        });
+        return () => unsubscribe();
+    }, [appStatusChecked]);
+
+    const handleLogout = async () => {
+        await signOut(auth);
     };
 
-    return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-100">
-            <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
-                <h2 className="text-2xl font-bold text-center text-gray-800 mb-6">Cambio Password Obbligatorio</h2>
-                <p className="text-sm text-gray-600 mb-4 text-center">
-                    Per motivi di sicurezza, devi impostare una nuova password personale al tuo primo accesso.
-                </p>
+    // --- LOGICA DI VISUALIZZAZIONE CORRETTA ---
 
-                {success ? (
-                    <div className="text-center text-green-600 font-medium">
-                        Password aggiornata con successo! Verrai reindirizzato alla tua dashboard...
-                    </div>
-                ) : (
-                    <form onSubmit={handleSubmit}>
-                        <div className="mb-4">
-                            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="newPassword">
-                                Nuova Password
-                            </label>
-                            <input
-                                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                                id="newPassword"
-                                type="password"
-                                placeholder="Minimo 6 caratteri"
-                                value={newPassword}
-                                onChange={(e) => setNewPassword(e.target.value)}
-                                required
-                            />
-                        </div>
-                        <div className="mb-6">
-                            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="confirmPassword">
-                                Conferma Nuova Password
-                            </label>
-                            <input
-                                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 mb-3 leading-tight focus:outline-none focus:shadow-outline"
-                                id="confirmPassword"
-                                type="password"
-                                placeholder="Ripeti la password"
-                                value={confirmPassword}
-                                onChange={(e) => setConfirmPassword(e.target.value)}
-                                required
-                            />
-                        </div>
+    // 1. Mostra una schermata di caricamento finché non siamo sicuri dello stato dell'app E dell'utente
+    if (!appStatusChecked || !authChecked) {
+        return <div className="min-h-screen flex items-center justify-center bg-gray-100">Caricamento in corso...</div>;
+    }
 
-                        {error && <p className="text-red-500 text-xs italic mb-4">{error}</p>}
-
-                        <div className="flex items-center justify-between">
-                            <button
-                                className={`w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                type="submit"
-                                disabled={isLoading}
-                            >
-                                {isLoading ? 'Aggiornamento...' : 'Imposta Nuova Password'}
-                            </button>
-                        </div>
-                    </form>
-                )}
+    // 2. Se l'app è bloccata, mostra il messaggio di blocco
+    if (!isAppActive) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 text-center p-4">
+                <h1 className="text-2xl font-bold text-red-600 mb-2">Applicazione non attiva</h1>
+                <p className="text-gray-700">Contattare l'amministratore per maggiori informazioni.</p>
             </div>
-        </div>
-    );
+        );
+    }
+    
+    // A questo punto, sappiamo se l'utente è loggato o no.
+
+    // 3. Se c'è un utente loggato, controlla se deve cambiare password
+    if (user) {
+        if (userData && userData.mustChangePassword === true) {
+            return <ChangePassword 
+                        user={user} 
+                        onPasswordChanged={() => setUserData(prev => ({ ...prev, mustChangePassword: false }))} 
+                    />;
+        }
+
+        // Se non deve cambiare password, mostra la dashboard corretta
+        if (userData && (userData.role === 'admin' || userData.role === 'preposto')) {
+            return <AdminDashboard user={user} userData={userData} handleLogout={handleLogout} />;
+        }
+
+        if (userData && userData.role === 'dipendente') {
+            const loadWorkAreas = async () => {
+                try {
+                    const areasSnapshot = await getDocs(collection(db, "work_areas"));
+                    const areas = areasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    setAllWorkAreas(areas);
+                } catch (error) {
+                    console.error("ERRORE nel caricamento delle aree di lavoro:", error);
+                }
+            };
+            if (allWorkAreas.length === 0) loadWorkAreas();
+            return <EmployeeDashboard user={user} employeeData={userData} handleLogout={handleLogout} allWorkAreas={allWorkAreas} />;
+        }
+
+        // Se il ruolo non è riconosciuto, mostra l'errore
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center">
+                <p className="font-bold text-red-600">Ruolo utente non riconosciuto o dati non disponibili.</p>
+                <button onClick={handleLogout} className="mt-4 px-4 py-2 bg-gray-500 text-white rounded">Logout</button>
+            </div>
+        );
+    }
+
+    // 4. Se non c'è nessun utente loggato, mostra la schermata di login
+    return <LoginScreen />;
 };
 
-export default ChangePassword;
+export default App;
+
