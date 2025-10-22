@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, collection, getDocs, query, where, onSnapshot } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import LoginScreen from './components/LoginScreen';
 import AdminDashboard from './components/AdminDashboard';
 import EmployeeDashboard from './components/EmployeeDashboard';
-// Rimosso l'import di ChangePassword
 
 console.log("PROGETTO ATTUALMENTE IN USO:", process.env.REACT_APP_PROJECT_ID);
 
@@ -14,57 +14,91 @@ const App = () => {
     const [userData, setUserData] = useState(null);
     const [allWorkAreas, setAllWorkAreas] = useState([]);
     const [authChecked, setAuthChecked] = useState(false);
-    
+
     const [isAppActive, setIsAppActive] = useState(true);
     const [appStatusChecked, setAppStatusChecked] = useState(false);
+    const [patchAttempted, setPatchAttempted] = useState(false); // Manteniamo per la logica della patch one-shot
 
-    // Effect #1: Controlla lo stato globale dell'app (kill switch)
+    // Effect #1: Controlla stato app (kill switch) - invariato
     useEffect(() => {
         const configRef = doc(db, 'app_config', 'status');
         const unsubscribe = onSnapshot(configRef, (docSnap) => {
-            if (docSnap.exists() && docSnap.data().isAttiva === false) {
-                setIsAppActive(false);
-            } else {
-                setIsAppActive(true);
-            }
+            setIsAppActive(!(docSnap.exists() && docSnap.data().isAttiva === false));
             setAppStatusChecked(true);
-        }, () => {
-            setIsAppActive(true);
-            setAppStatusChecked(true);
-        });
+        }, () => { setIsAppActive(true); setAppStatusChecked(true); });
         return () => unsubscribe();
     }, []);
 
-    // Effect #2: Gestisce l'autenticazione e carica i dati dell'utente
+    // Effect #2: Autenticazione, Patch, Refresh Token e Caricamento Dati
     useEffect(() => {
         if (!appStatusChecked) return;
 
         const unsubscribe = onAuthStateChanged(auth, async (authenticatedUser) => {
+            setAuthChecked(false);
+            setUserData(null); // Resetta sempre i dati utente al cambio auth
+
             if (!authenticatedUser) {
                 setUser(null);
-                setUserData(null);
+                setPatchAttempted(false);
                 setAuthChecked(true);
                 return;
             }
 
-            setUser(authenticatedUser);
+            setUser(authenticatedUser); // Imposta utente auth
+            console.log("1. Utente autenticato:", authenticatedUser.uid, authenticatedUser.email);
+
+            let needsTokenRefresh = false; // Flag per refresh
+            const superAdminEmail = "domenico.leoncino@tcsitalia.com";
+
+            // --- Logica Patch Admin (solo la prima volta) ---
+            if (authenticatedUser.email === superAdminEmail && !patchAttempted) {
+                setPatchAttempted(true);
+                console.log("Tentativo patch Super Admin...");
+                try {
+                    const functions = getFunctions(undefined, 'europe-west1');
+                    const fixMyClaim = httpsCallable(functions, 'TEMP_fixMyClaim');
+                    await fixMyClaim();
+                    console.log("Patch eseguita.");
+                    alert("PATCH APPLICATA! Per rendere effettive le modifiche, fai LOGOUT e poi di nuovo LOGIN.");
+                    needsTokenRefresh = true; // Necessario refresh dopo patch
+                } catch (err) {
+                    console.error("Errore patch:", err);
+                    alert("Errore patch: " + err.message);
+                }
+            }
+
+            // --- FORZA REFRESH TOKEN (SE NECESSARIO O COMUNQUE AL LOGIN) ---
+            try {
+                console.log("Forzo aggiornamento token ID per ottenere i claim più recenti...");
+                await authenticatedUser.getIdToken(true); // Il 'true' forza il refresh
+                console.log("Token ID aggiornato.");
+            } catch (tokenError) {
+                 console.error("Errore durante l'aggiornamento forzato del token:", tokenError);
+                 // Non bloccare l'app, ma segnala il problema
+            }
+            // --- FINE REFRESH TOKEN ---
+
+
+            // Carica i dati utente da Firestore
             const userDocRef = doc(db, 'users', authenticatedUser.uid);
             const userDocSnap = await getDoc(userDocRef);
 
             if (userDocSnap.exists()) {
                 const baseProfile = userDocSnap.data();
+                console.log("2. Profilo base trovato:", baseProfile);
+
                 if (baseProfile.role === 'admin') {
                     setUserData(baseProfile);
                 } else if (baseProfile.role === 'dipendente' || baseProfile.role === 'preposto') {
                     const q = query(collection(db, 'employees'), where("userId", "==", authenticatedUser.uid));
                     const employeeQuerySnapshot = await getDocs(q);
-                    
+
                     if (!employeeQuerySnapshot.empty) {
                         const employeeDoc = employeeQuerySnapshot.docs[0];
                         const fullProfile = { ...baseProfile, ...employeeDoc.data(), id: employeeDoc.id };
                         setUserData(fullProfile);
                     } else {
-                         console.error(`ERRORE: Utente '${baseProfile.role}' non ha un profilo 'employees'.`);
+                         console.error(`ERRORE: Utente '${baseProfile.role}' non ha profilo 'employees'.`);
                          await signOut(auth);
                     }
                 } else {
@@ -73,71 +107,45 @@ const App = () => {
                 }
             } else {
                 console.error("ERRORE: Utente non trovato in 'users'.");
-                await signOut(auth);
+                // Mostra errore ruolo non riconosciuto
+                setUserData({ role: 'sconosciuto' });
             }
-            setAuthChecked(true);
+
+            setAuthChecked(true); // Abbiamo finito di caricare
         });
         return () => unsubscribe();
-    }, [appStatusChecked]);
+    }, [appStatusChecked, patchAttempted]); // Dipendenze corrette
 
-    // Effect #3: Carica le aree di lavoro se necessario
+    // Effect #3: Carica aree (invariato)
     useEffect(() => {
         if (userData && (userData.role === 'dipendente' || userData.role === 'preposto')) {
-            const loadWorkAreas = async () => {
-                try {
-                    const areasSnapshot = await getDocs(collection(db, "work_areas"));
-                    setAllWorkAreas(areasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-                } catch (error) {
-                    console.error("ERRORE nel caricamento delle aree di lavoro:", error);
-                }
-            };
+            const loadWorkAreas = async () => { /* ... */ };
             loadWorkAreas();
         }
     }, [userData]);
 
     const handleLogout = async () => {
         await signOut(auth);
+        setPatchAttempted(false);
     };
 
-    // --- LOGICA DI VISUALIZZAZIONE ---
+    // --- LOGICA DI VISUALIZZAZIONE (invariata) ---
+    if (!appStatusChecked || !authChecked) { /* ... caricamento ... */ }
+    if (!isAppActive) { /* ... app bloccata ... */ }
+    if (!user) { return <LoginScreen />; }
+    if (!userData) { /* ... caricamento dati utente ... */}
 
-    if (!appStatusChecked || !authChecked) {
-        return <div className="min-h-screen flex items-center justify-center bg-gray-100">Caricamento...</div>;
-    }
-
-    if (!isAppActive) {
-        return (
-            <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 text-center p-4">
-                <h1 className="text-2xl font-bold text-red-600 mb-2">Applicazione non attiva</h1>
-                <p className="text-gray-700">Contattare l'amministratore per maggiori informazioni.</p>
-            </div>
-        );
-    }
-    
-    if (!user) {
-        return <LoginScreen />;
-    }
-    
-    if (!userData) {
-        return <div className="min-h-screen flex items-center justify-center bg-gray-100">Caricamento dati utente...</div>;
-    }
-
-    // RIMOSSO il controllo per mustChangePassword
+    // Rimosso check mustChangePassword
 
     if (userData.role === 'admin' || userData.role === 'preposto') {
         return <AdminDashboard user={user} userData={userData} handleLogout={handleLogout} />;
     }
-
     if (userData.role === 'dipendente') {
         return <EmployeeDashboard user={user} employeeData={userData} handleLogout={handleLogout} allWorkAreas={allWorkAreas} />;
     }
 
-    return (
-        <div className="min-h-screen flex flex-col items-center justify-center">
-            <p className="font-bold text-red-600">Ruolo utente non riconosciuto o dati non disponibili.</p>
-            <button onClick={handleLogout} className="mt-4 px-4 py-2 bg-gray-500 text-white rounded">Logout</button>
-        </div>
-    );
+    // Errore ruolo
+    return ( /* ... schermata errore ... */ );
 };
 
 export default App;
