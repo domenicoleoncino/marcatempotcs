@@ -1,3 +1,5 @@
+// File: src/js/components/AdminDashboard.js
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db } from '../firebase';
 import {
@@ -90,7 +92,19 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
         <div>
             <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Gestione Dipendenti</h1>
+                {/* Pulsante per Admin */}
                 {currentUserRole === 'admin' && <button onClick={() => openModal('newEmployee')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">Crea Nuovo Dipendente</button>}
+
+                {/* --- NUOVO PULSANTE PER PREPOSTO (per aggiungere dipendenti esistenti alle sue aree) --- */}
+                {currentUserRole === 'preposto' && (
+                    <button
+                        onClick={() => openModal('prepostoAddEmployeeToAreas', null)} // Nuovo tipo di modale
+                        className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 w-full sm:w-auto text-sm"
+                    >
+                        Aggiungi Dipendente alle Mie Aree
+                    </button>
+                )}
+                {/* --- FINE NUOVO PULSANTE --- */}
             </div>
             <div className="mb-4">
                 <input
@@ -112,22 +126,45 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                        {employees.map(emp => (
+                        {employees.map(emp => ( // La lista 'employees' è già filtrata correttamente da managedEmployees/sortedAndFilteredEmployees
                             <tr key={emp.id}>
                                 <td className="px-4 py-2 whitespace-nowrap">
                                     <div className="text-sm font-medium text-gray-900">{emp.name} {emp.surname}</div>
                                     <div className="text-xs text-gray-500 break-all">{emp.email}</div>
                                 </td>
                                 <td className="px-4 py-2 whitespace-nowrap">
-                                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${emp.activeEntry ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{emp.activeEntry ? 'Al Lavoro' : 'Non al Lavoro'}</span>
+                                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${emp.activeEntry ? (emp.activeEntry.status === 'In Pausa' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800') : 'bg-red-100 text-red-800'}`}>
+                                        {emp.activeEntry ? emp.activeEntry.status : 'Non al Lavoro'}
+                                    </span>
                                 </td>
                                 <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{emp.workAreaNames?.join(', ') || 'N/A'}</td>
                                 <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
                                     <div className="flex flex-col items-start gap-1">
                                         {emp.activeEntry ? (
                                             <>
-                                                <button onClick={() => openModal('manualClockOut', emp)} className="px-2 py-1 text-xs bg-yellow-500 text-white rounded-md hover:bg-yellow-600 w-full text-center">Timbra Uscita</button>
-                                                <button onClick={() => openModal('applyPredefinedPause', emp)} className="px-2 py-1 text-xs bg-orange-500 text-white rounded-md hover:bg-orange-600 w-full text-center mt-1">Applica Pausa</button>
+                                                <button
+                                                    onClick={() => openModal('manualClockOut', emp)}
+                                                    disabled={emp.activeEntry.status === 'In Pausa'}
+                                                    className={`px-2 py-1 text-xs text-white rounded-md w-full text-center ${
+                                                        emp.activeEntry.status === 'In Pausa'
+                                                        ? 'bg-gray-400 cursor-not-allowed'
+                                                        : 'bg-yellow-500 hover:bg-yellow-600'
+                                                    }`}
+                                                >
+                                                    Timbra Uscita
+                                                </button>
+
+                                                <button
+                                                    onClick={() => openModal('applyPredefinedPause', emp)}
+                                                    disabled={emp.activeEntry.status === 'In Pausa'}
+                                                    className={`px-2 py-1 text-xs text-white rounded-md w-full text-center mt-1 ${
+                                                        emp.activeEntry.status === 'In Pausa'
+                                                        ? 'bg-gray-400 cursor-not-allowed'
+                                                        : 'bg-orange-500 hover:bg-orange-600'
+                                                    }`}
+                                                >
+                                                    Applica Pausa
+                                                </button>
                                             </>
                                         ) : (
                                             <button onClick={() => openModal('manualClockIn', emp)} className="px-2 py-1 text-xs bg-blue-500 text-white rounded-md hover:bg-blue-600 w-full text-center">Timbra Entrata</button>
@@ -142,9 +179,10 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                         )}
                                         {currentUserRole === 'preposto' && (
                                              <div className="flex gap-2 w-full justify-start mt-1">
-                                                <button onClick={() => openModal('assignEmployeeToPrepostoArea', emp)} className="text-xs text-blue-600 hover:text-blue-900 whitespace-nowrap">Assegna alle Mie Aree</button>
+                                                {/* Questo pulsante apre il modale per modificare assegnazioni SOLO per le aree del preposto */}
+                                                <button onClick={() => openModal('assignEmployeeToPrepostoArea', emp)} className="text-xs text-blue-600 hover:text-blue-900 whitespace-nowrap">Gestisci Mie Aree</button>
                                                 <button onClick={() => handleGenerateEmployeeReportPDF(emp)} className="text-xs text-purple-600 hover:text-purple-900">PDF Report</button>
-                                             </div>
+                                            </div>
                                         )}
                                     </div>
                                 </td>
@@ -152,11 +190,19 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                         ))}
                     </tbody>
                 </table>
+                 {/* Aggiunta messaggio se la lista filtrata è vuota */}
+                 {employees.length === 0 && searchTerm === '' && currentUserRole === 'preposto' && (
+                    <p className="p-4 text-sm text-gray-500">Nessun dipendente attualmente assegnato alle tue aree di gestione. Usa il pulsante "Aggiungi Dipendente..." per assegnarne.</p>
+                 )}
+                 {employees.length === 0 && searchTerm !== '' && (
+                    <p className="p-4 text-sm text-gray-500">Nessun dipendente trovato per "{searchTerm}".</p>
+                 )}
             </div>
         </div>
     );
 };
 
+// ... (AreaManagementView, AddAdminForm, AdminManagementView, ReportView rimangono invariati) ...
 const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
     <div>
         <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
@@ -413,36 +459,12 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const currentUserRole = userData?.role;
     const superAdminEmail = "domenico.leoncino@tcsitalia.com";
 
-    // --- BLOCCO PATCH (ATTIVO) ---
+    // --- BLOCCO PATCH (DISATTIVATO) ---
     useEffect(() => {
         // eslint-disable-next-line no-unused-vars
-        const fixClaim = async () => {
-            if (user && user.email === superAdminEmail) {
-                try {
-                    console.log("Applico la patch per il ruolo admin...");
-                    const functions = getFunctions(undefined, 'europe-west1');
-                    const fixMyClaim = httpsCallable(functions, 'TEMP_fixMyClaim');
-                    const result = await fixMyClaim();
-                    console.log("Risultato patch:", result.data);
-                    alert("PATCH APPLICATA! Hai ottenuto i permessi di Admin. Ora fai Logout e Login per attivarli.");
-                } catch (err) {
-                    console.error("Errore durante l'applicazione della patch:", err);
-                    alert("Errore durante l'applicazione della patch: " + err.message);
-                }
-            } else {
-                 console.log("Patch non eseguita: utente non è super admin.");
-            }
-        };
-
-        // --- ATTIVAZIONE PATCH ---
-        // La riga seguente ESEGUIRA' la patch al prossimo login
-        fixClaim();
-        // -------------------------
-        // RICORDA: Dopo aver eseguito questa patch (Logout/Login),
-        // devi RIMETTERE il commento (//) a 'fixClaim();'
-        // e fare un altro push.
-
-    }, [user]); // Si attiva quando 'user' viene caricato
+        const fixClaim = async () => { /* ... codice patch ... */ };
+        // fixClaim(); // <-- COMMENTATO
+    }, [user]);
 
 
     // --- CARICAMENTO DATI ---
@@ -463,14 +485,16 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             setWorkAreasWithHours(allAreasList.map(a => ({...a, totalHours: 'N/D'})));
             setAllEmployees(allEmployeesList);
 
+            // Trova il profilo 'employees' corrispondente all'admin/preposto loggato (se esiste)
             if (role === 'preposto' || (role === 'admin' && user.email !== superAdminEmail)) {
                  const q = query(collection(db, "employees"), where("userId", "==", user.uid));
                  const adminEmployeeSnapshot = await getDocs(q);
                  setAdminEmployeeProfile(adminEmployeeSnapshot.empty ? null : { id: adminEmployeeSnapshot.docs[0].id, ...adminEmployeeSnapshot.docs[0].data() });
             } else {
-                 setAdminEmployeeProfile(null);
+                 setAdminEmployeeProfile(null); // Super Admin non ha profilo employee
             }
 
+            // Se admin, carica la lista di tutti gli admin/preposti
             if (role === 'admin') {
                 const qAdmins = query(collection(db, "users"), where("role", "in", ["admin", "preposto"]));
                 const adminsSnapshot = await getDocs(qAdmins);
@@ -481,7 +505,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 });
                 setAdmins(adminUsers);
             } else {
-                setAdmins([]);
+                setAdmins([]); // Preposto non vede la lista admin
             }
         } catch (error) {
             console.error("Errore caricamento dati statici:", error);
@@ -489,37 +513,56 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         } finally {
             setIsLoading(false);
         }
-    }, [user, userData, superAdminEmail]);
+    }, [user, userData, superAdminEmail]); // Dipendenze corrette
 
     useEffect(() => {
         if (user && userData) fetchData();
-    }, [user, userData, fetchData]);
+    }, [user, userData, fetchData]); // fetchData è ora inclusa nelle dipendenze
+
 
     // --- CALCOLI MEMOIZED ---
+    // Determina quali dipendenti mostrare nella tabella principale "Gestione Dipendenti"
     const managedEmployees = useMemo(() => {
-        if (currentUserRole !== 'preposto' || !userData?.managedAreaIds) {
-            return currentUserRole === 'admin' ? allEmployees : [];
+        // Se l'utente è Admin, mostra tutti i dipendenti.
+        if (currentUserRole === 'admin') {
+            return allEmployees;
         }
-        const managedAreaIds = userData.managedAreaIds;
-        return allEmployees.filter(emp => emp.workAreaIds?.some(areaId => managedAreaIds.includes(areaId)));
-    }, [allEmployees, currentUserRole, userData]);
+        // Se l'utente è Preposto, mostra SOLO i dipendenti assegnati ad almeno una delle sue aree gestite.
+        if (currentUserRole === 'preposto' && userData?.managedAreaIds) {
+            const managedAreaIds = userData.managedAreaIds;
+            // Filtra l'intera lista di dipendenti (allEmployees)
+            return allEmployees.filter(emp =>
+                // Controlla se l'array workAreaIds del dipendente esiste
+                emp.workAreaIds &&
+                // Verifica se almeno uno degli ID in workAreaIds è presente in managedAreaIds
+                emp.workAreaIds.some(areaId => managedAreaIds.includes(areaId))
+            );
+        }
+        // In altri casi (o se userData non è ancora pronto), non mostra nulla.
+        return [];
+    }, [allEmployees, currentUserRole, userData]); // Dipende da tutti i dipendenti, ruolo e dati utente (per managedAreaIds)
 
+
+    // Ordina e filtra i dipendenti da mostrare nella tabella
     const sortedAndFilteredEmployees = useMemo(() => {
+        // Prende la lista già filtrata da managedEmployees
         const employeesWithDetails = managedEmployees.map(emp => ({
             ...emp,
             workAreaNames: (emp.workAreaIds || []).map(id => allWorkAreas.find(a => a.id === id)?.name).filter(Boolean),
             activeEntry: activeEmployeesDetails.find(detail => detail.employeeId === emp.id) || null,
         }));
         let filterableItems = [...employeesWithDetails];
+        // Applica il filtro di ricerca testuale
         if (searchTerm) {
             const lowercasedFilter = searchTerm.toLowerCase();
             filterableItems = filterableItems.filter(emp => `${emp.name} ${emp.surname}`.toLowerCase().includes(lowercasedFilter));
         }
+        // Applica l'ordinamento
         if (sortConfig.key) {
              filterableItems.sort((a, b) => {
                  let aValue = (sortConfig.key === 'name') ? `${a.name} ${a.surname}` : a[sortConfig.key];
                  let bValue = (sortConfig.key === 'name') ? `${b.name} ${b.surname}` : b[sortConfig.key];
-                 if (!aValue) aValue = ''; // Gestisci valori null o undefined
+                 if (!aValue) aValue = '';
                  if (!bValue) bValue = '';
                  if (aValue < bValue) return sortConfig.direction === 'ascending' ? -1 : 1;
                  if (aValue > bValue) return sortConfig.direction === 'ascending' ? 1 : -1;
@@ -527,28 +570,34 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
              });
         }
         return filterableItems;
-    }, [managedEmployees, activeEmployeesDetails, searchTerm, allWorkAreas, sortConfig]);
+    }, [managedEmployees, activeEmployeesDetails, searchTerm, allWorkAreas, sortConfig]); // Dipende dalla lista filtrata, stato attivo, ricerca, aree e config ordinamento
+
 
     // --- LISTENER ---
     // Listener timbrature attive
     useEffect(() => {
+        // Non partire se mancano dati essenziali
         if (!allEmployees.length || !allWorkAreas.length) return;
+
         const q = query(collection(db, "time_entries"), where("status", "==", "clocked-in"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const activeEntriesList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
+            // Aggiorna lo stato della timbratura attiva dell'admin/preposto loggato
             if (adminEmployeeProfile) {
                 const adminEntry = activeEntriesList.find(entry => entry.employeeId === adminEmployeeProfile.id);
                 setAdminActiveEntry(adminEntry ? { ...adminEntry, id: adminEntry.id, isOnBreak: adminEntry.pauses?.some(p => !p.end) || false } : null);
             }
 
+            // Prepara i dettagli per la dashboard "Chi è al lavoro ora"
             const details = activeEntriesList
-                .filter(entry => entry.clockInTime)
+                .filter(entry => entry.clockInTime) // Assicurati che ci sia un tempo di entrata
                 .map(entry => {
                     const employee = allEmployees.find(emp => emp.id === entry.employeeId);
                     const area = allWorkAreas.find(ar => ar.id === entry.workAreaId);
-                    const isOnBreak = entry.pauses?.some(p => !p.end) || false;
-                    const roundedDate = roundTimeWithCustomRules(entry.clockInTime.toDate(), 'entrata');
+                    const isOnBreak = entry.pauses?.some(p => !p.end) || false; // Controlla se c'è una pausa attiva
+                    const roundedDate = roundTimeWithCustomRules(entry.clockInTime.toDate(), 'entrata'); // Arrotonda l'orario
+
                     return {
                         id: entry.id,
                         employeeId: entry.employeeId,
@@ -556,18 +605,19 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                         areaName: area ? area.name : 'Sconosciuta',
                         workAreaId: entry.workAreaId,
                         clockInTimeFormatted: roundedDate.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
-                        status: isOnBreak ? 'In Pausa' : 'Al Lavoro',
+                        status: isOnBreak ? 'In Pausa' : 'Al Lavoro', // Mostra lo stato corretto
                         pauses: entry.pauses || []
                     };
-                }).sort((a, b) => a.employeeName.localeCompare(b.employeeName));
+                }).sort((a, b) => a.employeeName.localeCompare(b.employeeName)); // Ordina per nome
 
             setActiveEmployeesDetails(details);
         }, (error) => {
              console.error("Errore listener timbrature attive:", error);
              alert("Errore aggiornamento presenze.");
         });
-        return () => unsubscribe();
-    }, [allEmployees, allWorkAreas, adminEmployeeProfile]);
+        return () => unsubscribe(); // Pulisce il listener quando il componente viene smontato
+    }, [allEmployees, allWorkAreas, adminEmployeeProfile]); // Dipendenze corrette
+
 
     // Listener ore totali oggi
     useEffect(() => {
@@ -579,9 +629,12 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 const entry = doc.data();
                 if (!entry.clockInTime) return;
                 const clockIn = entry.clockInTime.toDate();
+                // Se non c'è clockOut, considera 'now' solo se lo stato è 'clocked-in'
                 const clockOut = entry.clockOutTime ? entry.clockOutTime.toDate() : (entry.status === 'clocked-in' ? now : clockIn);
+                // Calcola durata pause completate
                 const pauseDurationMs = (entry.pauses || []).reduce((acc, p) => {
                     if (p.start && p.end) {
+                        // Gestisce sia Timestamp che Date (per compatibilità)
                         const startMillis = p.start.toMillis ? p.start.toMillis() : new Date(p.start).getTime();
                         const endMillis = p.end.toMillis ? p.end.toMillis() : new Date(p.end).getTime();
                         return acc + (endMillis - startMillis);
@@ -596,7 +649,8 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             alert("Errore aggiornamento ore totali.");
         });
         return () => unsubscribe();
-    }, []);
+    }, []); // Non servono dipendenze qui
+
 
     // --- FUNZIONI HANDLER ---
     const handleAdminClockIn = useCallback(async (areaId, timestamp) => {
@@ -631,22 +685,22 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         setIsActionLoading(true);
         try {
             const entryRef = doc(db, "time_entries", adminActiveEntry.id);
-            const entryDoc = await getDoc(entryRef); // Leggi sempre l'ultimo stato dal DB
+            const entryDoc = await getDoc(entryRef);
             if (!entryDoc.exists()) throw new Error("Documento timbratura non trovato.");
 
             const currentPauses = entryDoc.data().pauses || [];
             const now = Timestamp.now();
             const activePauseIndex = currentPauses.findIndex(p => !p.end);
 
-            if (activePauseIndex !== -1) {
+            if (activePauseIndex !== -1) { // Se c'è una pausa attiva, terminala
                 currentPauses[activePauseIndex].end = now;
-            } else {
+            } else { // Altrimenti, inizia una nuova pausa
                 currentPauses.push({ start: now, end: null });
             }
             await updateDoc(entryRef, { pauses: currentPauses });
         } catch (error) { alert(`Errore pausa: ${error.message}`); console.error(error); }
         finally { setIsActionLoading(false); }
-    }, [adminActiveEntry]); // Rimuovi user se non serve
+    }, [adminActiveEntry]);
 
     const handleAdminApplyPause = useCallback(async (employee) => {
         if (!employee || !employee.activeEntry) return alert("Nessuna timbratura attiva.");
@@ -655,7 +709,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             return alert(`Nessuna pausa predefinita per l'area "${workArea?.name || 'sconosciuta'}".`);
         }
         const pauseDurationInMinutes = workArea.pauseDuration;
-        // La conferma è nel Modal
+
         setIsActionLoading(true);
         try {
             const entryRef = doc(db, "time_entries", employee.activeEntry.id);
@@ -668,50 +722,66 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             const newPause = { start: Timestamp.fromDate(startTime), end: Timestamp.fromDate(endTime), durationMinutes: pauseDurationInMinutes, createdBy: user.uid };
             await updateDoc(entryRef, { pauses: [...currentPauses, newPause] });
             alert(`Pausa applicata.`);
+            setShowModal(false); // Chiudi modal dopo successo
         } catch (error) { alert(`Errore: ${error.message}`); console.error(error); }
         finally {
             setIsActionLoading(false);
-            setShowModal(false);
+            // Non chiudere il modal in caso di errore
         }
-    }, [allWorkAreas, user]); // Aggiunto user come dipendenza
+    }, [allWorkAreas, user]); // Rimosso setShowModal dalle dipendenze
 
     const openModal = useCallback((type, item = null) => {
         setModalType(type);
         setSelectedItem(item);
         setShowModal(true);
-    }, []);
+    }, []); // Non servono dipendenze qui
 
+    // Genera report filtrato
     const generateReport = useCallback(async () => {
         if (!dateRange.start || !dateRange.end) return alert("Seleziona date valide.");
         setIsLoading(true);
         try {
             const startDate = new Date(dateRange.start); startDate.setHours(0,0,0,0);
             const endDate = new Date(dateRange.end); endDate.setHours(23,59,59,999);
+            // Query base per data
             let q = query(collection(db, "time_entries"), where("clockInTime", ">=", Timestamp.fromDate(startDate)), where("clockInTime", "<=", Timestamp.fromDate(endDate)));
             const querySnapshot = await getDocs(q);
             let finalEntries = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-            if (currentUserRole === 'preposto') {
-                const managedEmployeeIds = managedEmployees.map(emp => emp.id);
-                finalEntries = finalEntries.filter(entry => managedEmployeeIds.includes(entry.employeeId));
+            // Filtro Preposto: mostra solo timbrature di dipendenti ASSEGNATI alle sue aree
+            if (currentUserRole === 'preposto' && userData?.managedAreaIds) {
+                const managedAreaIds = userData.managedAreaIds;
+                // Trova gli ID dei dipendenti che sono assegnati ad almeno una delle aree gestite
+                const trulyManagedEmployeeIds = allEmployees
+                  .filter(emp => emp.workAreaIds?.some(areaId => managedAreaIds.includes(areaId)))
+                  .map(emp => emp.id);
+                // Filtra le timbrature per includere solo quelle di questi dipendenti
+                finalEntries = finalEntries.filter(entry => trulyManagedEmployeeIds.includes(entry.employeeId));
             }
+            // Filtro per dipendente specifico (se selezionato)
             if (reportEmployeeFilter !== 'all') {
                 finalEntries = finalEntries.filter(entry => entry.employeeId === reportEmployeeFilter);
             }
+            // Filtro per area specifica (se selezionata)
             if (reportAreaFilter !== 'all') {
                 finalEntries = finalEntries.filter(entry => entry.workAreaId === reportAreaFilter);
             }
 
+            // Calcola ore per area e formatta i dati per il report
             const areaHoursMap = new Map(allWorkAreas.map(area => [area.id, 0]));
             const reportData = finalEntries.map(entry => {
                 const employee = allEmployees.find(e => e.id === entry.employeeId);
                 const area = allWorkAreas.find(a => a.id === entry.workAreaId);
+                // Salta timbrature senza dati essenziali
                 if (!entry.clockInTime || !employee || !area) return null;
+
                 const clockIn = entry.clockInTime.toDate();
                 const clockOut = entry.clockOutTime ? entry.clockOutTime.toDate() : null;
                 let durationHours = null;
+
                 if (clockOut) {
                     const totalMs = clockOut.getTime() - clockIn.getTime();
+                    // Calcola durata totale delle pause registrate
                     const pauseMs = (entry.pauses || []).reduce((acc, p) => {
                         if (p.start && p.end) {
                             const startMillis = p.start.toMillis ? p.start.toMillis() : new Date(p.start).getTime();
@@ -720,109 +790,159 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                         } return acc;
                     }, 0);
                     let calculatedDurationMs = totalMs - pauseMs;
-                    durationHours = calculatedDurationMs > 0 ? (calculatedDurationMs / 3600000) : 0;
+                    durationHours = calculatedDurationMs > 0 ? (calculatedDurationMs / 3600000) : 0; // Converti ms in ore
+                    // Aggiorna le ore totali per l'area
                     areaHoursMap.set(area.id, (areaHoursMap.get(area.id) || 0) + durationHours);
                 }
                 return {
-                    id: entry.id, employeeName: `${employee.name} ${employee.surname}`, employeeId: entry.employeeId,
-                    areaName: area.name, clockInDate: clockIn.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+                    id: entry.id,
+                    employeeName: `${employee.name} ${employee.surname}`,
+                    employeeId: entry.employeeId,
+                    areaName: area.name,
+                    clockInDate: clockIn.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' }),
                     clockInTimeFormatted: clockIn.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
                     clockOutTimeFormatted: clockOut ? clockOut.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : 'In corso',
-                    duration: durationHours, note: entry.note || '', createdBy: entry.createdBy || null,
+                    duration: durationHours,
+                    note: entry.note || '',
+                    createdBy: entry.createdBy || null, // Per indicare timbrature manuali
                 };
-            }).filter(Boolean).sort((a, b) => {
+            }).filter(Boolean) // Rimuovi eventuali righe nulle
+              .sort((a, b) => { // Ordina per data/ora e poi per nome
                 const dateA = new Date(a.clockInDate.split('/').reverse().join('-') + 'T' + a.clockInTimeFormatted);
                 const dateB = new Date(b.clockInDate.split('/').reverse().join('-') + 'T' + b.clockInTimeFormatted);
-                if (dateA < dateB) return -1; if (dateA > dateB) return 1;
+                if (dateA < dateB) return -1;
+                if (dateA > dateB) return 1;
                 return a.employeeName.localeCompare(b.employeeName);
             });
 
-            setReports(reportData);
-            setReportTitle(`Report dal ${dateRange.start} al ${dateRange.end}`);
+            setReports(reportData); // Aggiorna stato report
+            setReportTitle(`Report dal ${dateRange.start} al ${dateRange.end}`); // Imposta titolo
+            // Aggiorna lo stato delle aree con le ore calcolate
             const updatedAreas = allWorkAreas.map(area => ({ ...area, totalHours: (areaHoursMap.get(area.id) || 0).toFixed(2) }));
             setWorkAreasWithHours(updatedAreas);
-            setView('reports');
+            setView('reports'); // Cambia vista per mostrare il report
         } catch (error) { alert("Errore generazione report."); console.error(error); }
-        finally { setIsLoading(false); }
-    }, [dateRange, reportAreaFilter, reportEmployeeFilter, allEmployees, allWorkAreas, currentUserRole, managedEmployees]);
+        finally { setIsLoading(false); } // Disattiva caricamento
+    }, [dateRange, reportAreaFilter, reportEmployeeFilter, allEmployees, allWorkAreas, currentUserRole, userData]); // Dipendenze corrette
 
+
+    // Esporta report in XML
     const handleExportXml = useCallback((dataToExport) => {
         if (!dataToExport || dataToExport.length === 0) return alert("Nessun dato.");
         let xmlString = '<?xml version="1.0" encoding="UTF-8"?>\n<ReportTimbrature>\n';
         dataToExport.forEach(entry => {
-            xmlString += `  <Timbratura>\n    <Dipendente>${entry.employeeName || ''}</Dipendente>\n    <Area>${entry.areaName || ''}</Area>\n    <Data>${entry.clockInDate || ''}</Data>\n    <Entrata>${entry.clockInTimeFormatted || ''}</Entrata>\n    <Uscita>${entry.clockOutTimeFormatted || ''}</Uscita>\n    <Ore>${entry.duration ? entry.duration.toFixed(2) : 'N/A'}</Ore>\n    <Note>${entry.note || ''}</Note>\n  </Timbratura>\n`;
+            // Usa CDATA per sicurezza nei campi testo
+            xmlString += `  <Timbratura>\n`;
+            xmlString += `    <Dipendente><![CDATA[${entry.employeeName || ''}]]></Dipendente>\n`;
+            xmlString += `    <Area><![CDATA[${entry.areaName || ''}]]></Area>\n`;
+            xmlString += `    <Data>${entry.clockInDate || ''}</Data>\n`;
+            xmlString += `    <Entrata>${entry.clockInTimeFormatted || ''}</Entrata>\n`;
+            xmlString += `    <Uscita>${entry.clockOutTimeFormatted || ''}</Uscita>\n`;
+            xmlString += `    <Ore>${entry.duration ? entry.duration.toFixed(2) : 'N/A'}</Ore>\n`;
+            xmlString += `    <Note><![CDATA[${entry.note || ''}]]></Note>\n`;
+            xmlString += `  </Timbratura>\n`;
         });
         xmlString += '</ReportTimbrature>';
         try {
             const blob = new Blob([xmlString], { type: "application/xml;charset=utf-8" });
             saveAs(blob, `${(reportTitle || 'Report').replace(/ /g, '_')}.xml`);
         } catch (error) { alert("Errore salvataggio XML."); console.error(error); }
-    }, [reportTitle]);
+    }, [reportTitle]); // Dipende solo dal titolo per il nome file
 
+
+    // Genera PDF report per singolo dipendente
     const handleGenerateEmployeeReportPDF = useCallback((employee) => {
         if (!employee) return alert("Seleziona dipendente.");
-        if (!reports || reports.length === 0) return alert("Nessun dato nel report attuale.");
+        // Assicurati che ci siano dati nel report visualizzato
+        if (!reports || reports.length === 0) return alert("Nessun dato nel report attuale. Genera prima un report.");
+        // Filtra i dati per il dipendente selezionato
         const employeeReports = reports.filter(r => r.employeeId === employee.id);
-        if (employeeReports.length === 0) return alert(`Nessuna timbratura per ${employee.name} nel periodo.`);
+        if (employeeReports.length === 0) return alert(`Nessuna timbratura per ${employee.name} ${employee.surname} trovata nel periodo del report attuale.`);
+
         try {
             const doc = new jsPDF();
+            // Titolo e sottotitolo
             doc.setFontSize(18); doc.text(`Report Timbrature per ${employee.name} ${employee.surname}`, 14, 22);
             doc.setFontSize(11); doc.setTextColor(100); doc.text(`Periodo: ${reportTitle.replace('Report ', '')}`, 14, 30);
+            // Tabella con autotable
             doc.autoTable({
-                startY: 40, head: [['Data', 'Area', 'Entrata', 'Uscita', 'Ore', 'Note']],
-                body: employeeReports.map(entry => [ entry.clockInDate, entry.areaName, entry.clockInTimeFormatted, entry.clockOutTimeFormatted, entry.duration !== null ? entry.duration.toFixed(2) : 'N/A', entry.note || '' ]),
-                theme: 'grid', headStyles: { fillColor: [22, 160, 133] },
+                startY: 40, // Posizione inizio tabella
+                head: [['Data', 'Area', 'Entrata', 'Uscita', 'Ore', 'Note']], // Intestazioni colonne
+                body: employeeReports.map(entry => [ // Dati righe
+                    entry.clockInDate,
+                    entry.areaName,
+                    entry.clockInTimeFormatted,
+                    entry.clockOutTimeFormatted,
+                    entry.duration !== null ? entry.duration.toFixed(2) : 'N/A',
+                    entry.note || ''
+                ]),
+                theme: 'grid', // Stile tabella
+                headStyles: { fillColor: [22, 160, 133] }, // Colore intestazione
             });
+            // Salva il PDF
             doc.save(`Report_${employee.surname}_${employee.name}_${dateRange.start}_${dateRange.end}.pdf`);
         } catch (error) { alert("Errore generazione PDF."); console.error(error); }
-    }, [reports, reportTitle, dateRange]);
+    }, [reports, reportTitle, dateRange]); // Dipende dai dati attuali, titolo e date
 
+
+    // Gestisce il click sulle intestazioni per ordinare
     const requestSort = useCallback((key) => {
         let direction = 'ascending';
+        // Se si clicca sulla stessa colonna, inverte la direzione
         if (sortConfig?.key === key && sortConfig.direction === 'ascending') {
             direction = 'descending';
         }
         setSortConfig({ key, direction });
-    }, [sortConfig]);
+    }, [sortConfig]); // Dipende dalla configurazione corrente
+
 
     // --- RENDER ---
+    // Mostra caricamento finché i dati non sono pronti
     if (isLoading || !user || !userData) {
         return <div className="min-h-screen flex items-center justify-center bg-gray-100 w-full"><p>Caricamento...</p></div>;
     }
+    // Mostra errore se l'utente non è admin o preposto (dovrebbe essere gestito da App.js, ma per sicurezza)
     if (currentUserRole !== 'admin' && currentUserRole !== 'preposto') {
        return <div className="min-h-screen flex items-center justify-center bg-gray-100 w-full"><p>Accesso non autorizzato.</p></div>;
     }
 
+    // Render principale della dashboard
     return (
         <div className="min-h-screen bg-gray-100 w-full">
+            {/* Header con logo, stato timbratura (se preposto) e logout */}
             <header className="bg-white shadow-md">
                  <div className="max-w-7xl mx-auto py-3 px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                      <CompanyLogo />
+                     {/* Mostra box timbratura solo se l'utente è preposto/admin non superadmin E ha un profilo employee */}
                      {adminEmployeeProfile && (
-                         <div className="bg-gray-50 p-2 rounded-lg border border-gray-200 text-center">
-                             {adminActiveEntry ? (
-                                 <div className="space-y-2">
-                                     <div>
-                                         <p className="text-sm font-semibold text-green-600">Sei al lavoro</p>
-                                         {adminActiveEntry.isOnBreak && <p className="text-xs font-semibold text-yellow-600">In Pausa</p>}
-                                     </div>
-                                     <div className="flex gap-2 justify-center">
-                                         <button onClick={handleAdminPause} disabled={isActionLoading} className={`text-xs px-3 py-1 text-white rounded ${adminActiveEntry.isOnBreak ? 'bg-green-500 hover:bg-green-600' : 'bg-yellow-500 hover:bg-yellow-600'} disabled:opacity-50`}>
-                                             {adminActiveEntry.isOnBreak ? 'Termina Pausa' : 'Inizia Pausa'}
-                                         </button>
-                                         <button onClick={handleAdminClockOut} disabled={adminActiveEntry.isOnBreak || isActionLoading} className="text-xs px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 disabled:bg-gray-400 disabled:opacity-50">
-                                             Timbra Uscita
-                                         </button>
-                                     </div>
-                                 </div>
-                             ) : (
-                                 <div>
-                                     <p className="text-sm font-semibold text-red-600">Non sei al lavoro</p>
-                                     <button onClick={() => openModal('adminClockIn', adminEmployeeProfile)} disabled={isActionLoading} className="mt-1 text-xs px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50">Timbra Entrata</button>
-                                 </div>
+                          <div className="bg-gray-50 p-2 rounded-lg border border-gray-200 text-center">
+                              {adminActiveEntry ? ( // Se l'utente è attualmente timbrato
+                                   <div className="space-y-2">
+                                       <div>
+                                            <p className="text-sm font-semibold text-green-600">Sei al lavoro</p>
+                                            {adminActiveEntry.isOnBreak && <p className="text-xs font-semibold text-yellow-600">In Pausa</p>}
+                                       </div>
+                                       <div className="flex gap-2 justify-center">
+                                            {/* Pulsante Inizia/Termina Pausa */}
+                                            <button onClick={handleAdminPause} disabled={isActionLoading} className={`text-xs px-3 py-1 text-white rounded ${adminActiveEntry.isOnBreak ? 'bg-green-500 hover:bg-green-600' : 'bg-yellow-500 hover:bg-yellow-600'} disabled:opacity-50`}>
+                                                {adminActiveEntry.isOnBreak ? 'Termina Pausa' : 'Inizia Pausa'}
+                                            </button>
+                                            {/* Pulsante Timbra Uscita (disabilitato se in pausa) */}
+                                            <button onClick={handleAdminClockOut} disabled={adminActiveEntry.isOnBreak || isActionLoading} className="text-xs px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 disabled:bg-gray-400 disabled:opacity-50">
+                                                Timbra Uscita
+                                            </button>
+                                       </div>
+                                   </div>
+                             ) : ( // Se l'utente NON è timbrato
+                                   <div>
+                                       <p className="text-sm font-semibold text-red-600">Non sei al lavoro</p>
+                                       {/* Pulsante Timbra Entrata (apre modale) */}
+                                       <button onClick={() => openModal('adminClockIn', adminEmployeeProfile)} disabled={isActionLoading} className="mt-1 text-xs px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50">Timbra Entrata</button>
+                                   </div>
                              )}
-                         </div>
+                          </div>
                      )}
+                     {/* Info utente e pulsante Logout */}
                      <div className="flex items-center space-x-4">
                          <span className="text-sm text-gray-600 text-right">
                              {currentUserRole === 'admin' ? 'Admin' : 'Preposto'}:<br/>
@@ -833,6 +953,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                  </div>
             </header>
 
+            {/* Navigazione tra le viste */}
             <nav className="bg-white border-b border-gray-200">
                  <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                      <div className="flex justify-center">
@@ -840,30 +961,37 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                              <button onClick={() => setView('dashboard')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'dashboard' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Dashboard</button>
                              <button onClick={() => setView('employees')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'employees' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Dipendenti</button>
                              <button onClick={() => setView('areas')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'areas' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Aree</button>
+                             {/* Mostra Gestione Admin solo se l'utente è admin */}
                              {currentUserRole === 'admin' && <button onClick={() => setView('admins')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'admins' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Admin</button>}
+                             {/* Mostra tab Report solo se un report è visualizzato */}
                              {view === 'reports' && <button onClick={() => setView('reports')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium border-indigo-500 text-gray-900`}>Report Visualizzato</button>}
                          </div>
                      </div>
                  </div>
             </nav>
 
+            {/* Contenuto principale */}
             <div className="max-w-7xl mx-auto w-full p-4 sm:p-6 lg:p-8">
+                {/* Mostra form generazione report se non si è nella vista report */}
                 {view !== 'reports' && (
                     <div className="bg-white shadow-md rounded-lg p-4 mb-6">
                          <h3 className="text-lg font-medium text-gray-900 mb-4 text-center sm:text-left">Genera Report Personalizzato</h3>
                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
-                            {/* Input Date */}
+                            {/* Input Data Inizio */}
                             <div className="lg:col-span-1"><label htmlFor="startDate" className="block text-sm font-medium text-gray-700 mb-1">Da:</label><input type="date" id="startDate" value={dateRange.start} onChange={e => setDateRange({ ...dateRange, start: e.target.value })} className="p-2 border border-gray-300 rounded-md w-full text-sm" /></div>
+                            {/* Input Data Fine (CORRETTO) */}
                             <div className="lg:col-span-1"><label htmlFor="endDate" className="block text-sm font-medium text-gray-700 mb-1">A:</label><input type="date" id="endDate" value={dateRange.end} onChange={e => setDateRange({ ...dateRange, end: e.target.value })} className="p-2 border border-gray-300 rounded-md w-full text-sm" /></div>
-                            {/* Filtri */}
+                            {/* Filtro Area (mostra solo aree gestite se preposto) */}
                             <div className="lg:col-span-1"><label htmlFor="areaFilter" className="block text-sm font-medium text-gray-700 mb-1">Area:</label><select id="areaFilter" value={reportAreaFilter} onChange={e => setReportAreaFilter(e.target.value)} className="p-2 border border-gray-300 rounded-md w-full text-sm bg-white"><option value="all">Tutte le Aree</option>{(currentUserRole === 'admin' ? allWorkAreas : allWorkAreas.filter(a => userData?.managedAreaIds?.includes(a.id))).sort((a,b) => a.name.localeCompare(b.name)).map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}</select></div>
-                            <div className="lg:col-span-1"><label htmlFor="employeeFilter" className="block text-sm font-medium text-gray-700 mb-1">Dipendente:</label><select id="employeeFilter" value={reportEmployeeFilter} onChange={e => setReportEmployeeFilter(e.target.value)} className="p-2 border border-gray-300 rounded-md w-full text-sm bg-white"><option value="all">Tutti i Dipendenti</option>{(currentUserRole === 'admin' ? allEmployees : managedEmployees).sort((a,b) => `${a.name} ${a.surname}`.localeCompare(`${b.name} ${b.surname}`)).map(emp => (<option key={emp.id} value={emp.id}>{emp.name} {emp.surname}</option>))}</select></div>
-                            {/* Pulsante Genera */}
+                            {/* Filtro Dipendente (mostra solo dipendenti gestiti se preposto) */}
+                            <div className="lg:col-span-1"><label htmlFor="employeeFilter" className="block text-sm font-medium text-gray-700 mb-1">Dipendente:</label><select id="employeeFilter" value={reportEmployeeFilter} onChange={e => setReportEmployeeFilter(e.target.value)} className="p-2 border border-gray-300 rounded-md w-full text-sm bg-white"><option value="all">Tutti i Dipendenti</option>{(currentUserRole === 'admin' ? allEmployees : sortedAndFilteredEmployees).sort((a,b) => `${a.name} ${a.surname}`.localeCompare(`${b.name} ${b.surname}`)).map(emp => (<option key={emp.id} value={emp.id}>{emp.name} {emp.surname}</option>))}</select></div>
+                            {/* Pulsante Genera Report */}
                             <div className="lg:col-span-1"><button onClick={generateReport} disabled={isLoading || isActionLoading} className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm w-full disabled:opacity-50">Genera Report</button></div>
-                        </div>
-                   </div>
+                         </div>
+                    </div>
                 )}
 
+                {/* Render della vista corrente */}
                 <main>
                     {view === 'dashboard' && <DashboardView totalEmployees={allEmployees.length} activeEmployeesDetails={activeEmployeesDetails} totalDayHours={totalDayHours} />}
                     {view === 'employees' && <EmployeeManagementView employees={sortedAndFilteredEmployees} openModal={openModal} currentUserRole={currentUserRole} requestSort={requestSort} sortConfig={sortConfig} searchTerm={searchTerm} setSearchTerm={setSearchTerm} handleGenerateEmployeeReportPDF={handleGenerateEmployeeReportPDF} />}
@@ -873,23 +1001,23 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 </main>
             </div>
 
+            {/* Modale (mostrato condizionalmente) */}
             {showModal && <AdminModal
                 type={modalType}
                 item={selectedItem}
                 setShowModal={setShowModal}
                 workAreas={allWorkAreas}
-                onDataUpdate={fetchData}
+                onDataUpdate={fetchData} // Passa fetchData per aggiornare i dati dopo un'azione
                 user={user}
                 superAdminEmail={superAdminEmail}
-                allEmployees={allEmployees}
+                allEmployees={allEmployees} // Passa TUTTI i dipendenti al modale
                 currentUserRole={currentUserRole}
-                userData={userData}
-                onAdminClockIn={handleAdminClockIn}
-                onAdminApplyPause={handleAdminApplyPause}
+                userData={userData} // Passa i dati dell'utente loggato (serve per managedAreaIds)
+                onAdminClockIn={handleAdminClockIn} // Callback per timbratura entrata preposto
+                onAdminApplyPause={handleAdminApplyPause} // Callback per applica pausa
             />}
         </div>
     );
 };
 
 export default AdminDashboard;
-
