@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
+// Non servono import specifici da firestore qui, perché usiamo le Cloud Functions
 import { doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
@@ -54,7 +55,11 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                     setError("Non sei assegnato a nessuna area da GESTIRE. Impossibile timbrare. Contatta un admin.");
                     setIsLoading(true);
                 }
-                setFormData({ selectedArea: availableAreas.length > 0 ? availableAreas[0].id : '', manualTime: new Date().toISOString().slice(0, 16) });
+                // Imposta l'orario attuale nel formato 'YYYY-MM-DDTHH:mm' corretto per datetime-local
+                const now = new Date();
+                now.setMinutes(now.getMinutes() - now.getTimezoneOffset()); // Corregge per il fuso orario locale
+                const currentTime = now.toISOString().slice(0, 16);
+                setFormData({ selectedArea: availableAreas.length > 0 ? availableAreas[0].id : '', manualTime: currentTime });
 
             } else if (type === 'manualClockIn') { // Timbratura manuale per dipendente
                 const availableAreas = workAreas.filter(wa => item.workAreaIds?.includes(wa.id));
@@ -62,10 +67,18 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                     setError("Questo dipendente non è assegnato a nessuna area. Impossibile timbrare.");
                     setIsLoading(true);
                 }
-                setFormData({ selectedArea: availableAreas.length > 0 ? availableAreas[0].id : '', manualTime: new Date().toISOString().slice(0, 16) });
+                // Imposta l'orario attuale nel formato 'YYYY-MM-DDTHH:mm'
+                const now = new Date();
+                now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+                const currentTime = now.toISOString().slice(0, 16);
+                setFormData({ selectedArea: availableAreas.length > 0 ? availableAreas[0].id : '', manualTime: currentTime });
 
             } else if (type === 'manualClockOut') { // Timbratura manuale uscita
-                setFormData({ manualTime: new Date().toISOString().slice(0, 16) });
+                 // Imposta l'orario attuale nel formato 'YYYY-MM-DDTHH:mm'
+                 const now = new Date();
+                 now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+                 const currentTime = now.toISOString().slice(0, 16);
+                setFormData({ manualTime: currentTime });
 
             } else if (type === 'assignEmployeeToPrepostoArea') { // Preposto modifica aree SUE per UN dipendente
                 const managedAreas = workAreas.filter(wa => userData?.managedAreaIds?.includes(wa.id));
@@ -156,6 +169,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                     alert('Dipendente aggiornato!');
                     break;
                 case 'deleteEmployee':
+                    // Usiamo window.confirm qui, ma sarebbe meglio un modal di conferma più robusto
                     if (!window.confirm(`Sei sicuro di voler eliminare ${item.name} ${item.surname}? L'operazione eliminerà anche l'account di accesso e NON è reversibile.`)) { setIsLoading(false); return; }
                     const deleteUser = httpsCallable(functions, 'deleteUserAndEmployee');
                     await deleteUser({ userId: item.userId });
@@ -228,14 +242,27 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                     if (!formData.selectedArea || !formData.manualTime) throw new Error('Seleziona un\'area e un orario di entrata.');
                     const clockInFunction = httpsCallable(functions, 'manualClockIn');
                     // 'item' qui è l'employeeProfile (per adminClockIn) o il dipendente (per manualClockIn)
-                    await clockInFunction({ employeeId: item.id, workAreaId: formData.selectedArea, timestamp: formData.manualTime, adminId: user.uid });
+                    // === MODIFICA 1: Aggiungi 'timezone' ===
+                    await clockInFunction({
+                        employeeId: item.id,
+                        workAreaId: formData.selectedArea,
+                        timestamp: formData.manualTime,
+                        timezone: 'Europe/Rome', // <-- AGGIUNTO
+                        adminId: user.uid
+                    });
                     alert('Timbratura di entrata registrata.');
                     break;
                 case 'manualClockOut':
                      if (!formData.manualTime) throw new Error('Seleziona un orario di uscita.');
                      if (!item || !item.activeEntry) { throw new Error("Impossibile timbrare uscita: il dipendente non risulta attualmente al lavoro."); }
                      const clockOutFunction = httpsCallable(functions, 'manualClockOut');
-                     await clockOutFunction({ employeeId: item.id, timestamp: formData.manualTime, adminId: user.uid });
+                     // === MODIFICA 2: Aggiungi 'timezone' ===
+                     await clockOutFunction({
+                         employeeId: item.id,
+                         timestamp: formData.manualTime,
+                         timezone: 'Europe/Rome', // <-- AGGIUNTO
+                         adminId: user.uid
+                     });
                      alert('Timbratura di uscita registrata.');
                      break;
 
@@ -321,24 +348,24 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                  {items && items.length > 0 ? (
                      <div className="mt-2 max-h-60 overflow-y-auto border border-gray-200 rounded-md p-2 space-y-2 bg-gray-50">
                          {items
-                            .sort((a, b) => a.name.localeCompare(b.name)) // Ordina aree alfabeticamente
-                            .map(it => (
-                             <div key={it.id} className="flex items-center">
-                                 <input
-                                     id={`${name}-${it.id}`} name={name} type="checkbox" value={it.id}
-                                     checked={(formData[name] || []).includes(it.id)} // Assicura che formData[name] sia un array
-                                     onChange={handleChange} disabled={disabled}
-                                     className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 disabled:opacity-50"
-                                 />
-                                 <label htmlFor={`${name}-${it.id}`} className={`ml-3 block text-sm ${disabled ? 'text-gray-400' : 'text-gray-800'}`}>{it.name}</label>
-                             </div>
-                         ))}
+                             .sort((a, b) => a.name.localeCompare(b.name)) // Ordina aree alfabeticamente
+                             .map(it => (
+                                <div key={it.id} className="flex items-center">
+                                    <input
+                                        id={`${name}-${it.id}`} name={name} type="checkbox" value={it.id}
+                                        checked={(formData[name] || []).includes(it.id)} // Assicura che formData[name] sia un array
+                                        onChange={handleChange} disabled={disabled}
+                                        className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 disabled:opacity-50"
+                                    />
+                                    <label htmlFor={`${name}-${it.id}`} className={`ml-3 block text-sm ${disabled ? 'text-gray-400' : 'text-gray-800'}`}>{it.name}</label>
+                                </div>
+                            ))}
                      </div>
-                   ) : (
+                 ) : (
                      <p className="text-sm text-gray-500 mt-2">{disabled ? 'Nessuna area disponibile.' : 'Nessuna area definita.'}</p>
-                   )}
+                 )}
              </div>
-        );
+         );
 
         // Contenuto specifico del body del modal
         let body;
@@ -400,9 +427,9 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                 body = <div className="space-y-4">
                     {renderField('Orario di Entrata', 'manualTime', 'datetime-local')}
                     {adminAvailableAreas.length > 0 ?
-                        renderField('Seleziona Area di Lavoro (che gestisci)', 'selectedArea', 'select', adminAvailableAreas.map(a => ({value: a.id, label: a.name})))
-                        : <p className="text-sm text-red-500">Non sei assegnato a nessuna area da GESTIRE.</p>
-                    }
+                         renderField('Seleziona Area di Lavoro (che gestisci)', 'selectedArea', 'select', adminAvailableAreas.map(a => ({value: a.id, label: a.name})))
+                         : <p className="text-sm text-red-500">Non sei assegnato a nessuna area da GESTIRE.</p>
+                     }
                 </div>;
                 break;
 
@@ -453,7 +480,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
             {/* Aggiunto click sull'overlay per chiudere (opzionale ma comodo) */}
             <div className="fixed inset-0" aria-hidden="true" onClick={() => setShowModal(false)}></div>
 
-            <div className="relative bg-white rounded-lg shadow-xl w-full max-w-lg mx-auto transform transition-all duration-300 ease-out sm:my-8" role="document">
+             <div className="relative bg-white rounded-lg shadow-xl w-full max-w-lg mx-auto transform transition-all duration-300 ease-out sm:my-8" role="document">
                 <div className="p-6">
                     {renderContent()}
                 </div>
@@ -463,3 +490,4 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
 };
 
 export default AdminModal;
+
