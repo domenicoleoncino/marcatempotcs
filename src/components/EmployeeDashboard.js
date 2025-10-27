@@ -39,8 +39,8 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     const functions = getFunctions(undefined, 'europe-west1'); // Specifica regione
     const clockIn = httpsCallable(functions, 'clockEmployeeIn');
     const clockOut = httpsCallable(functions, 'clockEmployeeOut');
-    const applyAutoPauseEmployee = httpsCallable(functions, 'applyAutoPauseEmployee'); // <-- NUOVA per iniziare pausa auto
-    const endEmployeePause = httpsCallable(functions, 'endEmployeePause'); // <-- NUOVA per terminare pausa
+    const applyAutoPauseEmployee = httpsCallable(functions, 'applyAutoPauseEmployee'); // NUOVA per iniziare pausa auto
+    const endEmployeePause = httpsCallable(functions, 'endEmployeePause'); // NUOVA per terminare pausa
 
 
     // Aggiorna ora corrente
@@ -55,13 +55,19 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
         return allWorkAreas.filter(area => employeeData.workAreaIds.includes(area.id));
     }, [employeeData, allWorkAreas]);
 
+    // Leggi il flag GPS dai dati del dipendente
+    const isGpsRequired = employeeData?.controlloGpsRichiesto ?? true;
+
+
     // Logica GPS (watchPosition per aggiornamenti continui)
     useEffect(() => {
-        if (activeEntry || employeeWorkAreas.length === 0) {
+        // Se l'utente è timbrato, O non ha aree, O non richiede il GPS, ALLORA non avviare il GPS.
+        if (activeEntry || employeeWorkAreas.length === 0 || !isGpsRequired) {
             setLocationError(null);
             setInRangeArea(null);
-            return; // Non serve GPS se timbrato o senza aree
+            return; // Non serve GPS
         }
+
         if (!navigator.geolocation) {
             setLocationError("La geolocalizzazione non è supportata.");
             return;
@@ -108,7 +114,8 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             isMounted = false;
             if (watchId !== null) navigator.geolocation.clearWatch(watchId);
         };
-    }, [employeeWorkAreas, activeEntry]); // Ricalcola se cambiano aree o stato timbratura
+        // Dipendenze aggiornate
+    }, [employeeWorkAreas, activeEntry, isGpsRequired]);
 
 
     // Listener Firestore per timbratura attiva e timbrature odierne
@@ -125,9 +132,9 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
 
         // Listener timbratura attiva
         const qActive = query(collection(db, "time_entries"),
-                              where("employeeId", "==", employeeData.id),
-                              where("status", "==", "clocked-in"),
-                              limit(1));
+                               where("employeeId", "==", employeeData.id),
+                               where("status", "==", "clocked-in"),
+                               limit(1));
         const unsubscribeActive = onSnapshot(qActive, (snapshot) => {
             if (!snapshot.empty) {
                 const entryData = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
@@ -145,12 +152,12 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
         // Listener timbrature odierne
         const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
         const qTodays = query(collection(db, "time_entries"),
-                              where("employeeId", "==", employeeData.id),
-                              where("clockInTime", ">=", Timestamp.fromDate(startOfDay)),
-                              orderBy("clockInTime", "desc"));
+                               where("employeeId", "==", employeeData.id),
+                               where("clockInTime", ">=", Timestamp.fromDate(startOfDay)),
+                               orderBy("clockInTime", "desc"));
         const unsubscribeTodays = onSnapshot(qTodays, (snapshot) => {
             setTodaysEntries(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        }, (error) => console.error("Errore listener timbrature odierne:", error));
+        }, (error) => console.error("Errore listener timbratura attiva:", error));
 
         // Funzione di pulizia
         return () => {
@@ -172,9 +179,30 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             const currentActiveEntry = activeEntry; // Usa stato al momento del click
 
             if (action === 'clockIn') {
-                if (!inRangeArea) throw new Error("Devi essere all'interno di un'area rilevata.");
-                console.log(`Tentativo clockIn per area ${inRangeArea.id}`);
-                result = await clockIn({ areaId: inRangeArea.id });
+                // --- LOGICA DI ENTRATA CON GESTIONE GPS E NOTA ---
+                
+                let areaIdToClockIn = null;
+                // DICHIARIAMO LA NOTA BASATA SUL FLAG GPS (NUOVO)
+                const note = isGpsRequired ? '' : 'senza GPS Manutentore'; 
+
+                if (isGpsRequired) {
+                    // Comportamento normale: DEVI essere in un'area
+                    if (!inRangeArea) throw new Error("Devi essere all'interno di un'area rilevata.");
+                    areaIdToClockIn = inRangeArea.id;
+                } else {
+                    // Comportamento esente: NON serve GPS, basta avere un'area assegnata
+                    if (employeeWorkAreas.length === 0) {
+                        throw new Error("Controllo GPS esente, ma non sei assegnato a nessuna area. Contatta l'amministratore.");
+                    }
+                    // Timbra sulla prima area assegnata (logica di default)
+                    areaIdToClockIn = employeeWorkAreas[0].id;
+                }
+
+                console.log(`Tentativo clockIn per area ${areaIdToClockIn} (GPS Richiesto: ${isGpsRequired})`);
+                
+                // INVIA ALLA CLOUD FUNCTION INCLUSO IL CAMPO 'note'
+                result = await clockIn({ areaId: areaIdToClockIn, note: note }); 
+                // --- Fine Logica di Entrata ---
 
             } else if (action === 'clockOut') {
                 if (!currentActiveEntry) throw new Error("Nessuna timbratura attiva da chiudere.");
@@ -272,9 +300,9 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                         if (p.start && p.end) {
                              const startMillis = p.start.toMillis ? p.start.toMillis() : new Date(p.start).getTime();
                              const endMillis = p.end.toMillis ? p.end.toMillis() : new Date(p.end).getTime();
-                             if (endMillis > startMillis) {
+                            if (endMillis > startMillis) {
                                  pauseDurationMillis += (endMillis - startMillis);
-                             }
+                            }
                         }
                     });
                 }
@@ -394,19 +422,45 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 ) : ( // Se l'utente NON è timbrato
                     <div>
                         <p className="text-center text-red-600 font-semibold text-lg">Timbratura NON ATTIVA</p>
-                        {/* Messaggio errore GPS o stato area */}
-                        {locationError && <p className="text-xs text-red-500 mt-2 text-center">{locationError}</p>}
-                        {!locationError && (
-                            inRangeArea ? (
-                                <p className="text-sm text-green-600 mt-2 text-center">Area di lavoro rilevata: <strong>{inRangeArea.name}</strong></p>
-                            ) : (
-                                <p className="text-sm text-gray-500 mt-2 text-center">Nessuna area di lavoro nelle vicinanze o GPS non attivo. Avvicinati a un cantiere per timbrare.</p>
-                            )
+                        
+                        {/* Messaggio dinamico GPS */}
+                        {isGpsRequired ? (
+                            // Blocco per utenti con GPS OBBLIGATORIO
+                            <>
+                                {locationError && <p className="text-xs text-red-500 mt-2 text-center">{locationError}</p>}
+                                {!locationError && (
+                                    inRangeArea ? (
+                                        <p className="text-sm text-green-600 mt-2 text-center">Area di lavoro rilevata: <strong>{inRangeArea.name}</strong></p>
+                                    ) : (
+                                        <p className="text-sm text-gray-500 mt-2 text-center">Nessuna area di lavoro nelle vicinanze o GPS non attivo. Avvicinati a un cantiere per timbrare.</p>
+                                    )
+                                )}
+                            </>
+                        ) : (
+                            // Blocco per utenti ESENTI da GPS
+                            <>
+                                {employeeWorkAreas.length > 0 ? (
+                                    <p className="text-sm text-blue-600 mt-2 text-center">
+                                        <strong>Controllo GPS non richiesto.</strong><br/>
+                                        Timbratura su area: <strong>{employeeWorkAreas[0].name}</strong>
+                                    </p>
+                                ) : (
+                                    <p className="text-sm text-red-500 mt-2 text-center">
+                                        <strong>Controllo GPS non richiesto.</strong><br/>
+                                        Non sei assegnato a nessuna area. Contatta un admin.
+                                    </p>
+                                )}
+                            </>
                         )}
                         {/* Pulsante Entrata */}
                         <button
                             onClick={() => handleAction('clockIn')}
-                            disabled={isProcessing || !inRangeArea} // Disabilitato se fuori area o processando
+                            // Logica 'disabled' avanzata
+                            disabled={
+                                isProcessing || // Disabilitato se sta processando
+                                (isGpsRequired && !inRangeArea) || // O se GPS richiesto E non in area
+                                (!isGpsRequired && employeeWorkAreas.length === 0) // O se GPS non richiesto MA non ha aree
+                            }
                             className="w-full mt-4 text-lg font-bold py-4 px-4 rounded-lg shadow-md text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-400"
                         >
                             TIMBRA ENTRATA
