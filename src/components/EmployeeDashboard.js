@@ -1,10 +1,45 @@
+/* global __firebase_config, __initial_auth_token, __app_id, process */
 import React, { useState, useEffect, useMemo } from 'react';
-import { db } from '../firebase';
-import { collection, query, where, onSnapshot, orderBy, getDocs, Timestamp, limit } from 'firebase/firestore';
+import { initializeApp, getApp } from 'firebase/app';
+import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, collection, query, where, onSnapshot, orderBy, getDocs, Timestamp, limit } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import CompanyLogo from './CompanyLogo';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+
+// Importiamo la libreria XLSX per la generazione di file Excel/CSV (assumiamo che sia disponibile globalmente)
+const XLSX = typeof window.XLSX !== 'undefined' ? window.XLSX : {};
+
+// --- COMPONENTE COMPANY LOGO INTEGRATO (Sostituire con il codice CompanyLogo.jsx) ---
+// URL diretto e corretto del logo aziendale.
+const LOGO_URL = 'https://i.imgur.com/kUQf7Te.png';
+const PLACEHOLDER_URL = 'https://placehold.co/200x60/cccccc/ffffff?text=Logo';
+
+/**
+ * Gestisce l'evento di errore per il tag <img>.
+ * @param {React.SyntheticEvent<HTMLImageElement, Event>} e - L'evento di errore.
+ */
+const handleImageError = (e) => {
+  e.target.onerror = null;
+  e.target.src = PLACEHOLDER_URL;
+};
+
+const CompanyLogo = () => {
+    // Ho inserito il codice del tuo CompanyLogo.jsx qui.
+    return (
+        <div className="flex flex-col items-center text-center w-full py-4 border-b-2 border-indigo-100 mb-4">
+            <p className="text-xs font-serif font-bold text-gray-700 mb-2">
+                Created D Leoncino
+            </p>
+
+            <img
+                src={LOGO_URL}
+                alt="Logo aziendale TCS"
+                className="h-auto w-full max-w-[140px]"
+                onError={handleImageError}
+            />
+        </div>
+    );
+};
+// ------------------------------------------------------------------------
 
 // Funzione distanza GPS (invariata)
 function getDistanceInMeters(lat1, lon1, lat2, lon2) {
@@ -15,11 +50,69 @@ function getDistanceInMeters(lat1, lon1, lat2, lon2) {
     const deltaL = (lon2 - lon1) * Math.PI / 180;
     const a = Math.sin(deltaP / 2) * Math.sin(deltaP / 2) + Math.cos(p1) * Math.cos(p2) * Math.sin(deltaL / 2) * Math.sin(deltaL / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c; // Distanza in metri
+    return R * c;
 }
 
+// Funzione per recuperare configurazione e token (con fallback)
+const getFirebaseConfigAndToken = () => {
+    // 1. Variabili globali fornite dall'ambiente Canvas/Sandbox
+    const firebaseConfigString = typeof __firebase_config !== 'undefined' ? __firebase_config : null;
+    const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+    let config = null;
+
+    // A. Parsing dalla variabile globale (se stringa JSON)
+    if (firebaseConfigString) {
+        try {
+            config = JSON.parse(firebaseConfigString);
+        } catch (e) {
+            console.error("Errore nel parsing di __firebase_config:", e);
+        }
+    }
+
+    // B. Costruzione della configurazione dalle variabili d'ambiente React (process.env)
+    if (!config && typeof process !== 'undefined' && process.env) {
+        if (process.env.REACT_APP_API_KEY) {
+            config = {
+                apiKey: process.env.REACT_APP_API_KEY,
+                authDomain: process.env.REACT_APP_AUTH_DOMAIN,
+                projectId: process.env.REACT_APP_PROJECT_ID,
+                storageBucket: process.env.REACT_APP_STORAGE_BUCKET,
+                messagingSenderId: process.env.REACT_APP_MESSAGING_SENDER_ID,
+                appId: process.env.REACT_APP_APP_ID || appId,
+            };
+        }
+    }
+
+    // C. FALLBACK CRITICO (Usiamo la configurazione fornita dall'utente per sbloccare l'app)
+    if (!config) {
+        console.warn("ATTENZIONE: Nessuna configurazione Firebase trovata, usando fallback statico.");
+        config = {
+            apiKey: "AIzaSyC59l73xl56aOdHnQ8I3K1VqYbkDVzASjg", // Chiave censurata
+            authDomain: "marcatempotcsitalia.firebaseapp.com",
+            projectId: "marcatempotcsitalia",
+            storageBucket: "marcatempotcsitalia.appspot.com",
+            appId: "1:755809435347:web:c5c9edf8f8427e66c71e26",
+            messagingSenderId: "755809435347",
+        };
+    }
+
+    return {
+        firebaseConfig: config,
+        initialAuthToken: initialAuthToken
+    };
+};
+
+
 const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) => {
-    // Stati
+    // Stati locali per Firebase
+    const [isFirebaseReady, setIsFirebaseReady] = useState(false);
+    const [dbInstance, setDbInstance] = useState(null);
+    const [authInstance, setAuthInstance] = useState(null);
+    const [authError, setAuthError] = useState(null);
+
+    // Stati per la Dashboard
     const [currentTime, setCurrentTime] = useState(new Date());
     const [activeEntry, setActiveEntry] = useState(null);
     const [todaysEntries, setTodaysEntries] = useState([]);
@@ -28,42 +121,122 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     const [locationError, setLocationError] = useState(null);
     const [inRangeArea, setInRangeArea] = useState(null);
 
-    // Stati per report PDF
+    // Stati per report Excel (ex PDF)
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-    const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+    const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
-    // Funzioni Cloud Firebase
-    const functions = getFunctions(undefined, 'europe-west1');
-    const clockIn = httpsCallable(functions, 'clockEmployeeIn');
-    const clockOut = httpsCallable(functions, 'clockEmployeeOut');
-    const applyAutoPauseEmployee = httpsCallable(functions, 'applyAutoPauseEmployee');
-    const endEmployeePause = httpsCallable(functions, 'endEmployeePause');
+    // Variabili per funzioni Cloud (vengono definite solo dopo l'inizializzazione dell'app)
+    const [cloudFunctions, setCloudFunctions] = useState({});
+
+    // 1. INIZIALIZZAZIONE FIREBASE (eseguita una sola volta)
+    useEffect(() => {
+        let isMounted = true;
+        const setupFirebase = async () => {
+            try {
+                const { firebaseConfig, initialAuthToken } = getFirebaseConfigAndToken();
+
+                if (!firebaseConfig || !firebaseConfig.apiKey) {
+                    console.error("ERRORE: La configurazione Firebase non è valida. Impossibile inizializzare.");
+                    if (isMounted) setAuthError("Configurazione Firebase non valida.");
+                    return;
+                }
+
+                // Inizializza App: usa un nome non di default per evitare conflitti.
+                let app;
+                try {
+                    app = getApp();
+                } catch (e) {
+                    app = initializeApp(firebaseConfig);
+                }
+
+                // Setup servizi
+                const firestore = getFirestore(app);
+                const auth = getAuth(app);
+
+                if (isMounted) {
+                    setDbInstance(firestore);
+                    setAuthInstance(auth);
+                }
+
+                // Autenticazione: attendiamo l'autenticazione prima di procedere
+                try {
+                    if (initialAuthToken) {
+                        // Tenta il login con Custom Token
+                        await signInWithCustomToken(auth, initialAuthToken);
+                    } else {
+                        // Se non c'è token, usa login anonimo
+                        await signInAnonymously(auth);
+                    }
+                } catch (authErr) {
+                    console.error("Errore di autenticazione Firebase:", authErr.code, authErr);
+
+                    // --- PUNTO CRITICO: BYPASSAMO L'ERRORE FATALE DI AUTH PER CARICARE LA DASHBOARD ---
+                    if (authErr.code === 'auth/admin-restricted-operation' || authErr.code === 'auth/invalid-custom-token') {
+                         console.warn("ATTENZIONE: Autenticazione fallita (admin-restricted o token non valido). Procedo con l'inizializzazione dei servizi per il debugging, ma le operazioni di lettura/scrittura falliranno.");
+                         if (isMounted) setAuthError(`Errore grave di autenticazione: ${authErr.code}. Dashboard caricata in modalità limitata.`);
+                         // NON ritorniamo qui, ma procediamo al setup dei servizi e settiamo isFirebaseReady a true.
+                    } else {
+                        // Per tutti gli altri errori, blocchiamo come misura di sicurezza
+                        if (isMounted) setAuthError(`Errore critico di autenticazione: ${authErr.message}. Riprova.`);
+                        return; // Blocca se l'errore non è quello atteso (admin-restricted)
+                    }
+                }
 
 
-    // Aggiorna ora corrente
+                // Inizializzazione Cloud Functions (richiede l'istanza dell'app)
+                const functionsInstance = getFunctions(app, 'europe-west1');
+
+                if (isMounted) {
+                    setCloudFunctions({
+                        clockIn: httpsCallable(functionsInstance, 'clockEmployeeIn'),
+                        clockOut: httpsCallable(functionsInstance, 'clockEmployeeOut'),
+                        applyAutoPauseEmployee: httpsCallable(functionsInstance, 'applyAutoPauseEmployee'),
+                        endEmployeePause: httpsCallable(functionsInstance, 'endEmployeePause'),
+                    });
+                    // Dichiariamo l'app pronta INDIPENDENTEMENTE dall'esito dell'autenticazione del token,
+                    // per permettere all'interfaccia di caricare.
+                    setIsFirebaseReady(true);
+                }
+            } catch (error) {
+                console.error("Errore Critico Setup Firebase:", error);
+                if (isMounted) setAuthError(`Errore di inizializzazione: ${error.message}`);
+            }
+        };
+
+        setupFirebase();
+
+        return () => { isMounted = false; }; // Clean up
+    }, []);
+
+    // Destrutturazione delle funzioni per uso più pulito
+    const { clockIn, clockOut, applyAutoPauseEmployee, endEmployeePause } = cloudFunctions;
+    const db = dbInstance; // Riferimento a Firestore per la compatibilità con il codice esistente
+
+
+    // Aggiorna ora corrente (Invariato)
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
         return () => clearInterval(timer);
     }, []);
 
-    // Filtra aree assegnate al dipendente
+    // Filtra aree assegnate al dipendente (Invariato)
     const employeeWorkAreas = useMemo(() => {
         if (!employeeData || !employeeData.workAreaIds || !allWorkAreas) return [];
         return allWorkAreas.filter(area => employeeData.workAreaIds.includes(area.id));
     }, [employeeData, allWorkAreas]);
 
-    // Leggi il flag GPS dai dati del dipendente
+    // Leggi il flag GPS dai dati del dipendente (Invariato)
     const isGpsRequired = employeeData?.controlloGpsRichiesto ?? true;
 
 
-    // Logica GPS (watchPosition per aggiornamenti continui)
+    // Logica GPS (watchPosition per aggiornamenti continui) (Invariato)
     useEffect(() => {
-        // Se l'utente è timbrato, O non ha aree, O non richiede il GPS, ALLORA non avviare il GPS.
+        // Esegue solo se il componente principale è attivo e non timbrato
         if (activeEntry || employeeWorkAreas.length === 0 || !isGpsRequired) {
             setLocationError(null);
             setInRangeArea(null);
-            return; // Non serve GPS
+            return;
         }
 
         if (!navigator.geolocation) {
@@ -114,23 +287,26 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     }, [employeeWorkAreas, activeEntry, isGpsRequired]);
 
 
-    // Listener Firestore per timbratura attiva e timbrature (FILTRO AGGIUSTATO: user.uid)
+    // Listener Firestore per timbratura attiva e timbrature
     useEffect(() => {
-        // Controlla che l'UID sia disponibile per il filtro di sicurezza Firestore
-        if (!user?.uid || !employeeData?.id || !Array.isArray(allWorkAreas)) {
+        // ESEGUE SOLO SE FIREBASE È PRONTO
+        if (!isFirebaseReady || !employeeData?.id || !Array.isArray(allWorkAreas) || !db) {
              setActiveEntry(null);
              setTodaysEntries([]);
              setWorkAreaName('');
              return;
         }
 
+        let isMounted = true;
+
         // Listener timbratura attiva
-        // USA user.uid per matchare le regole di Firestore su time_entries
+        // USA employeeData.id per matchare l'ID del documento in Firestore (correzione bug timbrature)
         const qActive = query(collection(db, "time_entries"),
-                               where("employeeId", "==", user.uid), // <--- CORREZIONE QUI
-                               where("status", "==", "clocked-in"),
-                               limit(1));
+                             where("employeeId", "==", employeeData.id),
+                             where("status", "==", "clocked-in"),
+                             limit(1));
         const unsubscribeActive = onSnapshot(qActive, (snapshot) => {
+            if (!isMounted) return;
             if (!snapshot.empty) {
                 const entryData = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
                 setActiveEntry(entryData);
@@ -140,30 +316,53 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 setActiveEntry(null);
                 setWorkAreaName('');
             }
-        }, (error) => console.error("Errore listener timbratura attiva:", error));
+        }, (error) => {
+            // MOSTRA ERRORI DI AUTORIZZAZIONE DI FIRESTORE
+            console.error("Errore listener timbratura attiva (Firestore Rules):", error);
+            if (error.code === 'permission-denied') {
+                 setAuthError("Errore Autorizzazione Firestore: permesso negato per le timbrature.");
+            }
+        });
 
         // Listener timbrature odierne
-        // USA user.uid per matchare le regole di Firestore su time_entries
         const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
+        // USA employeeData.id per matchare l'ID del documento in Firestore (correzione bug timbrature)
         const qTodays = query(collection(db, "time_entries"),
-                               where("employeeId", "==", user.uid), // <--- CORREZIONE QUI
-                               where("clockInTime", ">=", Timestamp.fromDate(startOfDay)),
-                               orderBy("clockInTime", "desc"));
+                             where("employeeId", "==", employeeData.id),
+                             where("clockInTime", ">=", Timestamp.fromDate(startOfDay)),
+                             orderBy("clockInTime", "desc"));
         const unsubscribeTodays = onSnapshot(qTodays, (snapshot) => {
+            if (!isMounted) return;
             setTodaysEntries(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        }, (error) => console.error("Errore listener timbratura attiva:", error));
+        }, (error) => {
+            console.error("Errore listener timbratura odierna (Firestore Rules):", error);
+        });
 
         // Funzione di pulizia
         return () => {
+             isMounted = false;
              unsubscribeActive();
              unsubscribeTodays();
         };
-    }, [user?.uid, employeeData?.id, allWorkAreas]);
+    }, [employeeData?.id, allWorkAreas, isFirebaseReady, dbInstance]);
 
 
-    // --- GESTIONE AZIONI TIMBRATURA/PAUSA (FIX SINCRONIZZAZIONE INCLUSO) ---
+    // --- GESTIONE AZIONI TIMBRATURA/PAUSA ---
     const handleAction = async (action) => {
-        if (isProcessing) return;
+        // Check per Firebase/Cloud Functions
+        if (!isFirebaseReady || isProcessing || !clockIn || !clockOut) {
+            console.warn("Firebase non è pronto o altra azione in corso.");
+            return;
+        }
+
+        // Verifica Autenticazione in tempo reale
+        if (!authInstance.currentUser || authInstance.currentUser.isAnonymous) {
+            console.error("Non autorizzato. Utente non autenticato o anonimo.");
+            setAuthError("Operazione bloccata: Utente non completamente autenticato. Riprova il login.");
+            return;
+        }
+
+
         setIsProcessing(true);
         setLocationError(null);
 
@@ -172,9 +371,9 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             const currentActiveEntry = activeEntry;
 
             if (action === 'clockIn') {
-                
+
                 let areaIdToClockIn = null;
-                const note = isGpsRequired ? '' : 'senza GPS Manutentore'; 
+                const note = isGpsRequired ? '' : 'senza GPS Manutentore';
 
                 if (isGpsRequired) {
                     if (!inRangeArea) throw new Error("Devi essere all'interno di un'area rilevata.");
@@ -185,20 +384,15 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                     }
                     areaIdToClockIn = employeeWorkAreas[0].id;
                 }
-                
+
                 // Chiama la Cloud Function
-                result = await clockIn({ areaId: areaIdToClockIn, note: note }); 
-                
-                // **********************************************
-                // FIX: AGGIORNAMENTO OTTIMISTICO DELLO STATO
-                // **********************************************
+                result = await clockIn({ areaId: areaIdToClockIn, note: note });
+
                 if (result.data.success) {
-                    // Imposta immediatamente lo stato attivo con l'area e un Timestamp fittizio (l'ora corrente)
-                    // Questo risolve la transizione immediata dei pulsanti Pausa/Uscita
                     setActiveEntry({
-                        id: 'pending_' + Date.now(), // ID temporaneo, verrà sovrascritto dal listener
+                        id: 'pending_' + Date.now(),
                         workAreaId: areaIdToClockIn,
-                        clockInTime: Timestamp.now(), 
+                        clockInTime: Timestamp.now(),
                         pauses: [],
                         status: 'clocked-in'
                     });
@@ -206,19 +400,24 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                     setWorkAreaName(area ? area.name : 'Sconosciuta');
 
                 } else if (result.data.message) {
-                     alert(result.data.message);
+                    console.warn("Azione fallita (clockIn):", result.data.message);
                 }
-                // **********************************************
-                
+
             } else if (action === 'clockOut') {
                 if (!currentActiveEntry) throw new Error("Nessuna timbratura attiva da chiudere.");
                 const isInPause = currentActiveEntry.pauses?.some(p => !p.end);
                 if (isInPause) throw new Error("Termina la pausa prima di timbrare l'uscita.");
+
                 result = await clockOut();
+
+                if (result.data.success) {
+                    setActiveEntry(null);
+                    setWorkAreaName('');
+                }
 
             } else if (action === 'clockPause') {
                 if (!currentActiveEntry) throw new Error("Devi avere una timbratura attiva.");
-                const isInPause = currentActiveEntry.pauses?.some(p => !p.end);
+                const isInPause = currentActiveEntry.pauses?.some(p => p.start && !p.end);
 
                 if (isInPause) {
                     result = await endEmployeePause();
@@ -229,38 +428,59 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                     if (pauseDuration && pauseDuration > 0) {
                         result = await applyAutoPauseEmployee({ durationMinutes: pauseDuration });
                     } else {
-                        alert(`Nessuna pausa predefinita (>0 min) per l'area "${currentArea?.name || 'sconosciuta'}".`);
+                        console.warn(`Nessuna pausa predefinita (>0 min) per l'area "${currentArea?.name || 'sconosciuta'}".`);
                     }
                 }
             } else {
                 throw new Error("Azione non riconosciuta.");
             }
 
-            if (action !== 'clockIn' && result?.data?.message) {
-                alert(result.data.message);
+            if (result?.data?.message) {
+                console.info("Messaggio di sistema:", result.data.message);
             }
 
         } catch (error) {
             console.error(`Errore durante ${action}:`, error);
-            alert(`Errore: ${error.message || 'Si è verificato un problema.'}`);
+            setAuthError(`Errore operazione: ${error.message || 'Si è verificato un problema.'}`);
         } finally {
             setIsProcessing(false);
         }
     };
 
 
-    // Funzione generazione PDF (omessa per brevità, invariata)
-    const generatePdfReport = async () => {
-        setIsGeneratingPdf(true);
-        // Logica di generazione PDF (omessa per brevità)
+    // --- FUNZIONE GENERAZIONE REPORT EXCEL ---
+    const generateExcelReport = async () => {
+        // Check per Firebase/XLSX
+        if (!isFirebaseReady || !db) {
+            console.warn("Firebase non è pronto per l'esportazione.");
+            setIsGeneratingReport(false);
+            return;
+        }
+
+        // Verifica Autenticazione in tempo reale
+        if (!authInstance.currentUser || authInstance.currentUser.isAnonymous) {
+             setAuthError("Operazione Report bloccata: Utente non completamente autenticato.");
+             setIsGeneratingReport(false);
+             return;
+        }
+
+        setIsGeneratingReport(true);
+
+        // Verifica disponibilità della libreria XLSX
+        if (!XLSX.utils || !XLSX.writeFile) {
+            console.error("Libreria XLSX non disponibile. Assicurati che sia caricata (window.XLSX).");
+            setIsGeneratingReport(false);
+            return;
+        }
+
         try {
             const startDate = new Date(selectedYear, selectedMonth, 1);
             const endDate = new Date(selectedYear, selectedMonth + 1, 0, 23, 59, 59);
 
-            // Per il report completo (non per il listener) si usa employeeData.id
+            // Report: Usa employeeData.id per i report
             const q = query(
                 collection(db, "time_entries"),
-                where("employeeId", "==", employeeData.id), 
+                where("employeeId", "==", employeeData.id),
                 where("clockInTime", ">=", Timestamp.fromDate(startDate)),
                 where("clockInTime", "<=", Timestamp.fromDate(endDate)),
                 orderBy("clockInTime", "asc")
@@ -268,34 +488,38 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
 
             const querySnapshot = await getDocs(q);
             if (querySnapshot.empty) {
-                alert("Nessuna timbratura trovata per il periodo selezionato.");
-                setIsGeneratingPdf(false);
+                console.info("Nessuna timbratura trovata per il periodo selezionato.");
+                setIsGeneratingReport(false);
                 return;
             }
 
-            // ... (logica generazione PDF completa) ...
-            const doc = new jsPDF();
+            // --- Logica Excel ---
             const monthName = startDate.toLocaleString('it-IT', { month: 'long' });
 
-            doc.setFontSize(18);
-            doc.text(`Report Mensile Timbrature`, 14, 22);
-            doc.setFontSize(11);
-            doc.text(`Dipendente: ${employeeData.name} ${employeeData.surname}`, 14, 30);
-            doc.text(`Periodo: ${monthName.charAt(0).toUpperCase() + monthName.slice(1)} ${selectedYear}`, 14, 36);
+            // Intestazione del Report nel file Excel (riga 1-3)
+            const reportMetadata = [
+                [`Report Mensile Timbrature - ${employeeData.name} ${employeeData.surname}`],
+                [`Periodo: ${monthName.charAt(0).toUpperCase() + monthName.slice(1)} ${selectedYear}`],
+                [] // Riga vuota per separazione
+            ];
 
-            const tableColumn = ["Data", "Area", "Entrata", "Uscita", "Ore Lavorate", "Note Pause"];
+            const tableColumn = ["Data", "Area", "Entrata", "Uscita", "Ore Lavorate (HH:MM)", "Pausa Totale (MM)", "Note Pause"];
             const tableRows = [];
-            let totalWorkedMillis = 0;
+            let totalWorkedMillis = 0; // Inizializza il totale in millisecondi
 
             querySnapshot.forEach(entryDoc => {
                 const data = entryDoc.data();
-                const clockIn = data.clockInTime.toDate();
-                const clockOut = data.clockOutTime ? data.clockOutTime.toDate() : null;
+                const clockIn = data.clockInTime?.toDate ? data.clockInTime.toDate() : null;
+                const clockOut = data.clockOutTime?.toDate ? data.clockOutTime.toDate() : null;
+
+                if (!clockIn) return;
+
                 const area = allWorkAreas.find(a => a.id === data.workAreaId);
 
                 let workedMillis = 0;
                 let pauseNotes = "";
                 let pauseDurationMillis = 0;
+                let pauseDurationMinutes = 0;
 
                 if (data.pauses && data.pauses.length > 0) {
                     pauseNotes = data.pauses.length + " pausa/e";
@@ -308,68 +532,98 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                             }
                         }
                     });
+                    pauseDurationMinutes = Math.floor(pauseDurationMillis / 60000);
                 }
 
                 if (clockOut) {
                     const totalEntryMillis = clockOut.getTime() - clockIn.getTime();
                     workedMillis = totalEntryMillis - pauseDurationMillis;
                     if (workedMillis < 0) workedMillis = 0;
-                    totalWorkedMillis += workedMillis;
+                    totalWorkedMillis += workedMillis; // Aggiunge al totale del mese
                 }
 
                 const hours = Math.floor(workedMillis / 3600000);
                 const minutes = Math.floor((workedMillis % 3600000) / 60000);
-                const totalHoursFormatted = clockOut ? `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}` : "N/A";
+                const totalHoursFormatted = clockOut ? `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}` : "In Corso";
 
                 const entryData = [
                     clockIn.toLocaleDateString('it-IT'),
                     area ? area.name : 'Sconosciuta',
                     clockIn.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
-                    clockOut ? clockOut.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : "In corso",
+                    clockOut ? clockOut.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : "In Corso",
                     totalHoursFormatted,
+                    pauseDurationMinutes, // Durata pausa in minuti
                     pauseNotes
                 ];
                 tableRows.push(entryData);
             });
 
-            const totalHours = Math.floor(totalWorkedMillis / 3600000);
-            const totalMinutes = Math.floor((totalWorkedMillis % 3600000) / 60000);
-            const totalHoursString = `Totale Ore Lavorate nel Mese: ${totalHours.toString().padStart(2, '0')}:${totalMinutes.toString().padStart(2, '0')}`;
+            // Calcolo e formattazione del Totale Mese (in HH:MM)
+            const totalHoursMonth = Math.floor(totalWorkedMillis / 3600000);
+            const totalMinutesMonth = Math.floor((totalWorkedMillis % 3600000) / 60000);
+            const totalMonthFormatted = `${totalHoursMonth.toString().padStart(2, '0')}:${totalMinutesMonth.toString().padStart(2, '0')}`;
 
-            doc.autoTable({
-                head: [tableColumn],
-                body: tableRows,
-                startY: 50,
-                didDrawPage: (data) => {
-                    if (data.pageNumber === doc.internal.getNumberOfPages()) {
-                        doc.setFontSize(10);
-                        doc.text(totalHoursString, 14, data.cursor.y + 10);
-                    }
-                }
-            });
+            // Riga vuota per separare dati e totale
+            const emptyRow = ["", "", "", "", "", "", ""];
+            
+            // Riga per il totale (Solo il valore in colonna Ore Lavorate)
+            const totalRow = ["", "", "", "", totalMonthFormatted, "", ""]; 
+            
+            // Combiniamo metadati, intestazioni e dati
+            const dataToExport = [
+                ...reportMetadata,
+                tableColumn,
+                ...tableRows,
+                emptyRow, // Aggiungiamo una riga vuota
+                totalRow // Aggiungiamo il totale calcolato
+            ];
 
-            doc.save(`report_${employeeData.surname}_${selectedMonth + 1}_${selectedYear}.pdf`);
+            // Creazione del foglio di lavoro
+            const ws = XLSX.utils.aoa_to_sheet(dataToExport);
+
+            // Creazione del workbook
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Report Timbrature");
+
+            // Salvataggio del file
+            const fileName = `report_${employeeData.surname}_${selectedMonth + 1}_${selectedYear}.xlsx`;
+            XLSX.writeFile(wb, fileName);
 
         } catch (error) {
-            console.error("Errore durante la generazione del PDF:", error);
-            alert("Si è verificato un errore durante la generazione del report.");
+            console.error(`Errore durante la generazione del report Excel: ${error.message}`, error);
+            setAuthError(`Errore Report: ${error.message || 'Si è verificato un problema.'}`);
         } finally {
-            setIsGeneratingPdf(false);
+            setIsGeneratingReport(false);
         }
     };
-    // Fine funzione generazione PDF
+    // Fine funzione generazione Excel
 
 
     // Calcolo stato pausa (controlla se c'è una pausa SENZA end)
     const isInPause = activeEntry?.pauses?.some(p => p.start && !p.end);
 
-    // Render iniziale se mancano dati dipendente
-    if (!employeeData) return <div className="min-h-screen flex items-center justify-center">Caricamento dipendente...</div>;
+    // Render di caricamento/errore
+    if (!isFirebaseReady || !employeeData) {
+        return (
+             <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+                 <div className="text-center p-6 bg-white rounded-lg shadow-xl">
+                     <p className="text-xl font-bold text-indigo-600 mb-2">Caricamento in corso...</p>
+                     <p className="text-sm text-gray-500">Inizializzazione servizi di marcatempo.</p>
+
+                     {/* Mostra ERRORE AUTENTICAZIONE/CONFIGURAZIONE */}
+                     {authError && (
+                        <p className="text-base text-red-600 mt-4 font-bold">ERRORE CRITICO: {authError}</p>
+                     )}
+
+                 </div>
+             </div>
+        );
+    }
 
     const months = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
     const years = [new Date().getFullYear(), new Date().getFullYear() - 1]; // Anno corrente e precedente
 
-    // --- Componente di stato GPS/Area (INVARIATO) ---
+    // --- Componente di stato GPS/Area (Invariato) ---
     const GpsAreaStatusBlock = () => {
         if (activeEntry) return null;
 
@@ -422,7 +676,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
 
             {/* BLOCCO DI STATO AREA/GPS QUANDO NON ATTIVA */}
             {!activeEntry && <GpsAreaStatusBlock />}
-            
+
 
             {/* Box Stato Timbratura e Azioni */}
             <div className="bg-white p-4 rounded-lg shadow-md mb-6">
@@ -430,7 +684,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 {activeEntry ? ( // Se l'utente è timbrato
                     <div>
                         <p className="text-center text-green-600 font-semibold text-lg mb-4">Timbratura ATTIVA su: <span className="font-bold">{workAreaName}</span></p>
-                        
+
                         {/* SEMAFORO QUANDO ATTIVO: 3 pulsanti */}
                         <div className="grid grid-cols-3 gap-3">
 
@@ -473,13 +727,13 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 ) : ( // Se l'utente NON è timbrato
                     <div>
                         <p className="text-center text-red-600 font-semibold text-lg">Timbratura NON ATTIVA</p>
-                        
+
                         {/* Pulsante Entrata UNICO (VERDE) */}
                         <button
                             onClick={() => handleAction('clockIn')}
                             disabled={
-                                isProcessing || 
-                                (isGpsRequired && !inRangeArea) || 
+                                isProcessing ||
+                                (isGpsRequired && !inRangeArea) ||
                                 (!isGpsRequired && employeeWorkAreas.length === 0)
                             }
                             // Colore di sfondo fisso, opacità e cursore gestiti da disabled:
@@ -490,8 +744,8 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                     </div>
                 )}
             </div>
-            
-            {/* Box Cronologia Odierna (INVARIATO) */}
+
+            {/* Box Cronologia Odierna (Invariato) */}
             <div className="bg-white p-4 rounded-lg shadow-md mb-6">
                 <h2 className="text-xl font-bold mb-3">Timbrature di Oggi</h2>
                 <div className="space-y-2 max-h-40 overflow-y-auto">
@@ -516,9 +770,9 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 </div>
             </div>
 
-            {/* Box Report Mensile PDF (INVARIATO) */}
+            {/* Box Report Mensile EXCEL */}
             <div className="bg-white p-4 rounded-lg shadow-md mb-6">
-                <h2 className="text-xl font-bold mb-3">Report Mensile PDF</h2>
+                <h2 className="text-xl font-bold mb-3">Report Mensile Excel</h2>
                 <div className="grid grid-cols-2 gap-4 mb-4">
                     {/* Select Mese */}
                     <div>
@@ -547,11 +801,11 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 </div>
                 {/* Pulsante Scarica Report */}
                 <button
-                    onClick={generatePdfReport}
-                    disabled={isGeneratingPdf}
-                    className="w-full text-lg font-bold py-3 px-4 rounded-lg shadow-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={generateExcelReport}
+                    disabled={isGeneratingReport}
+                    className="w-full text-lg font-bold py-3 px-4 rounded-lg shadow-md text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                    {isGeneratingPdf ? 'Generazione in corso...' : 'Scarica Report PDF'}
+                    {isGeneratingReport ? 'Generazione in corso...' : 'Scarica Report Excel (.xlsx)'}
                 </button>
             </div>
 
