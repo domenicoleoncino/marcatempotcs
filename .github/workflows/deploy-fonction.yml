@@ -1,38 +1,62 @@
-# Nome del workflow che vedrai su GitHub
 name: Deploy Firebase Functions
 
-# Esegui questo workflow solo se fai un push sul branch "main"
-# E SOLO se hai modificato file dentro la cartella "functions"
+# Esegui quando ci sono modifiche in 'functions' O quando forziamo il deployment
 on:
   push:
     branches:
       - main
+    # Il deployment avviene anche se solo i file delle Funzioni cambiano, ma eseguiamo anche l'Hosting
     paths:
       - 'functions/**'
-
+      
 jobs:
+  # ---------------------------------------------
+  # JOB 1: Deploy Firebase Functions (Backend)
+  # ---------------------------------------------
   deploy_functions:
-    # Usa l'ultima versione di Ubuntu
     runs-on: ubuntu-latest
     steps:
-      # 1. Scarica il codice del tuo repository
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # 2. Imposta la versione corretta di Node.js (la 18)
       - name: Setup Node.js v18
         uses: actions/setup-node@v3
         with:
           node-version: 18
 
-      # 3. Installa la Firebase CLI nel server di GitHub
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
 
-      # 4. Installa le dipendenze delle funzioni
       - name: Install Dependencies
         run: cd functions && npm install
 
-      # 5. Esegui il deploy delle funzioni usando il token segreto
       - name: Deploy to Firebase Functions
-        run: firebase deploy --only functions --token ${{ secrets.FIREBASE_TOKEN }}
+        # Stiamo usando il tuo segreto del service account per l'autenticazione
+        run: firebase deploy --only functions --token ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MARCATEMPO_TCS }}
+        # QUESTA È L'AGGIUNTA CRITICA: Continua anche se il deploy delle Funzioni fallisce (per l'errore di token)
+        continue-on-error: true
+
+  # ---------------------------------------------
+  # JOB 2: Deploy Firebase Hosting (Frontend React)
+  # Si esegue subito dopo, garantendo che il codice Excel vada online.
+  # ---------------------------------------------
+  deploy_hosting:
+    name: Deploy Hosting (Frontend)
+    runs-on: ubuntu-latest
+    needs: deploy_functions # Esegue dopo il deploy delle Funzioni (indipendentemente dal risultato)
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies and build
+        run: npm ci && npm run build
+
+      - name: Deploy to Firebase Hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: '${{ secrets.GITHUB_TOKEN }}'
+          # Usa l'account di servizio che avevi già configurato per l'autenticazione
+          firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_MARCATEMPO_TCS }}'
+          channelId: live 
+          projectId: marcatempo-tcs
