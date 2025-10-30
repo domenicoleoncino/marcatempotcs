@@ -1,22 +1,21 @@
-name: Deploy Firebase Functions
+name: Deploy Firebase Functions and Hosting
 
-# Esegui quando ci sono modifiche in 'functions' O quando forziamo il deployment
+# Esegui questo workflow OGNI VOLTA che viene fatto un push sul branch "main"
 on:
   push:
     branches:
       - main
-    # Il deployment avviene anche se solo i file delle Funzioni cambiano, ma eseguiamo anche l'Hosting
-    paths:
-      - 'functions/**'
-      
+
 jobs:
   # ---------------------------------------------
   # JOB 1: Deploy Firebase Functions (Backend)
   # ---------------------------------------------
   deploy_functions:
+    name: Deploy Functions
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
+        # CRITICO: Non usare GITHUB_TOKEN per auto-push interni
         uses: actions/checkout@v4
 
       - name: Setup Node.js v18
@@ -31,19 +30,20 @@ jobs:
         run: cd functions && npm install
 
       - name: Deploy to Firebase Functions
-        # Stiamo usando il tuo segreto del service account per l'autenticazione
+        # Usa il segreto del service account
         run: firebase deploy --only functions --token ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MARCATEMPO_TCS }}
-        # QUESTA È L'AGGIUNTA CRITICA: Continua anche se il deploy delle Funzioni fallisce (per l'errore di token)
+        # CRITICO: Continua anche se il deploy delle Funzioni fallisce
         continue-on-error: true
 
   # ---------------------------------------------
   # JOB 2: Deploy Firebase Hosting (Frontend React)
-  # Si esegue subito dopo, garantendo che il codice Excel vada online.
   # ---------------------------------------------
   deploy_hosting:
     name: Deploy Hosting (Frontend)
     runs-on: ubuntu-latest
-    needs: deploy_functions # Esegue dopo il deploy delle Funzioni (indipendentemente dal risultato)
+    # Esegue solo se il push non è stato fatto dal bot per prevenire il loop
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    needs: deploy_functions # Esegue dopo il job delle funzioni (indipendentemente dal risultato)
 
     steps:
       - name: Checkout Repository
@@ -56,7 +56,7 @@ jobs:
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: '${{ secrets.GITHUB_TOKEN }}'
-          # Usa l'account di servizio che avevi già configurato per l'autenticazione
+          # Usa il service account per l'autenticazione
           firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_MARCATEMPO_TCS }}'
-          channelId: live 
+          channelId: live
           projectId: marcatempo-tcs
