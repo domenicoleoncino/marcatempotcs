@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 /* global __firebase_config, __initial_auth_token, __app_id */
 import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp, getApp } from 'firebase/app';
