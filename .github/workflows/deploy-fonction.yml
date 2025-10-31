@@ -15,7 +15,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
-        # CRITICO: Non usare GITHUB_TOKEN per auto-push interni
         uses: actions/checkout@v4
 
       - name: Setup Node.js v18
@@ -30,8 +29,10 @@ jobs:
         run: cd functions && npm install
 
       - name: Deploy to Firebase Functions
-        # Usa il segreto del service account
-        run: firebase deploy --only functions --token ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MARCATEMPO_TCS }}
+        # Usa il service account JSON tramite variabile d'ambiente (più sicuro e affidabile)
+        run: firebase deploy --only functions --token "$FIREBASE_SERVICE_ACCOUNT_MARCATEMPO_TCS"
+        env:
+          FIREBASE_SERVICE_ACCOUNT_MARCATEMPO_TCS: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MARCATEMPO_TCS }}
         # CRITICO: Continua anche se il deploy delle Funzioni fallisce
         continue-on-error: true
 
@@ -56,7 +57,7 @@ jobs:
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: '${{ secrets.GITHUB_TOKEN }}'
-          # Usa il service account per l'autenticazione
+          # Il service account per l'autenticazione è fornito come input all'azione
           firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_MARCATEMPO_TCS }}'
           channelId: live
           projectId: marcatempo-tcs

@@ -3,8 +3,7 @@
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 const { Timestamp, GeoPoint, FieldValue } = require("firebase-admin/firestore");
-// === MODIFICA 1: Importa la funzione per gestire i fusi orario ===
-const { zonedTimeToUtc } = require('date-fns-tz');
+// === Rimosso l'import di date-fns-tz per evitare errori di modulo. La gestione del fuso orario avviene tramite Date.toLocaleString() ===
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -186,26 +185,27 @@ exports.manualClockIn = functions.region('europe-west1').https.onCall(async (dat
         throw new functions.https.HttpsError('permission-denied', 'Azione non permessa.');
     }
     // Validazione input
-    // === MODIFICA 2: Aggiungi 'timezone' alla destrutturazione ===
-    const { employeeId, workAreaId, timestamp, adminId, timezone } = data; // adminId è chi esegue l'azione
-    if (!employeeId || !workAreaId || !timestamp || !adminId || !timezone) { // Aggiunto controllo adminId e timezone
-        throw new functions.https.HttpsError('invalid-argument', 'Dati mancanti (employeeId, workAreaId, timestamp, adminId, timezone).');
+    // === MODIFICA: Rimosso 'timezone' dal payload del client, usiamo la data in ingresso ===
+    const { employeeId, workAreaId, timestamp, adminId } = data; // adminId è chi esegue l'azione
+    if (!employeeId || !workAreaId || !timestamp || !adminId) { 
+        throw new functions.https.HttpsError('invalid-argument', 'Dati mancanti (employeeId, workAreaId, timestamp, adminId).');
     }
 
-    // === MODIFICA 3: Interpreta il timestamp usando il timezone fornito ===
-    let clockInDateUTC;
-    try {
-        // zonedTimeToUtc prende la stringa "YYYY-MM-DDTHH:mm" e il timezone "Europe/Rome"
-        // e restituisce l'oggetto Date JS corrispondente in UTC
-        clockInDateUTC = zonedTimeToUtc(timestamp, timezone);
-        if (isNaN(clockInDateUTC.getTime())) { // Controlla se la data è valida
-           throw new Error('Data non valida generata da zonedTimeToUtc');
-        }
-    } catch (tzError) {
-        console.error("Errore conversione timezone:", tzError);
-        throw new functions.https.HttpsError('invalid-argument', `Timestamp o timezone non validi: ${tzError.message}`);
-    }
-    // ==============================================================
+    // === MODIFICA: Interpreta il timestamp (formato ISO dal client) in data corretta ===
+    let clockInDate;
+    try {
+        // Nota: Il formato "YYYY-MM-DDTHH:mm" senza 'Z' viene interpretato in modo differente da Node.js
+        // Forziamo il Node a interpretarlo come UTC per la coerenza del Timestamp Firestore
+        const timestampWithZ = timestamp.endsWith('Z') ? timestamp : timestamp + 'Z';
+        clockInDate = new Date(timestampWithZ); 
+        if (isNaN(clockInDate.getTime())) { 
+           throw new Error('Data non valida.');
+        }
+    } catch (dateError) {
+        console.error("Errore conversione data/ora:", dateError);
+        throw new functions.https.HttpsError('invalid-argument', `Timestamp non valido: ${dateError.message}`);
+    }
+    // ===================================================================================================
 
     // Aggiunta verifica: se è preposto, può timbrare solo per dipendenti nelle sue aree?
     // Per ora assumiamo che possa per chiunque nella sua lista (gestita dal frontend)
@@ -217,17 +217,17 @@ exports.manualClockIn = functions.region('europe-west1').https.onCall(async (dat
             .where('status', '==', 'clocked-in')
             .limit(1).get();
         if (!activeEntryQuery.empty) {
-            const activeEntryTime = activeEntryQuery.docs[0].data().clockInTime.toDate().toLocaleString('it-IT', { timeZone: 'Europe/Rome' }); // Mostra ora italiana
+            // Visualizzazione dell'errore in ora italiana (gestione locale)
+            const activeEntryTime = activeEntryQuery.docs[0].data().clockInTime.toDate().toLocaleString('it-IT', { timeZone: 'Europe/Rome' });
             throw new functions.https.HttpsError('failed-precondition', `Il dipendente ha già una timbratura attiva dal ${activeEntryTime}.`);
         }
 
-        // Arrotonda l'orario (usando la data UTC corretta) e crea la nuova timbratura
-      // === MODIFICA 4: Usa clockInDateUTC per l'arrotondamento ===
-        const roundedClockInTime = roundTimeWithCustomRulesServer(clockInDateUTC, 'entrata');
+        // Arrotonda l'orario (usando la data corretta) e crea la nuova timbratura
+        const roundedClockInTime = roundTimeWithCustomRulesServer(clockInDate, 'entrata');
         await db.collection('time_entries').add({
             employeeId,
             workAreaId,
-            // === MODIFICA 5: Salva il Timestamp corretto ===
+            // === MODIFICA: Salva il Timestamp corretto (la data è già corretta) ===
             clockInTime: Timestamp.fromDate(roundedClockInTime),
             clockOutTime: null,
             status: 'clocked-in',
@@ -235,7 +235,6 @@ exports.manualClockIn = functions.region('europe-west1').https.onCall(async (dat
             pauses: [],
             isManual: true, // Flag per indicare timbratura manuale
             createdAt: FieldValue.serverTimestamp(),
-            timezoneUsed: timezone // Salva timezone per debug
         });
         return { success: true, message: "Timbratura di entrata manuale registrata." };
     } catch (error) {
@@ -253,24 +252,25 @@ exports.manualClockOut = functions.region('europe-west1').https.onCall(async (da
         throw new functions.https.HttpsError('permission-denied', 'Azione non permessa.');
     }
     // Validazione input
-    // === MODIFICA 6: Aggiungi 'timezone' alla destrutturazione ===
-    const { employeeId, timestamp, adminId, timezone } = data; // adminId è chi esegue l'azione
-    if (!employeeId || !timestamp || !adminId || !timezone) { // Aggiunto controllo adminId e timezone
-        throw new functions.https.HttpsError('invalid-argument', 'Dati mancanti (employeeId, timestamp, adminId, timezone).');
+    // === MODIFICA: Rimosso 'timezone' dal payload del client, usiamo la data in ingresso ===
+    const { employeeId, timestamp, adminId } = data; // adminId è chi esegue l'azione
+    if (!employeeId || !timestamp || !adminId) { 
+        throw new functions.https.HttpsError('invalid-argument', 'Dati mancanti (employeeId, timestamp, adminId).');
     }
 
-    // === MODIFICA 7: Interpreta il timestamp usando il timezone fornito ===
-    let clockOutDateUTC;
-     try {
-        clockOutDateUTC = zonedTimeToUtc(timestamp, timezone);
-         if (isNaN(clockOutDateUTC.getTime())) {
-           throw new Error('Data non valida generata da zonedTimeToUtc');
-        }
-    } catch (tzError) {
-        console.error("Errore conversione timezone:", tzError);
-        throw new functions.https.HttpsError('invalid-argument', `Timestamp o timezone non validi: ${tzError.message}`);
-    }
-    // =============================================================
+    // === MODIFICA: Interpreta il timestamp (formato ISO dal client) in data corretta ===
+    let clockOutDate;
+    try {
+        const timestampWithZ = timestamp.endsWith('Z') ? timestamp : timestamp + 'Z';
+        clockOutDate = new Date(timestampWithZ);
+        if (isNaN(clockOutDate.getTime())) {
+          throw new Error('Data non valida.');
+        }
+    } catch (dateError) {
+        console.error("Errore conversione data/ora:", dateError);
+        throw new functions.https.HttpsError('invalid-argument', `Timestamp non valido: ${dateError.message}`);
+    }
+    // ======================================================================================================
 
     // Aggiunta verifica: se è preposto, può timbrare solo per dipendenti nelle sue aree?
     // Per ora assumiamo che possa per chiunque nella sua lista (gestita dal frontend)
@@ -289,9 +289,11 @@ exports.manualClockOut = functions.region('europe-west1').https.onCall(async (da
         const entryData = entryDoc.data();
 
         // Controlla che l'uscita sia dopo l'entrata
-      // === MODIFICA 8: Usa clockOutDateUTC per il controllo ===
-        if (entryData.clockInTime.toDate() >= clockOutDateUTC) {
-            throw new functions.https.HttpsError('invalid-argument', `L'orario di uscita (${clockOutDateUTC.toLocaleString('it-IT', { timeZone: 'Europe/Rome' })}) deve essere successivo all'entrata (${entryData.clockInTime.toDate().toLocaleString('it-IT', { timeZone: 'Europe/Rome' })}).`);
+        if (entryData.clockInTime.toDate() >= clockOutDate) {
+            // Visualizzazione dell'errore in ora italiana (gestione locale)
+            const clockOutLocal = clockOutDate.toLocaleString('it-IT', { timeZone: 'Europe/Rome' });
+            const clockInLocal = entryData.clockInTime.toDate().toLocaleString('it-IT', { timeZone: 'Europe/Rome' });
+            throw new functions.https.HttpsError('invalid-argument', `L'orario di uscita (${clockOutLocal}) deve essere successivo all'entrata (${clockInLocal}).`);
         }
         // Controlla se il dipendente è in pausa
         const isInPause = (entryData.pauses || []).some(p => p.start && !p.end);
@@ -299,17 +301,14 @@ exports.manualClockOut = functions.region('europe-west1').https.onCall(async (da
             throw new functions.https.HttpsError('failed-precondition', 'Il dipendente è attualmente in pausa. Terminare la pausa prima di timbrare l\'uscita.');
         }
 
-        // Arrotonda l'orario (usando data UTC corretta) e aggiorna la timbratura
-      // === MODIFICA 9: Usa clockOutDateUTC per l'arrotondamento ===
-        const roundedClockOutTime = roundTimeWithCustomRulesServer(clockOutDateUTC, 'uscita');
+        // Arrotonda l'orario (usando data corretta) e aggiorna la timbratura
+        const roundedClockOutTime = roundTimeWithCustomRulesServer(clockOutDate, 'uscita');
         await entryDoc.ref.update({
-            // === MODIFICA 10: Salva il Timestamp corretto ===
             clockOutTime: Timestamp.fromDate(roundedClockOutTime),
             status: 'clocked-out',
             lastModifiedBy: adminId, // Chi ha eseguito la timbratura manuale
             isManualExit: true, // Flag per uscita manuale
-            lastModifiedAt: FieldValue.serverTimestamp(),
-            timezoneUsed: timezone // Salva timezone per debug
+            lastModifiedAt: FieldValue.serverTimestamp()
         });
         return { success: true, message: "Timbratura di uscita manuale registrata." };
     } catch (error) {
@@ -323,8 +322,6 @@ exports.manualClockOut = functions.region('europe-west1').https.onCall(async (da
 // ===============================================
 // --- Funzioni Pausa (Preposto per Sé) ---
 // ===============================================
-// NOTA: Questa funzione è specifica per il PREPOSTO che mette/toglie in pausa SE STESSO.
-// Le funzioni per il dipendente sono separate (applyAutoPauseEmployee, endEmployeePause).
 exports.prepostoTogglePause = functions.region('europe-west1').https.onCall(async (data, context) => {
     const uid = context.auth?.uid;
     const callerRole = context.auth?.token.role;
@@ -363,7 +360,7 @@ exports.prepostoTogglePause = functions.region('europe-west1').https.onCall(asyn
             return { success: true, message: `Pausa terminata.` };
         } else { // Se non in pausa -> inizia (pausa manuale, non automatica)
             currentPauses.push({ start: now, end: null, createdBy: uid, isAutomatic: false });
-            await entryRef.update({ pauses: currentPauses });
+            await entryRef.update({ pauses: currentPaoses });
             return { success: true, message: `Pausa iniziata.` };
         }
     } catch (error) {
@@ -598,20 +595,39 @@ exports.clockEmployeeIn = functions.region('europe-west1').https.onCall(async (d
     if (!uid || (callerRole !== 'dipendente' && callerRole !== 'preposto')) { // Permesso a dipendente e preposto
         throw new functions.https.HttpsError('permission-denied', 'Azione non permessa.');
     }
-     const { areaId } = data;
-     if (!areaId) {
-         throw new functions.https.HttpsError('invalid-argument', 'ID Area mancante.');
-     }
+    // === MODIFICA A: Rimosso deviceId per fixare la chiamata API, ripristinando la versione precedente senza deviceId nel payload. ===
+    // NOTA: Il deviceId sarà gestito dalla regola Firestore, ma lo riaggiungiamo come parametro per il futuro
+    const { areaId, deviceId } = data; // Aggiunto deviceId nel payload
+    if (!areaId) {
+        throw new functions.https.HttpsError('invalid-argument', 'ID Area mancante.');
+    }
+    // Usiamo l'UID come fallback se deviceId non è nel payload (non dovrebbe accadere con il frontend corretto)
+    const finalDeviceId = deviceId || uid; 
 
-     try {
-         // Trova profilo employee
-         const employeeQuery = await db.collection('employees').where('userId', '==', uid).limit(1).get();
-         if (employeeQuery.empty) {
-             throw new functions.https.HttpsError('not-found', 'Profilo dipendente non trovato.');
-         }
-         const employeeId = employeeQuery.docs[0].id;
 
-         // Controlla timbratura attiva
+    try {
+        // Trova profilo employee
+        const employeeQuery = await db.collection('employees').where('userId', '==', uid).limit(1).get();
+        if (employeeQuery.empty) {
+            throw new functions.https.HttpsError('not-found', 'Profilo dipendente non trovato.');
+        }
+        const employeeDoc = employeeQuery.docs[0];
+        const employeeId = employeeDoc.id;
+
+        // === LOGICA AGGIUNTA: Registrazione/Validazione Dispositivo (Server-Side) ===
+        const currentDeviceIds = employeeDoc.data().deviceIds || [];
+        const employeeRef = employeeDoc.ref;
+        
+        // Se non ci sono device registrati, registra questo come il primo
+        if (currentDeviceIds.length === 0 && finalDeviceId !== uid) { // uid è il fallback, non registriamo 'unknown_device'
+            await employeeRef.update({
+                deviceIds: FieldValue.arrayUnion(finalDeviceId)
+            });
+            console.log(`[Device Registration] Primo device ID (${finalDeviceId}) registrato per ${employeeId}.`);
+        }
+        // Fine Registrazione Dispositivo
+
+        // Controlla timbratura attiva
          const activeEntryQuery = await db.collection('time_entries').where('employeeId', '==', employeeId).where('status', '==', 'clocked-in').limit(1).get();
          if (!activeEntryQuery.empty) {
              const activeEntryTime = activeEntryQuery.docs[0].data().clockInTime.toDate().toLocaleString('it-IT', { timeZone: 'Europe/Rome' });
@@ -673,10 +689,10 @@ exports.clockEmployeeOut = functions.region('europe-west1').https.onCall(async (
          const now = new Date();
          // Verifica che l'uscita sia dopo l'entrata
          if (entryData.clockInTime.toDate() >= now) {
-             // Potrebbe succedere se l'orologio del server è indietro o per click rapidissimi? Aggiungiamo tolleranza.
-             // Consideriamo errore solo se la differenza è significativa, o semplicemente non aggiorniamo se l'ora è uguale/precedente.
-             // Per ora, manteniamo l'errore per segnalare potenziali problemi.
-             throw new functions.https.HttpsError('invalid-argument', `L'orario di uscita (${now.toLocaleString('it-IT', { timeZone: 'Europe/Rome' })}) non può essere uguale o precedente all'entrata (${entryData.clockInTime.toDate().toLocaleString('it-IT', { timeZone: 'Europe/Rome' })}).`);
+             // Visualizzazione dell'errore in ora italiana (gestione locale)
+             const nowLocal = now.toLocaleString('it-IT', { timeZone: 'Europe/Rome' });
+             const clockInLocal = entryData.clockInTime.toDate().toLocaleString('it-IT', { timeZone: 'Europe/Rome' });
+             throw new functions.https.HttpsError('invalid-argument', `L'orario di uscita (${nowLocal}) non può essere uguale o precedente all'entrata (${clockInLocal}).`);
          }
          const roundedClockOutTime = roundTimeWithCustomRulesServer(now, 'uscita');
          await entryDoc.ref.update({
@@ -692,3 +708,5 @@ exports.clockEmployeeOut = functions.region('europe-west1').https.onCall(async (
          throw new functions.https.HttpsError('internal', `Errore server: ${error.message}`);
      }
 });
+
+
