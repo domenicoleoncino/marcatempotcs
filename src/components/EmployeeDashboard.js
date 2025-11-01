@@ -15,7 +15,7 @@ import {
 } from 'firebase/firestore';
 
 // Importazioni dalle istanze centralizzate (src/firebase.js)
-import { db, auth, functions, useFirebase, INITIALIZATION_ERROR } from '../firebase'; 
+import { useFirebase, INITIALIZATION_ERROR } from '../firebase'; 
 
 // IMPORTAZIONE ESSENZIALE PER EXCEL/CSV
 const XLSX = typeof window !== 'undefined' && typeof window.XLSX !== 'undefined' ? window.XLSX : {};

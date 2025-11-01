@@ -1,53 +1,97 @@
-/* src/firebase.js - Configurazione Centralizzata */
-
-import { initializeApp, getApp } from "firebase/app";
+/* eslint-disable no-unused-vars */
+import { useState, useEffect } from 'react';
+import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
-import { getAuth } from "firebase/auth";
+import { getAuth, signInAnonymously } from "firebase/auth";
 import { getFunctions } from "firebase/functions";
-// RIMOSSO: import React, { useState, useEffect } from 'react'; // Rimosso React dal modulo di inizializzazione
 
-// --- Configurazione Iniziale ---
-const FALLBACK_PROJECT_ID = "marcatempotcsitalia";
-const FIREBASE_CONFIG = {
-    apiKey: process.env.REACT_APP_API_KEY || "AIzaSyC59l73xl56aOdHnQ8I3K1VqYbkDVzASjg",
-    authDomain: process.env.REACT_APP_AUTH_DOMAIN || `${FALLBACK_PROJECT_ID}.firebaseapp.com`,
-    projectId: process.env.REACT_APP_PROJECT_ID || FALLBACK_PROJECT_ID,
-    storageBucket: process.env.REACT_APP_STORAGE_BUCKET || `${FALLBACK_PROJECT_ID}.appspot.com`,
+// Chiave API (Deve essere sempre la stessa che hai in .env.local e Netlify)
+const FALLBACK_API_KEY = "AIzaSyC59l73xl56aOdHnQ8I3K1VqYbkDVzASjg"; 
+
+// Configurazione centralizzata che legge le variabili d'ambiente (Netlify/React)
+const firebaseConfig = {
+    // Legge da process.env o usa il fallback statico
+    apiKey: process.env.REACT_APP_API_KEY || FALLBACK_API_KEY, 
+    authDomain: process.env.REACT_APP_AUTH_DOMAIN || "marcatempotcsitalia.firebaseapp.com",
+    projectId: process.env.REACT_APP_PROJECT_ID || "marcatempotcsitalia",
+    storageBucket: process.env.REACT_APP_STORAGE_BUCKET || "marcatempotcsitalia.appspot.com",
     messagingSenderId: process.env.REACT_APP_MESSAGING_SENDER_ID || "755809435347",
     appId: process.env.REACT_APP_APP_ID || "1:755809435347:web:c5c9edf8f8427e66c71e26"
 };
 
-let app;
-let db;
-let auth;
-let functions;
+let appInstance = null;
+let dbInstance = null;
+let authInstance = null;
+let functionsInstance = null;
 let initializationError = null;
 
 try {
-    if (!FIREBASE_CONFIG.apiKey || !FIREBASE_CONFIG.projectId || FIREBASE_CONFIG.apiKey === 'undefined') {
+    // Controllo critico: Se la configurazione non è valida, lancia un errore
+    if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
         throw new Error("Credenziali Firebase mancanti o non valide.");
     }
     
-    // 1. Inizializzazione SINCRONA (Tenta di usare l'istanza esistente)
-    try {
-        app = getApp();
-    } catch (e) {
-        app = initializeApp(FIREBASE_CONFIG);
-    }
+    // Inizializza l'app se non è già stata inizializzata
+    appInstance = initializeApp(firebaseConfig);
     
-    // 2. Assegnazione SINCRONA delle istanze
-    db = getFirestore(app);
-    auth = getAuth(app);
-    functions = getFunctions(app, 'europe-west1');
-    
-} catch(e) {
-    console.error("ERRORE CRITICO DI INIZIALIZZAZIONE:", e);
+    // Setup servizi (Solo dopo l'inizializzazione dell'app)
+    dbInstance = getFirestore(appInstance);
+    authInstance = getAuth(appInstance);
+    functionsInstance = getFunctions(appInstance, 'europe-west1');
+
+} catch (e) {
+    console.error("Errore durante initializeApp:", e);
     initializationError = new Error(`Inizializzazione fallita: ${e.message}`);
 }
 
-// --- Esportazioni Statiche per Componenti ---
+// --- Hook Personalizzato per la Dashboard ---
+const useFirebase = () => {
+    const [isReady, setIsReady] = useState(false);
+    const [error, setError] = useState(null);
 
-export { db, auth, functions };
+    useEffect(() => {
+        let isMounted = true;
+        
+        const setupAuth = async () => {
+            if (initializationError) {
+                setError(initializationError);
+                return;
+            }
 
-// Esporta anche l'eventuale errore di inizializzazione
-export const INITIALIZATION_ERROR = initializationError; 
+            try {
+                // Autenticazione (Solo se non è già autenticato)
+                if (!authInstance.currentUser) {
+                    // Usiamo signInAnonymously per il primo avvio
+                    await signInAnonymously(authInstance); 
+                }
+                
+                if (isMounted) {
+                    setIsReady(true);
+                }
+            } catch (authErr) {
+                console.error("Errore di autenticazione in useFirebase:", authErr);
+                if (isMounted) {
+                    setError(new Error(`Autenticazione fallita: ${authErr.code}`));
+                }
+            }
+        };
+
+        setupAuth();
+        
+        return () => { isMounted = false; };
+    }, []);
+
+    // Ritorna le istanze e lo stato di prontezza/errore
+    return {
+        db: dbInstance,
+        auth: authInstance,
+        functions: functionsInstance,
+        isReady,
+        error: error || initializationError
+    };
+};
+
+// Esporta l'hook e l'errore statico per il componente Dashboard
+export { useFirebase, initializationError as INITIALIZATION_ERROR };
+// Esportazioni statiche per i vecchi file (App.js, ecc.)
+export { dbInstance as db, authInstance as auth, functionsInstance as functions };
