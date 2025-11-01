@@ -1,72 +1,53 @@
-// src/firebase.js
+/* src/firebase.js - Configurazione Centralizzata */
 
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 import { getFunctions } from "firebase/functions";
+// RIMOSSO: import React, { useState, useEffect } from 'react'; // Rimosso React dal modulo di inizializzazione
 
-/**
- * Recupera la prima variabile d'ambiente definita tra le possibili.
- * Accetta sia REACT_APP_FIREBASE_* che REACT_APP_* (compatibilità).
- */
-const pickEnv = (keys = []) => {
-  for (const k of keys) {
-    if (process.env[k]) return process.env[k];
-  }
-  return undefined;
+// --- Configurazione Iniziale ---
+const FALLBACK_PROJECT_ID = "marcatempotcsitalia";
+const FIREBASE_CONFIG = {
+    apiKey: process.env.REACT_APP_API_KEY || "AIzaSyC59l73xl56aOdHnQ8I3K1VqYbkDVzASjg",
+    authDomain: process.env.REACT_APP_AUTH_DOMAIN || `${FALLBACK_PROJECT_ID}.firebaseapp.com`,
+    projectId: process.env.REACT_APP_PROJECT_ID || FALLBACK_PROJECT_ID,
+    storageBucket: process.env.REACT_APP_STORAGE_BUCKET || `${FALLBACK_PROJECT_ID}.appspot.com`,
+    messagingSenderId: process.env.REACT_APP_MESSAGING_SENDER_ID || "755809435347",
+    appId: process.env.REACT_APP_APP_ID || "1:755809435347:web:c5c9edf8f8427e66c71e26"
 };
-
-// Supporta configurazione iniettata in window (public/index.html) oppure dalle env
-const configFromWindow = (typeof window !== "undefined" && window.__firebase_config) ? window.__firebase_config : null;
-
-const configFromEnv = {
-  apiKey: pickEnv(["REACT_APP_FIREBASE_API_KEY", "REACT_APP_API_KEY"]),
-  authDomain: pickEnv(["REACT_APP_FIREBASE_AUTH_DOMAIN", "REACT_APP_AUTH_DOMAIN"]),
-  projectId: pickEnv(["REACT_APP_FIREBASE_PROJECT_ID", "REACT_APP_PROJECT_ID"]),
-  storageBucket: pickEnv(["REACT_APP_FIREBASE_STORAGE_BUCKET", "REACT_APP_STORAGE_BUCKET"]),
-  messagingSenderId: pickEnv(["REACT_APP_FIREBASE_MESSAGING_SENDER_ID", "REACT_APP_MESSAGING_SENDER_ID"]),
-  appId: pickEnv(["REACT_APP_FIREBASE_APP_ID", "REACT_APP_APP_ID"]),
-};
-
-const firebaseConfig = configFromWindow || configFromEnv;
-
-// Controllo minimo e messaggio chiaro in console
-if (!firebaseConfig || !firebaseConfig.apiKey || !firebaseConfig.projectId) {
-  console.error("Firebase config missing or invalid. configFromWindow:", configFromWindow, "configFromEnv:", configFromEnv);
-  throw new Error("Invalid Firebase configuration. Set window.__firebase_config in public/index.html or REACT_APP_* variables in .env and rebuild.");
-}
-
-// (opzionale) mostra config in dev per debug se vuoi: impostare REACT_APP_DEBUG_FIREBASE=true
-if (process.env.REACT_APP_DEBUG_FIREBASE === "true") {
-  // non loggare chiavi in produzione!
-  // eslint-disable-next-line no-console
-  console.log("Using firebaseConfig:", { apiKey: firebaseConfig.apiKey ? "****" : undefined, projectId: firebaseConfig.projectId });
-}
 
 let app;
+let db;
+let auth;
+let functions;
+let initializationError = null;
+
 try {
-  app = initializeApp(firebaseConfig);
-} catch (err) {
-  console.error("Firebase initialization failed:", err);
-  throw err;
+    if (!FIREBASE_CONFIG.apiKey || !FIREBASE_CONFIG.projectId || FIREBASE_CONFIG.apiKey === 'undefined') {
+        throw new Error("Credenziali Firebase mancanti o non valide.");
+    }
+    
+    // 1. Inizializzazione SINCRONA (Tenta di usare l'istanza esistente)
+    try {
+        app = getApp();
+    } catch (e) {
+        app = initializeApp(FIREBASE_CONFIG);
+    }
+    
+    // 2. Assegnazione SINCRONA delle istanze
+    db = getFirestore(app);
+    auth = getAuth(app);
+    functions = getFunctions(app, 'europe-west1');
+    
+} catch(e) {
+    console.error("ERRORE CRITICO DI INIZIALIZZAZIONE:", e);
+    initializationError = new Error(`Inizializzazione fallita: ${e.message}`);
 }
 
-export const db = getFirestore(app);
-export const auth = getAuth(app);
+// --- Esportazioni Statiche per Componenti ---
 
-// Inizializzazione sicura di Cloud Functions senza usare `export` dentro try/catch
-export const functions = (() => {
-  try {
-    if (typeof getFunctions === "function") {
-      // specifica la regione se serve
-      return getFunctions(app, "europe-west1");
-    }
-    return undefined;
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.warn("Could not initialize Cloud Functions:", err);
-    return undefined;
-  }
-})();
+export { db, auth, functions };
 
-export default app;
+// Esporta anche l'eventuale errore di inizializzazione
+export const INITIALIZATION_ERROR = initializationError; 

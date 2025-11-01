@@ -1,10 +1,9 @@
 /* eslint-disable no-unused-vars */
 /* global __firebase_config, __initial_auth_token, __app_id */
 import React, { useState, useEffect, useMemo } from 'react';
-import { initializeApp, getApp } from 'firebase/app';
-import { getAuth, signInWithCustomToken, signInAnonymously } from 'firebase/auth';
+import { httpsCallable } from 'firebase/functions';
+import { signInWithCustomToken, signInAnonymously } from 'firebase/auth';
 import {
-  getFirestore,
   collection,
   query,
   where,
@@ -14,7 +13,9 @@ import {
   Timestamp,
   limit,
 } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+
+// Importazioni dalle istanze centralizzate (src/firebase.js)
+import { db, auth, functions, useFirebase, INITIALIZATION_ERROR } from '../firebase'; 
 
 // IMPORTAZIONE ESSENZIALE PER EXCEL/CSV
 const XLSX = typeof window !== 'undefined' && typeof window.XLSX !== 'undefined' ? window.XLSX : {};
@@ -65,65 +66,6 @@ function getDistanceInMeters(lat1, lon1, lat2, lon2) {
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
 }
-
-const getFirebaseConfigAndToken = () => {
-    // Variabili fornite dall'ambiente di runtime (Canvas/Deployment)
-    const firebaseConfigString = typeof __firebase_config !== 'undefined' ? __firebase_config : null;
-    const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-
-    let config = null;
-
-    // 1. Priorità: Variabili d'ambiente React (.env.local) per LOCOHOST
-    if (typeof process !== 'undefined' && process.env && process.env.REACT_APP_API_KEY) {
-        config = {
-            apiKey: process.env.REACT_APP_API_KEY,
-            authDomain: process.env.REACT_APP_AUTH_DOMAIN,
-            projectId: process.env.REACT_APP_PROJECT_ID,
-            storageBucket: process.env.REACT_APP_STORAGE_BUCKET,
-            messagingSenderId: process.env.REACT_APP_MESSAGING_SENDER_ID,
-            appId: process.env.REACT_APP_APP_ID || appId,
-        };
-        console.info("Firebase Config: Caricata da Variabili d'Ambiente React (.env.local)");
-    } 
-    // 2. Seconda Priorità: Variabili Globali Canvas (Produzione/Deployment)
-    else if (firebaseConfigString) {
-        try { config = JSON.parse(firebaseConfigString); } catch (e) { console.error("Errore nel parsing di __firebase_config:", e); }
-        console.info("Firebase Config: Caricata da Variabili Globali Canvas");
-    }
-
-    if (!config || !config.apiKey) {
-        console.error("ERRORE CRITICO: Nessuna configurazione Firebase valida trovata. L'autenticazione fallirà.");
-    }
-
-    return { firebaseConfig: config, initialAuthToken: initialAuthToken };
-};
-
-const roundTimeWithCustomRules = (date, type) => {
-    const newDate = new Date(date.getTime());
-    const minutes = newDate.getMinutes();
-
-    if (type === 'entrata') {
-        if (minutes >= 46) { newDate.setHours(newDate.getHours() + 1); newDate.setMinutes(0); } 
-        else if (minutes >= 16) { newDate.setMinutes(30); }
-        else { newDate.setMinutes(0); }
-    } else if (type === 'uscita') {
-        if (minutes >= 30) { newDate.setMinutes(30); }
-        else { newDate.setMinutes(0); }
-    }
-
-    newDate.setSeconds(0);
-    newDate.setMilliseconds(0);
-    return newDate;
-};
-
-const calculateTotalHours = (clockInTime, clockOutTime) => {
-    if (!clockInTime || !clockOutTime) return 0;
-    const durationMs = clockOutTime.toDate() - clockInTime.toDate();
-    const durationHours = durationMs / 3600000;
-    return durationHours;
-};
-
 
 // --- Componente GPS / Stato Dispositivo (Spostato fuori dallo scope di render) ---
 const GpsAreaStatusBlock = ({ activeEntry, isGpsRequired, locationError, inRangeArea, employeeWorkAreas }) => {
@@ -177,13 +119,17 @@ const GpsAreaStatusBlock = ({ activeEntry, isGpsRequired, locationError, inRange
 // COMPONENTE PRINCIPALE
 // =================================================================================
 const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) => {
-    // Stati locali per Firebase
-    const [isFirebaseReady, setIsFirebaseReady] = useState(false);
-    const [dbInstance, setDbInstance] = useState(null);
-    const [authInstance, setAuthInstance] = useState(null);
-    const [authError, setAuthError] = useState(null);
+    // USA L'HOOK FIREBASE (Definito in ../firebase)
+    const { 
+        db: dbInstance, 
+        auth: authInstance, 
+        functions: functionsInstance, 
+        isReady: isFirebaseReady, 
+        error: firebaseHookError 
+    } = useFirebase();
 
-    // Stati per la Dashboard
+    // Stati locali per la gestione interna della dashboard
+    const [authError, setAuthError] = useState(null);
     const [currentTime, setCurrentTime] = useState(new Date());
     const [activeEntry, setActiveEntry] = useState(null);
     const [todaysEntries, setTodaysEntries] = useState([]);
@@ -191,108 +137,37 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     const [isProcessing, setIsProcessing] = useState(false);
     const [locationError, setLocationError] = useState(null);
     const [inRangeArea, setInRangeArea] = useState(null);
-
-    // Nuovo stato per la gestione del ritardo di Firestore
     const [isDataReady, setIsDataReady] = useState(false); 
 
-    // Stati per report Excel (ex PDF)
+    // Stati per report Excel
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
-    // Variabili per funzioni Cloud (vengono definite solo dopo l'inizializzazione dell'app)
-    const [cloudFunctions, setCloudFunctions] = useState({});
-
-    // DICHIARAZIONI DEGLI ARRAY DI UTILITY (Nello scope corretto del componente)
+    // DICHIARAZIONI DEGLI ARRAY DI UTILITY
     const months = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
     const years = [new Date().getFullYear(), new Date().getFullYear() - 1]; // Anno corrente e precedente
 
-    // Variabile di stato per la pausa 
-    const isPauseUsed = activeEntry?.pauses?.length > 0 && activeEntry.pauses.every(p => p.end); // Usufruita solo se tutte le pause hanno end
-    const isInPause = activeEntry?.pauses?.some(p => p.start && !p.end); // In corso se almeno una non ha end
-    const isPauseUsedOrActive = activeEntry?.pauses?.length > 0; // Se c'è almeno una pausa, è usata o attiva
+    // Variabili di stato per la pausa (Derivate)
+    const isPauseUsed = activeEntry?.pauses?.length > 0 && activeEntry.pauses.every(p => p.end); 
+    const isInPause = activeEntry?.pauses?.some(p => p.start && !p.end); 
+    const isPauseUsedOrActive = activeEntry?.pauses?.length > 0; 
 
-
-    // 1. INIZIALIZZAZIONE FIREBASE (eseguita una sola volta)
+    // Assegnazione delle istanze di Firebase e Cloud Functions per uso locale
+    const db = dbInstance;
+    const auth = authInstance;
+    
+    const clockIn = functionsInstance ? httpsCallable(functionsInstance, 'clockEmployeeIn') : () => { throw new Error('Functions non pronte'); };
+    const clockOut = functionsInstance ? httpsCallable(functionsInstance, 'clockEmployeeOut') : () => { throw new Error('Functions non pronte'); };
+    const applyAutoPauseEmployee = functionsInstance ? httpsCallable(functionsInstance, 'applyAutoPauseEmployee') : () => { throw new Error('Functions non pronte'); };
+    const endEmployeePause = functionsInstance ? httpsCallable(functionsInstance, 'endEmployeePause') : () => { throw new Error('Functions non pronte'); };
+    
+    // Controlla se c'è un errore di inizializzazione
     useEffect(() => {
-        let isMounted = true;
-        const setupFirebase = async () => {
-            try {
-                const { firebaseConfig, initialAuthToken } = getFirebaseConfigAndToken();
-
-                if (!firebaseConfig || !firebaseConfig.apiKey) {
-                    console.error("ERRORE: La configurazione Firebase non è valida. Impossibile inizializzare.");
-                    if (isMounted) setAuthError("Configurazione Firebase non valida.");
-                    return;
-                }
-
-                // Inizializza App: usa un nome non di default per evitare conflitti.
-                let app;
-                try {
-                    app = getApp();
-                } catch (e) {
-                    app = initializeApp(firebaseConfig);
-                }
-
-                // Setup servizi
-                const firestore = getFirestore(app);
-                const auth = getAuth(app);
-
-                if (isMounted) {
-                    setDbInstance(firestore);
-                    setAuthInstance(auth);
-                }
-
-                // Autenticazione: attendiamo l'autenticazione prima di procedere
-                try {
-                    if (initialAuthToken) {
-                        await signInWithCustomToken(auth, initialAuthToken);
-                        console.info("Autenticazione con token personalizzato riuscita.");
-                    } else {
-                        // Tenta l'autenticazione anonima come fallback
-                        await signInAnonymously(auth); 
-                        console.info("Autenticazione anonima (fallback) riuscita.");
-                    }
-                } catch (authErr) {
-                    console.error("Errore di autenticazione Firebase:", authErr.code, authErr);
-                    if (authErr.code === 'auth/admin-restricted-operation' || authErr.code === 'auth/invalid-custom-token') {
-                        // Questo è l'errore che vedi in locale quando le regole di sicurezza bloccano
-                         console.warn("ATTENZIONE: Autenticazione fallita (Permessi bloccati).");
-                         if (isMounted) setAuthError(`Errore grave di autenticazione: ${authErr.code}. Controlla il file .env.local e le regole di Firestore.`);
-                    } else {
-                        if (isMounted) setAuthError(`Errore critico di autenticazione: ${authErr.message}. Riprova.`);
-                        return;
-                    }
-                }
-
-
-                // Inizializzazione Cloud Functions (richiede l'istanza dell'app)
-                const functionsInstance = getFunctions(app, 'europe-west1');
-
-                if (isMounted) {
-                    setCloudFunctions({
-                        clockIn: httpsCallable(functionsInstance, 'clockEmployeeIn'),
-                        clockOut: httpsCallable(functionsInstance, 'clockEmployeeOut'),
-                        applyAutoPauseEmployee: httpsCallable(functionsInstance, 'applyAutoPauseEmployee'),
-                        endEmployeePause: httpsCallable(functionsInstance, 'endEmployeePause'),
-                    });
-                    setIsFirebaseReady(true);
-                }
-            } catch (error) {
-                console.error("Errore Critico Setup Firebase:", error);
-                if (isMounted) setAuthError(`Errore di inizializzazione: ${error.message}`);
-            }
-        };
-
-        setupFirebase();
-
-        return () => { isMounted = false; }; // Clean up
-    }, []);
-
-
-    // Destrutturazione delle funzioni per uso più pulito
-    const { clockIn, clockOut, applyAutoPauseEmployee, endEmployeePause } = cloudFunctions;
-    const db = dbInstance; // Riferimento a Firestore per la compatibilità con il codice esistente
+        if (INITIALIZATION_ERROR || firebaseHookError) {
+            setAuthError(INITIALIZATION_ERROR?.message || firebaseHookError?.message || "Errore di configurazione non specificato.");
+        }
+    }, [firebaseHookError]);
 
 
     // Aggiorna ora corrente (Invariato)
@@ -313,13 +188,14 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
 
     // Logica GPS (watchPosition per aggiornamenti continui) (Invariato)
     useEffect(() => {
-        // Se l'utente è timbrato, O non ha aree, O non richiede il GPS, ALLORA non avviare il GPS.
-        if (activeEntry || employeeWorkAreas.length === 0 || !isGpsRequired) {
+        // Se Firebase non è pronto, non avviare nulla
+        if (!isFirebaseReady || activeEntry || employeeWorkAreas.length === 0 || !isGpsRequired) {
             setLocationError(null);
             setInRangeArea(null);
             return;
         }
-
+        
+        // Logica per watchPosition...
         if (typeof navigator === 'undefined' || !navigator.geolocation) {
             setLocationError("La geolocalizzazione non è supportata.");
             return;
@@ -349,7 +225,6 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             if (!isMounted) return;
             console.error("Errore Geolocalizzazione:", error);
             let message = "Impossibile recuperare la posizione.";
-            // Geolocation API standard codes: 1 = PERMISSION_DENIED, 2 = POSITION_UNAVAILABLE, 3 = TIMEOUT
             if (error?.code === 1) message = "Permesso di geolocalizzazione negato.";
             else if (error?.code === 2) message = "Posizione non disponibile.";
             else if (error?.code === 3) message = "Timeout nel recuperare la posizione.";
@@ -366,14 +241,13 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             isMounted = false;
             if (watchId !== null) navigator.geolocation.clearWatch(watchId);
         };
-    }, [employeeWorkAreas, activeEntry, isGpsRequired]);
+    }, [isFirebaseReady, employeeWorkAreas, activeEntry, isGpsRequired]);
 
 
     // Listener Firestore per timbratura attiva e timbrature odierne
     useEffect(() => {
-        // Controlli robusti per evitare errori se i dati non sono pronti
-        if (!user?.uid || !employeeData?.id || !Array.isArray(allWorkAreas) || !db || !isFirebaseReady) {
-            // Aggiungo un piccolo debounce per assicurarmi che i dati arrivino prima di impostare lo stato
+        // Controlli robusti per evitare l'errore 'Cannot access db'
+        if (!isFirebaseReady || !user?.uid || !employeeData?.id || !Array.isArray(allWorkAreas) || !db) {
             const timeout = setTimeout(() => setIsDataReady(false), 100); 
             setActiveEntry(null);
             setTodaysEntries([]);
@@ -391,7 +265,6 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
         const unsubscribeActive = onSnapshot(qActive, (snapshot) => {
             if (!isMounted) return;
             
-            // QUESTO È IL PUNTO CRITICO: AGGIORNA ACTIVE ENTRY DA FIRESTORE
             if (!snapshot.empty) {
                 const entryData = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
                 setActiveEntry(entryData); 
@@ -401,15 +274,14 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 setActiveEntry(null); 
                 setWorkAreaName('');
             }
-            // Indica che i dati sono arrivati
             setIsDataReady(true);
 
         }, (error) => {
-            console.error("Errore listener timbratura attiva (Firestore Rules):", error);
+            console.error("Errore listener timbratura attiva:", error);
             if (error.code === 'permission-denied') {
                  setAuthError("Errore Autorizzazione Firestore: permesso negato per le timbrature.");
             }
-            setIsDataReady(true); // Se fallisce, almeno la UI può sbloccarmi
+            setIsDataReady(true); 
         });
 
         // Listener timbrature odierne
@@ -422,7 +294,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             if (!isMounted) return;
             setTodaysEntries(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         }, (error) => {
-            console.error("Errore listener timbratura odierne (Firestore Rules):", error);
+            console.error("Errore listener timbratura odierne:", error);
         });
 
         // Funzione di pulizia
@@ -430,20 +302,19 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
              unsubscribeActive();
              unsubscribeTodays();
         };
-    // Dipendenze aggiornate
     }, [isFirebaseReady, db, user?.uid, employeeData, employeeData?.id, allWorkAreas]);
 
 
     // --- GESTIONE AZIONI TIMBRATURA/PAUSA ---
     const handleAction = async (action) => {
         // Check per Firebase/Cloud Functions
-        if (!isFirebaseReady || isProcessing || !clockIn || !clockOut) {
+        if (!isFirebaseReady || isProcessing) {
             console.warn("Firebase non è pronto o altra azione in corso.");
             return;
         }
 
         // Verifica Autenticazione in tempo reale
-        if (!authInstance.currentUser || authInstance.currentUser.isAnonymous) {
+        if (!auth.currentUser || auth.currentUser.isAnonymous) {
             console.error("Non autorizzato. Utente non autenticato o anonimo.");
             setAuthError("Operazione bloccata: Utente non completamente autenticato. Riprova il login.");
             return;
@@ -458,15 +329,13 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             const currentActiveEntry = activeEntry;
 
             if (action === 'clockIn') {
-                // Prevenzione del doppio clock in
                 await new Promise(resolve => setTimeout(resolve, 50)); 
                 if (currentActiveEntry) throw new Error("Hai già una timbratura attiva. Riprova a ricaricare."); 
 
                 let areaIdToClockIn = null;
                 const note = isGpsRequired ? '' : 'senza GPS Manutentore';
                 
-                // NUOVA LOGICA: Acquisisce l'UID come DeviceId (più stabile in un contesto web)
-                const deviceId = authInstance.currentUser?.uid || 'unknown_device'; 
+                const deviceId = auth.currentUser?.uid || 'unknown_device'; 
 
                 if (isGpsRequired) {
                     if (!inRangeArea) throw new Error("Devi essere all'interno di un'area rilevata.");
@@ -478,11 +347,10 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                     areaIdToClockIn = employeeWorkAreas[0].id;
                 }
 
-                // Chiama la Cloud Function, PASSANDO il deviceId
                 result = await clockIn({ 
                     areaId: areaIdToClockIn, 
                     note: note,
-                    deviceId: deviceId // <--- NUOVO PARAMETRO PER IL BACKEND
+                    deviceId: deviceId 
                 });
 
                 if (result.data.success) {
@@ -516,12 +384,10 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
 
             } else if (action === 'clockPause') {
                 if (!currentActiveEntry) throw new Error("Devi avere una timbratura attiva.");
-                // Controlla se una pausa è già stata usufruita (lunghezza array pauses > 0)
                 if (currentActiveEntry.pauses?.length > 0) { 
                     throw new Error("Hai già usufruito della pausa per questo turno. La pausa è fissa.");
                 }
 
-                // Se non ci sono pause: applica la pausa se configurata
                 const currentArea = allWorkAreas.find(a => a.id === currentActiveEntry.workAreaId);
                 const pauseDuration = currentArea?.pauseDuration;
 
@@ -542,7 +408,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 const isInPauseCheck = currentActiveEntry.pauses?.some(p => p.start && !p.end);
                 if (!isInPauseCheck) throw new Error("Non sei in pausa.");
 
-                result = await endEmployeePause(); // Chiama la Cloud Function per terminare la pausa
+                result = await endEmployeePause();
 
                 if (result.data.success) {
                     console.log(`Pausa terminata con successo.`);
@@ -576,7 +442,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
         }
 
         // Verifica Autenticazione in tempo reale
-        if (!authInstance.currentUser || authInstance.currentUser.isAnonymous) {
+        if (!auth.currentUser || auth.currentUser.isAnonymous) {
              setAuthError("Operazione Report bloccata: Utente non completamente autenticato.");
              setIsGeneratingReport(false);
              return;
@@ -732,13 +598,30 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     // Fine funzione generazione Excel
 
 
-    // Dobbiamo mostrare 'Caricamento...' finché il listener non ha risposto (isDataReady)
+    // --- Blocco di Caricamento e Errore ---
+
+    // Priorità alta: Se c'è un errore di inizializzazione statica, mostralo immediatamente.
+    if (INITIALIZATION_ERROR || firebaseHookError) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+                <div className="text-center p-6 bg-white rounded-lg shadow-xl border-t-4 border-red-500">
+                    <p className="text-xl font-bold text-red-600 mb-2">ERRORE CRITICO DI INIZIALIZZAZIONE</p>
+                    <p className="text-sm text-gray-700">Il sistema non ha potuto connettersi a Firebase.</p>
+                    <p className="text-xs text-red-500 mt-2 font-mono">
+                        {INITIALIZATION_ERROR?.message || firebaseHookError?.message || "Verifica le chiavi API/Credenziali .env"}
+                    </p>
+                </div>
+            </div>
+        );
+    }
+
+    // Dobbiamo mostrare 'Caricamento...' finché l'hook non ha finito l'autenticazione (isReady)
     if (!isFirebaseReady || !employeeData || !isDataReady) {
         return (
              <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
                  <div className="text-center p-6 bg-white rounded-lg shadow-xl">
                      <p className="text-xl font-bold text-indigo-600 mb-2">Caricamento dati...</p>
-                     {/* Mostra ERRORE AUTENTICAZIONE/CONFIGURAZIONE */}
+                     {/* Mostra ERRORE AUTENTICAZIONE/CONFIGURAZIONE (Se fallisce l'Auth dopo l'inizializzazione) */}
                      {authError && (
                          <p className="text-base text-red-600 mt-4 font-bold">ERRORE CRITICO: {authError}</p>
                      )}
@@ -869,10 +752,8 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             {/* Box Cronologia Odierna (ULTRA-COMPATTO) */}
             <div className="bg-white p-4 rounded-lg shadow-md mb-6">
                 <h2 className="text-xl font-bold mb-2">Timbrature di Oggi</h2>
-                {/* Rimosso space-y-1 sul contenitore principale per compattare ulteriormente */}
                 <div className="max-h-60 overflow-y-auto space-y-1"> 
                     {todaysEntries.length > 0 ? todaysEntries.map(entry => (
-                        // Aggiunto gap-y-0.5 per micro-spazio tra le timbrature
                         <div key={entry.id} className="text-sm border-b pb-1 last:border-b-0 leading-tight space-y-0">
                             {/* RIGA PRINCIPALE ENTRATA/USCITA: usa flex compatto */}
                             <div className="flex justify-between w-full gap-x-2 pt-0.5">

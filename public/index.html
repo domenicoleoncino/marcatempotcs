@@ -21,19 +21,20 @@
   <body>
     <noscript>Devi abilitare JavaScript per eseguire questa app.</noscript>
     <div id="root"></div>
-    
+
+    <!-- TEMP: inietta config Firebase per test locale (NON committare) -->
     <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('%PUBLIC_URL%/service-worker.js')
-            .then(registration => {
-              console.log('Service Worker registrato con successo: ', registration);
-            })
-            .catch(registrationError => {
-              console.log('Registrazione del Service Worker fallita: ', registrationError);
-            });
-        });
-      }
+      window.__firebase_config = {
+        apiKey: "TUO_API_KEY",
+        authDomain: "tuo-progetto.firebaseapp.com",
+        projectId: "tuo_project_id",
+        storageBucket: "tuo_project.appspot.com",
+        messagingSenderId: "SENDER_ID",
+        appId: "APP_ID"
+      };
+      console.log("TEMP: window.__firebase_config injected");
     </script>
+
+    <script src="%PUBLIC_URL%/static/js/bundle.js"></script>
   </body>
 </html>
