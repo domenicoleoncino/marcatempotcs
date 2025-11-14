@@ -11,8 +11,8 @@ import CompanyLogo from './CompanyLogo';
 import AdminModal from './AdminModal'; // Assicurati che il percorso sia corretto
 import { utils, writeFile } from 'xlsx';
 import { saveAs } from 'file-saver';
-//import jsPDF from 'jspdf';
-//import 'jspdf-autotable';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 // --- SUB-COMPONENTI INTERNI ---
 // Semplificata la firma per evitare ReferenceErrors, mantenendo solo le props necessarie.
