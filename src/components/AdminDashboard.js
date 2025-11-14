@@ -11,11 +11,12 @@ import CompanyLogo from './CompanyLogo';
 import AdminModal from './AdminModal'; // Assicurati che il percorso sia corretto
 import { utils, writeFile } from 'xlsx';
 import { saveAs } from 'file-saver';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+//import jsPDF from 'jspdf';
+//import 'jspdf-autotable';
 
 // --- SUB-COMPONENTI INTERNI ---
-const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours }) => (
+// Semplificata la firma per evitare ReferenceErrors, mantenendo solo le props necessarie.
+const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours }) => ( 
     <div>
         <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-4">Dashboard</h1>
         <div className="flex flex-col md:grid md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
@@ -151,7 +152,7 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                                 <button onClick={() => openModal('assignArea', emp)} className="text-xs text-indigo-600 hover:text-indigo-900 whitespace-nowrap">Assegna Aree (Tutte)</button>
                                                 <button onClick={() => openModal('editEmployee', emp)} className="text-xs text-green-600 hover:text-green-900">Modifica</button>
                                                 <button onClick={() => openModal('deleteEmployee', emp)} className="text-xs text-red-600 hover:text-red-900">Elimina</button>
-                                                <button onClick={() => handleGenerateEmployeeReportPDF(emp)} className="text-xs text-purple-600 hover:text-purple-900">PDF Report</button>
+                                                {/* <button onClick={() => handleGenerateEmployeeReportPDF(emp)} className="text-xs text-purple-600 hover:text-purple-900">PDF Report</button> <-- Rimosso */}
                                             </div>
                                         )}
                                         {/* Pulsanti specifici per Preposto */}
@@ -159,7 +160,7 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                              <div className="flex gap-2 w-full justify-start mt-1">
                                                  {/* Questo pulsante apre il modale per modificare assegnazioni SOLO per le aree del preposto */}
                                                  <button onClick={() => openModal('assignEmployeeToPrepostoArea', emp)} className="text-xs text-blue-600 hover:text-blue-900 whitespace-nowrap">Gestisci Mie Aree</button>
-                                                 <button onClick={() => handleGenerateEmployeeReportPDF(emp)} className="text-xs text-purple-600 hover:text-purple-900">PDF Report</button>
+                                                 {/* <button onClick={() => handleGenerateEmployeeReportPDF(emp)} className="text-xs text-purple-600 hover:text-purple-900">PDF Report</button> <-- Rimosso */}
                                              </div>
                                         )}
                                     </div>
@@ -688,42 +689,88 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
 
     // --- FUNZIONI HANDLER ---
-    const handleAdminClockIn = useCallback(async (areaId, timestamp) => {
-        if (!adminEmployeeProfile) return alert("Profilo dipendente non trovato.");
+
+    // 1. DEFINIZIONE DI openModal (Spostata all'inizio)
+    const openModal = useCallback((type, item = null) => {
+        setModalType(type);
+        setSelectedItem(item);
+        setShowModal(true);
+    }, []);
+
+    // CORREZIONE CHIAVE: Accetta l'oggetto 'data' completo dal Modale (non solo posizionali)
+    const handleAdminClockIn = useCallback(async (data) => {
+        // Destruttura tutti i campi attesi dal Modale (ora è un oggetto singolo)
+        const { employeeId, areaId, timestamp, location } = data; 
+        
+        // Questo controllo è solo per l'entrata self-service dell'admin, che abbiamo rimosso
+        // Se si timbra per un dipendente, l'ID dell'admin è nel user.uid
+        if (!employeeId) return alert("ID Dipendente mancante.");
+        if (!areaId || !timestamp) return alert("Dati orario o area non validi.");
+
         setIsActionLoading(true);
         try {
             const clockInFunction = httpsCallable(getFunctions(undefined, 'europe-west1'), 'manualClockIn');
+            
             await clockInFunction({
-                employeeId: adminEmployeeProfile.id,
+                employeeId: employeeId,
                 workAreaId: areaId,
                 timestamp: timestamp,
                 timezone: 'Europe/Rome',
-                adminId: user.uid
+                adminId: user.uid,
+                location: location // Passa la posizione fittizia 
             });
+            
             alert('Timbratura entrata registrata.');
             setShowModal(false);
-        } catch (error) { alert(`Errore: ${error.message}`); console.error(error); }
+            fetchData(); // <--- AGGIUNTO PER FORZARE REFRESH
+        } catch (error) { 
+             // Gestione errore per mostrare il popup generico 'Errore internali'
+             alert(`Errore: ${error.message}`); 
+             console.error("Errore handleAdminClockIn:", error); 
+        }
         finally { setIsActionLoading(false); }
-    }, [adminEmployeeProfile, user, setShowModal]);
+    }, [user, setShowModal, fetchData]); // Aggiunto fetchData a dipendenze
 
-    const handleAdminClockOut = useCallback(async () => {
-        if (!adminActiveEntry) return alert("Nessuna timbratura attiva trovata.");
+    // NUOVA FUNZIONE PER CLOCK-OUT CON GPS PER ALTRI DIPENDENTI
+    const handleEmployeeClockOutWithGPS = useCallback(async ({ entryId, employeeId, timestamp, timezone, adminId, location }) => {
         setIsActionLoading(true);
         try {
             const clockOutFunction = httpsCallable(getFunctions(undefined, 'europe-west1'), 'manualClockOut');
-            const now = new Date();
-            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-            const currentTime = now.toISOString().slice(0, 16);
+            
             await clockOutFunction({
-                employeeId: adminEmployeeProfile.id,
-                timestamp: currentTime,
-                timezone: 'Europe/Rome',
-                adminId: user.uid
+                entryId,
+                employeeId,
+                timestamp,
+                timezone,
+                adminId,
+                location // Dati di geolocalizzazione (anche fittizi 0,0)
             });
+            
             alert('Timbratura uscita registrata.');
-        } catch (error) { alert(`Errore: ${error.message}`); console.error(error); }
+            
+            setShowModal(false); 
+            fetchData(); // <--- AGGIUNTO PER FORZARE REFRESH
+            
+        } catch (error) { 
+            alert(`Errore: ${error.message}`); 
+            console.error("Errore Timbratura Uscita con GPS:", error);
+        }
         finally { setIsActionLoading(false); }
-    }, [adminActiveEntry, user, adminEmployeeProfile]);
+    }, [setShowModal, fetchData]);
+    
+    
+    // FUNZIONE PER APRIRE IL MODALE DI CLOCK-OUT DELL'ADMIN (rimossa l'interfaccia self-service)
+    const handleAdminClockOut = useCallback(() => {
+        if (!adminActiveEntry) return alert("Nessuna timbratura attiva trovata.");
+        
+        // Apre il modale per forzare la richiesta GPS
+        openModal('adminClockOut', { 
+            displayName: userData?.name && userData?.surname ? `${userData.name} ${userData.surname}` : user?.email,
+            id: adminActiveEntry.id, // ID della time_entry
+            userId: adminActiveEntry.employeeId, // ID del dipendente/admin
+            activeEntry: adminActiveEntry // Passa l'intera entry attiva
+        });
+    }, [adminActiveEntry, userData, user, openModal]); // openModal ora è definita prima
 
     const handleAdminPause = useCallback(async () => {
         if (!adminActiveEntry) return alert("Nessuna timbratura attiva.");
@@ -749,17 +796,13 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             await applyPauseFunction({ timeEntryId: employee.activeEntry.id, durationMinutes: pauseDurationInMinutes });
             alert(`Pausa predefinita di ${pauseDurationInMinutes} minuti applicata a ${employee.name}.`);
             setShowModal(false);
+            fetchData(); // <--- AGGIUNTO PER FORZARE REFRESH
         } catch (error) { alert(`Errore applicazione pausa: ${error.message}`); console.error(error); }
         finally {
             setIsActionLoading(false);
         }
-    }, [allWorkAreas, setShowModal]);
+    }, [allWorkAreas, setShowModal, fetchData]);
 
-    const openModal = useCallback((type, item = null) => {
-        setModalType(type);
-        setSelectedItem(item);
-        setShowModal(true);
-    }, []);
 
     // Genera report filtrato
     const generateReport = useCallback(async () => {
@@ -934,31 +977,8 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             <header className="bg-white shadow-md">
                  <div className="max-w-7xl mx-auto py-3 px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                      <CompanyLogo />
-                     {adminEmployeeProfile && (
-                         <div className="bg-gray-50 p-2 rounded-lg border border-gray-200 text-center">
-                             {adminActiveEntry ? (
-                                 <div className="space-y-2">
-                                     <div>
-                                         <p className="text-sm font-semibold text-green-600">Sei al lavoro</p>
-                                         {adminActiveEntry.isOnBreak && <p className="text-xs font-semibold text-yellow-600">In Pausa</p>}
-                                     </div>
-                                     <div className="flex gap-2 justify-center">
-                                         <button onClick={handleAdminPause} disabled={isActionLoading} className={`text-xs px-3 py-1 text-white rounded ${adminActiveEntry.isOnBreak ? 'bg-green-500 hover:bg-green-600' : 'bg-yellow-500 hover:bg-yellow-600'} disabled:opacity-50`}>
-                                             {adminActiveEntry.isOnBreak ? 'Termina Pausa' : 'Inizia Pausa'}
-                                         </button>
-                                         <button onClick={handleAdminClockOut} disabled={adminActiveEntry.isOnBreak || isActionLoading} className="text-xs px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 disabled:bg-gray-400 disabled:opacity-50">
-                                             Timbra Uscita
-                                         </button>
-                                     </div>
-                                 </div>
-                             ) : (
-                                 <div>
-                                     <p className="text-sm font-semibold text-red-600">Non sei al lavoro</p>
-                                     <button onClick={() => openModal('adminClockIn', adminEmployeeProfile)} disabled={isActionLoading} className="mt-1 text-xs px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50">Timbra Entrata</button>
-                                 </div>
-                             )}
-                         </div>
-                     )}
+                     {/* !!! RIMOSSO TUTTO IL BLOCCO DI CONTROLLO TIMBRATURA ADMIN/PREPOSTO !!! */}
+                     {/* {adminEmployeeProfile && ( ... )} */}
                      <div className="flex items-center space-x-4">
                          <span className="text-sm text-gray-600 text-right">
                              {currentUserRole === 'admin' ? 'Admin' : 'Preposto'}:<br/>
@@ -1002,7 +1022,11 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
                 {/* Render della vista corrente */}
                 <main>
-                    {view === 'dashboard' && <DashboardView totalEmployees={managedEmployees.length} activeEmployeesDetails={activeEmployeesDetails} totalDayHours={totalDayHours} />}
+                    {view === 'dashboard' && <DashboardView 
+                        totalEmployees={managedEmployees.length} 
+                        activeEmployeesDetails={activeEmployeesDetails} 
+                        totalDayHours={totalDayHours} 
+                    />}
                     {view === 'employees' && <EmployeeManagementView employees={sortedAndFilteredEmployees} openModal={openModal} currentUserRole={currentUserRole} requestSort={requestSort} sortConfig={sortConfig} searchTerm={searchTerm} setSearchTerm={setSearchTerm} handleGenerateEmployeeReportPDF={handleGenerateEmployeeReportPDF} />}
                     {view === 'areas' && <AreaManagementView workAreas={workAreasWithHours} openModal={openModal} currentUserRole={currentUserRole} />}
                     {view === 'admins' && currentUserRole === 'admin' && <AdminManagementView admins={admins} openModal={openModal} user={user} superAdminEmail={superAdminEmail} currentUserRole={currentUserRole} onDataUpdate={fetchData} />}
@@ -1025,6 +1049,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                      userData={userData} // Passa i dati dell'utente loggato
                      onAdminClockIn={handleAdminClockIn}
                      onAdminApplyPause={handleAdminApplyPause}
+                     onEmployeeClockOutWithGPS={handleEmployeeClockOutWithGPS}
                  />
              )}
         </div>
