@@ -1,39 +1,31 @@
-name: Deploy Firebase Functions
+# Nome del workflow che vedrai su GitHub
+name: Deploy to Firebase Hosting
 
+# Questo dice a GitHub di eseguire il workflow
+# ogni volta che fai un push sul branch "main"
 on:
   push:
     branches:
       - main
-    paths:
-      - 'functions/**'
-      - '.github/workflows/deploy-function.yml'
 
 jobs:
-  deploy_functions:
+  build_and_deploy:
+    # Usa l'ultima versione di Ubuntu come sistema operativo
     runs-on: ubuntu-latest
-    
-    env:
-      # PROJECT_ID MUST be used in lowercase in Firebase/GCP
-      GCP_PROJECT: marcatempotcsitalia 
-      
     steps:
+      # 1. Scarica il codice del tuo repository
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js 20
-        uses: actions/setup-node@v4
+      # 2. Installa le dipendenze e crea la versione di produzione del sito
+      - name: Install dependencies and build
+        run: npm ci && npm run build
+
+      # 3. Fa il deploy su Firebase Hosting
+      - name: Deploy to Firebase Hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
         with:
-          node-version: '20' 
-          cache: 'npm'
-          cache-dependency-path: 'functions/package-lock.json'
-
-      - name: Install Dependencies
-        run: npm install
-        working-directory: ./functions
-
-      - name: Install Firebase CLI
-        run: npm install -g firebase-tools
-        
-      - name: Deploy Firebase Functions via CLI
-        # NOTE: Using single quotes for the expression to ensure it's interpreted correctly by the shell (as discussed).
-        run: firebase deploy --only functions --token '${{ secrets.FIREBASE_SERVICE_ACCOUNT_MARCATEMPO_TCS }}' --project ${{ env.GCP_PROJECT }}
+          repoToken: '${{ secrets.GITHUB_TOKEN }}'
+          firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_MARCATEMPO_TCS }}'
+          channelId: live   
+          projectId: marcatempo-tcs
