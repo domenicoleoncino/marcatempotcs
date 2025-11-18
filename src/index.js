@@ -11,9 +11,9 @@ if (!container) {
 }
 const root = createRoot(container);
 root.render(
-  <React.StrictMode>
+  //<React.StrictMode>
     <App />
-  </React.StrictMode>
+  //</React.StrictMode>
 );
 
 // Dev: unregister any service workers to avoid DOM interference

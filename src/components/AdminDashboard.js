@@ -153,12 +153,20 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                                     <button onClick={() => openModal('deleteEmployee', emp)} className="text-xs text-red-600 hover:text-red-900">Elimina</button>
                                                 </>
                                             )}
-                                            {/* Pulsanti specifici per Preposto/Admin - RESET DEVICE */}
-                                            {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (
-                                                <button onClick={() => handleResetEmployeeDevice(emp)} disabled={emp.deviceIds?.length === 0} className="text-xs px-2 py-1 bg-yellow-500 text-gray-800 rounded-md hover:bg-yellow-600 whitespace-nowrap disabled:bg-gray-400 disabled:cursor-not-allowed">
-                                                    Reset Device
-                                                </button>
-                                            )}
+                                            {/* Pulsanti specifici per Preposto/Admin - RESET DEVICE & BYPASS RIPOSO */}
+                                            <div className='flex gap-2'>
+                                                {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (
+                                                    <>
+                                                        <button onClick={() => openModal('bypassRestPeriod', emp)} className="text-xs px-2 py-1 bg-purple-500 text-white rounded-md hover:bg-purple-600 whitespace-nowrap">
+                                                            Sblocca Riposo
+                                                        </button>
+                                                        <button onClick={() => handleResetEmployeeDevice(emp)} disabled={emp.deviceIds?.length === 0} className="text-xs px-2 py-1 bg-yellow-500 text-gray-800 rounded-md hover:bg-yellow-600 whitespace-nowrap disabled:bg-gray-400 disabled:cursor-not-allowed">
+                                                            Reset Device
+                                                        </button>
+                                                    </>
+                                                )}
+                                            </div>
+                                            
                                             {currentUserRole === 'preposto' && (
                                                 <button onClick={() => openModal('assignEmployeeToPrepostoArea', emp)} className="text-xs text-blue-600 hover:text-blue-900 whitespace-nowrap">Gestisci Mie Aree</button>
                                             )}
@@ -181,6 +189,7 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
     );
 };
 
+// ... (resto dei sub-componenti AreaManagementView, AdminManagementView, ReportView - INVARIATI) ...
 const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
     <div>
         <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
@@ -410,7 +419,7 @@ const ReportView = ({ reports, title, handleExportXml }) => {
 // --- COMPONENTE PRINCIPALE ---
 const AdminDashboard = ({ user, handleLogout, userData }) => {
 
-    console.log('[AdminDashboard] Ricevuto userData:', userData);
+    // console.log('[AdminDashboard] Ricevuto userData:', userData); // Mantenuto per debug
 
     const [view, setView] = useState('dashboard');
     const [allEmployees, setAllEmployees] = useState([]); // <-- Manteniamo tutti qui
@@ -438,13 +447,11 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const [workAreasWithHours, setWorkAreasWithHours] = useState([]);
 
     const currentUserRole = userData?.role;
-    const superAdminEmail = "domenico.leoncino@tcsitalia.com"; // Considera di metterla in config o variabile d'ambiente
+    const superAdminEmail = "domenico.leoncino@tcsitalia.com"; 
 
-    // --- CARICAMENTO DATI ---
+    // --- CARICAMENTO DATI (fetchData - INVARIATO) ---
     const fetchData = useCallback(async () => {
         if (!user || !userData) { setIsLoading(false); return; }
-        // Log aggiuntivo per sicurezza
-        console.log('[AdminDashboard] fetchData - userData:', userData);
         const role = userData?.role;
         if (role !== 'admin' && role !== 'preposto') { setIsLoading(false); return; }
         setIsLoading(true);
@@ -458,7 +465,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
             setAllWorkAreas(allAreasList);
             setWorkAreasWithHours(allAreasList.map(a => ({...a, totalHours: 'N/D'})));
-            setAllEmployees(allEmployeesList); // Salva tutti i dipendenti nello stato
+            setAllEmployees(allEmployeesList); 
 
             // Trova il profilo 'employees' corrispondente all'admin/preposto loggato (se esiste)
             if (role === 'preposto' || (role === 'admin' && user.email !== superAdminEmail)) {
@@ -488,51 +495,37 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         } finally {
             setIsLoading(false);
         }
-    }, [user, userData, superAdminEmail]); // Dipendenze corrette
+    }, [user, userData, superAdminEmail]);
 
     useEffect(() => {
         if (user && userData) fetchData();
-    }, [user, userData, fetchData]); // fetchData è ora inclusa nelle dipendenze
+    }, [user, userData, fetchData]); 
 
 
-    // --- CALCOLI MEMOIZED ---
-    // Determina quali dipendenti mostrare nella tabella principale "Gestione Dipendenti"
+    // --- CALCOLI MEMOIZED (managedEmployees e sortedAndFilteredEmployees - INVARIATI) ---
     const managedEmployees = useMemo(() => {
-        // Log aggiuntivo per vedere cosa usa per filtrare
-        console.log('[AdminDashboard] managedEmployees - Ruolo:', currentUserRole, 'Managed IDs:', userData?.managedAreaIds);
-        
-        // Se l'utente è Admin, mostra tutti i dipendenti.
         if (currentUserRole === 'admin') {
-            console.log("Admin - Mostro tutti i dipendenti:", allEmployees.length);
             return allEmployees;
         }
 
-        // Se l'utente è Preposto, usiamo l'array corretto o un array vuoto per il fallback.
         if (currentUserRole === 'preposto') {
-            // Seleziona l'array managedAreaIds. Usa [] se è undefined, null, o non è un array.
             const managedAreaIds = userData?.managedAreaIds || []; 
-
             if (managedAreaIds.length === 0) {
-                 // NESSUNA AREA GESTITA = NESSUN DIPENDENTE GESTITO
                  return [];
             }
             
-            // Filtra l'intera lista di dipendenti (allEmployees)
             const filtered = allEmployees.filter(emp =>
-                // Verifica se almeno uno degli ID in workAreaIds è presente in managedAreaIds
                 emp.workAreaIds &&
                 emp.workAreaIds.some(areaId => managedAreaIds.includes(areaId))
             );
             return filtered;
         }
 
-        return []; // Default sicuro
+        return []; 
     }, [allEmployees, currentUserRole, userData]);
 
 
-    // Ordina e filtra i dipendenti da mostrare nella tabella
     const sortedAndFilteredEmployees = useMemo(() => {
-        // Prende la lista già filtrata da managedEmployees
         const employeesWithDetails = managedEmployees.map(emp => ({
             ...emp,
             workAreaNames: (emp.workAreaIds || []).map(id => allWorkAreas.find(a => a.id === id)?.name).filter(Boolean),
@@ -541,21 +534,18 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         
         let filterableItems = [...employeesWithDetails];
         
-        // Applica il filtro di ricerca testuale
         if (searchTerm) {
             const lowercasedFilter = searchTerm.toLowerCase();
             filterableItems = filterableItems.filter(emp => `${emp.name} ${emp.surname}`.toLowerCase().includes(lowercasedFilter));
         }
         
-        // Applica l'ordinamento
         if (sortConfig.key) {
-             filterableItems.sort((a, b) => { // CORREZIONE: usiamo filterableItems qui
+             filterableItems.sort((a, b) => { 
                  let aValue = (sortConfig.key === 'name') ? `${a.name} ${a.surname}` : a[sortConfig.key];
                  let bValue = (sortConfig.key === 'name') ? `${b.name} ${b.surname}` : b[sortConfig.key];
-                 // Gestione valori null o undefined per l'ordinamento
-                 if (aValue == null) aValue = ''; // Tratta null/undefined come stringa vuota
+
+                 if (aValue == null) aValue = ''; 
                  if (bValue == null) bValue = '';
-                 // Conversione a stringa per confronto robusto
                  aValue = String(aValue);
                  bValue = String(bValue);
 
@@ -568,31 +558,26 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     }, [managedEmployees, activeEmployeesDetails, searchTerm, allWorkAreas, sortConfig]);
 
 
-    // --- LISTENER ---
-    // Listener timbrature attive
+    // --- LISTENER (timbrature attive, ore totali - INVARIATI) ---
     useEffect(() => {
-        // Non partire se mancano dati essenziali
         if (!allEmployees.length || !allWorkAreas.length) return;
 
         const q = query(collection(db, "time_entries"), where("status", "==", "clocked-in"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const activeEntriesList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-            // Aggiorna lo stato della timbratura attiva dell'admin/preposto loggato
             if (adminEmployeeProfile) {
                 const adminEntry = activeEntriesList.find(entry => entry.employeeId === adminEmployeeProfile.id);
                 setAdminActiveEntry(adminEntry ? { ...adminEntry, id: adminEntry.id, isOnBreak: adminEntry.pauses?.some(p => !p.end) || false } : null);
             }
 
-            // Prepara i dettagli per la dashboard "Chi è al lavoro ora"
             const details = activeEntriesList
-                .filter(entry => entry.clockInTime) // Assicurati che ci sia un tempo di entrata
+                .filter(entry => entry.clockInTime) 
                 .map(entry => {
                     const employee = allEmployees.find(emp => emp.id === entry.employeeId);
                     const area = allWorkAreas.find(ar => ar.id === entry.workAreaId);
-                    const isOnBreak = entry.pauses?.some(p => !p.end) || false; // Controlla se c'è una pausa attiva
+                    const isOnBreak = entry.pauses?.some(p => !p.end) || false; 
 
-                    // FORMATTAZIONE ORA CORRETTA (Usando Intl.DateTimeFormat)
                     let clockInFormatted = 'N/D';
                     if (entry.clockInTime && typeof entry.clockInTime.toDate === 'function') {
                         try {
@@ -600,7 +585,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                            clockInFormatted = new Intl.DateTimeFormat('it-IT', {
                                hour: '2-digit',
                                minute: '2-digit',
-                               timeZone: 'Europe/Rome' // Specifica il fuso orario!
+                               timeZone: 'Europe/Rome' 
                            }).format(clockInDate);
                         } catch (e) { console.error("Errore formattazione ora entrata:", e); }
                     }
@@ -611,37 +596,33 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                         employeeName: employee ? `${employee.name} ${employee.surname}` : 'Sconosciuto',
                         areaName: area ? area.name : 'Sconosciuta',
                         workAreaId: entry.workAreaId,
-                        clockInTimeFormatted: clockInFormatted, // Usa l'ora formattata correttamente
-                        status: isOnBreak ? 'In Pausa' : 'Al Lavoro', // Mostra lo stato corretto
+                        clockInTimeFormatted: clockInFormatted, 
+                        status: isOnBreak ? 'In Pausa' : 'Al Lavoro', 
                         pauses: entry.pauses || []
                     };
                 })
-                // Filtra anche la dashboard se è preposto
                 .filter(detail => {
-                    if (currentUserRole === 'admin') return true; // Admin vede tutti
+                    if (currentUserRole === 'admin') return true; 
                     if (currentUserRole === 'preposto') {
-                         const managedAreaIds = userData?.managedAreaIds || []; // <<-- Accesso sicuro
-                         if (managedAreaIds.length === 0) return false; // Se non gestisce aree, non vede nulla
+                         const managedAreaIds = userData?.managedAreaIds || []; 
+                         if (managedAreaIds.length === 0) return false; 
 
-                        // Preposto vede solo se il dipendente è in una delle sue aree
                         const employee = allEmployees.find(emp => emp.id === detail.employeeId);
                         return employee?.workAreaIds?.some(waId => managedAreaIds.includes(waId));
                     }
-                    return false; // Altrimenti non mostra
+                    return false; 
                 })
-                .sort((a, b) => a.employeeName.localeCompare(b.employeeName)); // Ordina per nome
+                .sort((a, b) => a.employeeName.localeCompare(b.employeeName)); 
 
             setActiveEmployeesDetails(details);
         }, (error) => {
              console.error("Errore listener timbratura attive:", error);
              alert("Errore aggiornamento presenze.");
         });
-        return () => unsubscribe(); // Pulisce il listener
-    // Dipendenze aggiornate
+        return () => unsubscribe(); 
     }, [allEmployees, allWorkAreas, adminEmployeeProfile, currentUserRole, userData]);
 
 
-    // Listener ore totali oggi
     useEffect(() => {
         const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
         const q = query(collection(db, "time_entries"), where("clockInTime", ">=", Timestamp.fromDate(startOfDay)));
@@ -651,25 +632,20 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 const entry = doc.data();
                 if (!entry.clockInTime) return;
 
-                // Filtra ore totali se preposto
-                // Considera solo le timbrature dei dipendenti gestiti dal preposto
                 if (currentUserRole === 'preposto') {
-                     const managedAreaIds = userData?.managedAreaIds || []; // <<-- Accesso sicuro
-                     if (managedAreaIds.length === 0) return; // Se non gestisce aree, salta
+                     const managedAreaIds = userData?.managedAreaIds || []; 
+                     if (managedAreaIds.length === 0) return; 
 
                      const employee = allEmployees.find(emp => emp.id === entry.employeeId);
                      if (!employee || !employee.workAreaIds?.some(waId => managedAreaIds.includes(waId))) {
-                          return; // Salta questa timbratura se non è di un dipendente gestito
+                          return; 
                      }
                  }
 
                 const clockIn = entry.clockInTime.toDate();
-                // Se non c'è clockOut, considera 'now' solo se lo stato è 'clocked-in'
                 const clockOut = entry.clockOutTime ? entry.clockOutTime.toDate() : (entry.status === 'clocked-in' ? now : clockIn);
-                // Calcola durata pause completate
                 const pauseDurationMs = (entry.pauses || []).reduce((acc, p) => {
                     if (p.start && p.end) {
-                        // Gestisce sia Timestamp che Date (per compatibilità)
                         const startMillis = p.start.toMillis ? p.start.toMillis() : new Date(p.start).getTime();
                         const endMillis = p.end.toMillis ? p.end.toMillis() : new Date(p.end).getTime();
                         return acc + (endMillis - startMillis);
@@ -686,22 +662,20 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             alert("Errore aggiornamento ore totali.");
         });
         return () => unsubscribe();
-    // Dipendenze aggiornate
     }, [currentUserRole, userData, allEmployees]);
 
 
-    // --- FUNZIONI HANDLER ---
+    // --- FUNZIONI HANDLER (parzialmente INVARIATE) ---
     const handleAdminClockIn = useCallback(async (areaId, timestamp) => {
         if (!adminEmployeeProfile) return alert("Profilo dipendente non trovato.");
         setIsActionLoading(true);
         try {
             const clockInFunction = httpsCallable(getFunctions(undefined, 'europe-west1'), 'manualClockIn');
-            // Nota: Inviamo l'orario in formato ISO per garantire che il server lo interpreti correttamente
             await clockInFunction({
                 employeeId: adminEmployeeProfile.id,
                 workAreaId: areaId,
                 timestamp: timestamp,
-                timezone: 'Europe/Rome', // Manteniamo il timezone per coerenza con il server
+                timezone: 'Europe/Rome', 
                 adminId: user.uid
             });
             alert('Timbratura entrata registrata.');
@@ -716,12 +690,11 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         try {
             const clockOutFunction = httpsCallable(getFunctions(undefined, 'europe-west1'), 'manualClockOut');
             const now = new Date();
-            // Nota: Inviamo l'orario in formato ISO per garantire che il server lo interpreti correttamente
             const currentTime = now.toISOString().slice(0, 16); 
             await clockOutFunction({
                 employeeId: adminEmployeeProfile.id,
                 timestamp: currentTime,
-                timezone: 'Europe/Rome', // Manteniamo il timezone per coerenza con il server
+                timezone: 'Europe/Rome', 
                 adminId: user.uid
             });
             alert('Timbratura uscita registrata.');
@@ -784,7 +757,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         }
     }, [fetchData]);
     
-    // Genera report filtrato
+    // Genera report filtrato (omesso per brevità, invariato)
     const generateReport = useCallback(async () => {
         if (!dateRange.start || !dateRange.end) return alert("Seleziona date valide.");
         setIsLoading(true);
@@ -795,7 +768,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             const querySnapshot = await getDocs(q);
             let finalEntries = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-            // Filtro Preposto: mostra solo timbrature di dipendenti ASSEGNATI alle sue aree
             if (currentUserRole === 'preposto' && userData?.managedAreaIds) {
                 const managedAreaIds = userData.managedAreaIds;
                 const trulyManagedEmployeeIds = allEmployees
@@ -803,16 +775,13 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                   .map(emp => emp.id);
                 finalEntries = finalEntries.filter(entry => trulyManagedEmployeeIds.includes(entry.employeeId));
             }
-            // Filtro per dipendente specifico
             if (reportEmployeeFilter !== 'all') {
                 finalEntries = finalEntries.filter(entry => entry.employeeId === reportEmployeeFilter);
             }
-            // Filtro per area specifica
             if (reportAreaFilter !== 'all') {
                 finalEntries = finalEntries.filter(entry => entry.workAreaId === reportAreaFilter);
             }
 
-            // Calcola ore per area e formatta i dati
             const areaHoursMap = new Map(allWorkAreas.map(area => [area.id, 0]));
             const reportData = finalEntries.map(entry => {
                 const employee = allEmployees.find(e => e.id === entry.employeeId);
@@ -879,7 +848,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         finally { setIsLoading(false); }
     }, [dateRange, reportAreaFilter, reportEmployeeFilter, allEmployees, allWorkAreas, currentUserRole, userData]);
 
-    // Esporta report in XML
     const handleExportXml = useCallback((dataToExport) => {
         if (!dataToExport || dataToExport.length === 0) return alert("Nessun dato.");
         let xmlString = '<?xml version="1.0" encoding="UTF-8"?>\n<ReportTimbrature>\n';
@@ -901,9 +869,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         } catch (error) { alert("Errore salvataggio XML."); console.error(error); }
     }, [reportTitle]);
     
-    // RIMOSSA: handleGenerateEmployeeReportPDF
-
-    // Gestisce il click sulle intestazioni per ordinare
     const requestSort = useCallback((key) => {
         let direction = 'ascending';
         if (sortConfig?.key === key && sortConfig.direction === 'ascending') {
