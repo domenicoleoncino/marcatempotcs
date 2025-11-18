@@ -1,4 +1,4 @@
-// File: src/js/components/EmployeeDashboard.js (SENZA LOGICA RIPOSO E AGGIORNA STATO)
+// File: src/js/components/EmployeeDashboard.js (SINTASSI RIPRISTINATA)
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../firebase';
@@ -600,7 +600,6 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                             onClick={() => handleAction('clockIn')}
                             disabled={
                                 isProcessing || 
-                                // RIMOZIONE: isRestPeriodRequired || 
                                 (isGpsRequired && !inRangeArea) || 
                                 (!isGpsRequired && employeeWorkAreas.length === 0)
                             }
