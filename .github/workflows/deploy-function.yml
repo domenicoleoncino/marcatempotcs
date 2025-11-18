@@ -35,4 +35,4 @@ jobs:
         
       - name: Deploy Firebase Functions via CLI
         # Esegue il deploy usando il token fornito dalle secrets
-        run: firebase deploy --only functions --token ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MARCATEMPO_TCS }} --project ${{ env.GCP_PROJECT }}
+        run: firebase deploy --only functions --token ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MARCATEMPOTCSITALIA }} --project ${{ env.GCP_PROJECT }}
