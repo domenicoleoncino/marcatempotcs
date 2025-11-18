@@ -3,20 +3,18 @@ name: Deploy Firebase Functions
 on:
   push:
     branches:
-      - main # Il branch che innesca il deployment
+      - main
     paths:
-      - 'functions/**' # Innesca solo se ci sono modifiche in functions/
-      - '.github/workflows/deploy-function.yml' # O se il workflow stesso viene modificato
+      - 'functions/**'
+      - '.github/workflows/deploy-function.yml'
 
 jobs:
   deploy_functions:
     runs-on: ubuntu-latest
     
-    # Variabili d'ambiente per il job
     env:
-      GCP_PROJECT: marcatempotcsitalia # ID del tuo progetto Firebase
-      FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MARCATEMPOTCSITALIA }} # Nome del Service Account Secret
-
+      GCP_PROJECT: marcatempotcsitalia 
+      
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -32,12 +30,9 @@ jobs:
         run: npm install
         working-directory: ./functions
 
-      - name: Deploy Firebase Functions
-        uses: w9jds/firebase-action@v2
-        with:
-          args: deploy --only functions --project ${{ env.GCP_PROJECT }}
-          token: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MARCATEMPOTCSITALIA }} # Usa il Service Account come token
-          # Il w9jds/firebase-action esegue i comandi dalla root del progetto
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
         
-      - name: Verify Deployment (Optional)
-        run: echo "Deployment of functions finished for ${{ env.GCP_PROJECT }}"
+      - name: Deploy Firebase Functions via CLI
+        # Esegue il deploy usando il token fornito dalle secrets
+        run: firebase deploy --only functions --token ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MARCATEMPOTCSITALIA }} --project ${{ env.GCP_PROJECT }}

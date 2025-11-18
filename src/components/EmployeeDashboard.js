@@ -465,10 +465,10 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
         );
     }; 
     
-    // Funzione per forzare l'aggiornamento della pagina (Refresh Manuale)
-    const handleManualRefresh = () => {
-        window.location.reload();
-    };
+    
+
+
+    
 
 
     // --- Componente di stato GPS/Area ---
