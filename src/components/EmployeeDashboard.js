@@ -1,10 +1,14 @@
+// File: src/js/components/EmployeeDashboard.js (SINTASSI RIPRISTINATA)
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../firebase';
 import { collection, query, where, onSnapshot, orderBy, getDocs, Timestamp, limit } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import CompanyLogo from './CompanyLogo';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+// === NUOVE IMPORTAZIONI PER EXCEL ===
+import { utils, writeFile } from 'xlsx';
+
+// RIMOZIONE: const requiredRestHours = 8; 
 
 // Funzione distanza GPS (invariata)
 function getDistanceInMeters(lat1, lon1, lat2, lon2) {
@@ -25,25 +29,52 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     const [todaysEntries, setTodaysEntries] = useState([]);
     const [workAreaName, setWorkAreaName] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
+    const [isPauseAttempted, setIsPauseAttempted] = useState(false); // Flag di tentativo di pausa
     const [locationError, setLocationError] = useState(null);
     const [inRangeArea, setInRangeArea] = useState(null);
+    // RIMOZIONE: [lastClockOutTime, setLastClockOutTime]
+    // RIMOZIONE: [isRestBypassActive, setIsRestBypassActive]
 
-    // Stati per report PDF
+    // Stati per report Excel
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-    const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+    const [isGenerating, setIsGenerating] = useState(false);
 
     // Funzioni Cloud Firebase
     const functions = getFunctions(undefined, 'europe-west1');
     const clockIn = httpsCallable(functions, 'clockEmployeeIn');
     const clockOut = httpsCallable(functions, 'clockEmployeeOut');
     const applyAutoPauseEmployee = httpsCallable(functions, 'applyAutoPauseEmployee');
-    const endEmployeePause = httpsCallable(functions, 'endEmployeePause');
+
+
+    // === FUNZIONE HELPER AUDIO ===
+    const playSound = (fileName) => {
+        const audioPath = process.env.PUBLIC_URL + `/sounds/${fileName}.mp3`;
+        try {
+            const audio = new Audio(audioPath);
+            audio.play().catch(e => {
+                // Cattura l'errore NotAllowedError
+                console.warn(`Riproduzione audio fallita per ${fileName}:`, e);
+            });
+        } catch (e) {
+            console.warn("Errore creazione oggetto Audio:", e);
+        }
+    };
+    // =============================
+
+    // Funzione per forzare l'aggiornamento della pagina (Refresh Manuale)
+    const handleManualRefresh = () => {
+        window.location.reload();
+    };
 
 
     // Aggiorna ora corrente
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+        
+        // SUONO ALL'APERTURA DELL'APP
+        playSound('app_open');
+        
         return () => clearInterval(timer);
     }, []);
 
@@ -59,8 +90,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
 
     // Logica GPS (watchPosition per aggiornamenti continui)
     useEffect(() => {
-        // Se l'utente è timbrato, O non ha aree, O non richiede il GPS, ALLORA non avviare il GPS.
-        if (activeEntry || employeeWorkAreas.length === 0 || !isGpsRequired) {
+        if (employeeWorkAreas.length === 0 || !isGpsRequired) {
             setLocationError(null);
             setInRangeArea(null);
             return; // Non serve GPS
@@ -83,6 +113,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                     const distance = getDistanceInMeters(latitude, longitude, area.latitude, area.longitude);
                     if (distance <= area.radius) {
                         foundArea = area;
+                        break;
                     }
                 }
             }
@@ -94,9 +125,20 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             if (!isMounted) return;
             console.error("Errore Geolocalizzazione:", error);
             let message = "Impossibile recuperare la posizione.";
-            if (error.code === error.PERMISSION_DENIED) message = "Permesso di geolocalizzazione negato.";
+            
+            if (error.code === error.PERMISSION_DENIED) {
+                 message = "Permesso di geolocalizzazione negato. Aggiorna i permessi del browser o riavvia la pagina.";
+                 setInRangeArea(null);
+                 setLocationError(message);
+                 if (watchId !== null) {
+                      navigator.geolocation.clearWatch(watchId);
+                      watchId = null;
+                 }
+                 return;
+            }
             else if (error.code === error.POSITION_UNAVAILABLE) message = "Posizione non disponibile.";
             else if (error.code === error.TIMEOUT) message = "Timeout nel recuperare la posizione.";
+            
             setLocationError(message + " Controlla permessi e segnale.");
             setInRangeArea(null);
         };
@@ -107,16 +149,25 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
         );
 
-        return () => { // Pulizia
+        return () => {
             isMounted = false;
             if (watchId !== null) navigator.geolocation.clearWatch(watchId);
         };
-    }, [employeeWorkAreas, activeEntry, isGpsRequired]);
+    }, [employeeWorkAreas, isGpsRequired]); 
 
 
-    // Listener Firestore per timbratura attiva e timbrature (FILTRO AGGIUSTATO: user.uid)
+    // Calcolo stato pausa (controlla se c'è una pausa SENZA end)
+    const isInPause = activeEntry?.pauses?.some(p => p.start && !p.end);
+    
+    // Logica di Reset del flag di tentativo pausa
     useEffect(() => {
-        // Controlla che l'UID sia disponibile per il filtro di sicurezza Firestore
+        if (!isInPause && isPauseAttempted) {
+             setIsPauseAttempted(false);
+        }
+    }, [isInPause, isPauseAttempted]);
+
+    // Listener Firestore per timbratura attiva e timbrature odierne
+    useEffect(() => {
         if (!user?.uid || !employeeData?.id || !Array.isArray(allWorkAreas)) {
              setActiveEntry(null);
              setTodaysEntries([]);
@@ -124,13 +175,23 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
              return;
         }
 
-        // Listener timbratura attiva
-        // USA user.uid per matchare le regole di Firestore su time_entries
+        // 1. Listener timbratura attiva (FIX: rimosso orderBy)
         const qActive = query(collection(db, "time_entries"),
-                               where("employeeId", "==", user.uid), // <--- CORREZIONE QUI
+                               where("employeeId", "==", employeeData.id),
                                where("status", "==", "clocked-in"),
                                limit(1));
-        const unsubscribeActive = onSnapshot(qActive, (snapshot) => {
+        
+        // 2. Listener timbrature odierne
+        const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
+        const qTodays = query(collection(db, "time_entries"),
+                               where("employeeId", "==", employeeData.id),
+                               where("clockInTime", ">=", Timestamp.fromDate(startOfDay)),
+                               orderBy("clockInTime", "desc"));
+
+        let unsubscribeActive, unsubscribeTodays;
+
+        // Esegue l'ascolto per la timbratura attiva
+        unsubscribeActive = onSnapshot(qActive, (snapshot) => {
             if (!snapshot.empty) {
                 const entryData = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
                 setActiveEntry(entryData);
@@ -139,29 +200,32 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             } else {
                 setActiveEntry(null);
                 setWorkAreaName('');
+                
+                // RIMOZIONE: Logica di ricerca ultima uscita (Regola 8h di riposo)
             }
         }, (error) => console.error("Errore listener timbratura attiva:", error));
 
-        // Listener timbrature odierne
-        // USA user.uid per matchare le regole di Firestore su time_entries
-        const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
-        const qTodays = query(collection(db, "time_entries"),
-                               where("employeeId", "==", user.uid), // <--- CORREZIONE QUI
-                               where("clockInTime", ">=", Timestamp.fromDate(startOfDay)),
-                               orderBy("clockInTime", "desc"));
-        const unsubscribeTodays = onSnapshot(qTodays, (snapshot) => {
+        // Esegue l'ascolto per le timbrature odierne
+        unsubscribeTodays = onSnapshot(qTodays, (snapshot) => {
             setTodaysEntries(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         }, (error) => console.error("Errore listener timbratura attiva:", error));
+        
+        // RIMOZIONE: Esegue l'ascolto per il bypass
+
 
         // Funzione di pulizia
         return () => {
              unsubscribeActive();
              unsubscribeTodays();
+             // RIMOZIONE: unsubscribeBypass();
         };
     }, [user?.uid, employeeData?.id, allWorkAreas]);
 
 
-    // --- GESTIONE AZIONI TIMBRATURA/PAUSA (FIX SINCRONIZZAZIONE INCLUSO) ---
+    // RIMOZIONE: Logica useMemo isRestPeriodRequired (è sempre false)
+
+
+    // --- GESTIONE AZIONI TIMBRATURA/PAUSA ---
     const handleAction = async (action) => {
         if (isProcessing) return;
         setIsProcessing(true);
@@ -173,11 +237,14 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
 
             if (action === 'clockIn') {
                 
+                // RIMOZIONE: BLOCCO CONTROLLO RIPOSO 8 ORE
+                
                 let areaIdToClockIn = null;
                 const note = isGpsRequired ? '' : 'senza GPS Manutentore'; 
 
+                // Logica GPS Entrata
                 if (isGpsRequired) {
-                    if (!inRangeArea) throw new Error("Devi essere all'interno di un'area rilevata.");
+                    if (!inRangeArea) throw new Error("Devi essere all'interno di un'area rilevata per timbrare l'entrata.");
                     areaIdToClockIn = inRangeArea.id;
                 } else {
                     if (employeeWorkAreas.length === 0) {
@@ -189,14 +256,10 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 // Chiama la Cloud Function
                 result = await clockIn({ areaId: areaIdToClockIn, note: note }); 
                 
-                // **********************************************
-                // FIX: AGGIORNAMENTO OTTIMISTICO DELLO STATO
-                // **********************************************
+                // Aggiornamento ottimistico stato
                 if (result.data.success) {
-                    // Imposta immediatamente lo stato attivo con l'area e un Timestamp fittizio (l'ora corrente)
-                    // Questo risolve la transizione immediata dei pulsanti Pausa/Uscita
                     setActiveEntry({
-                        id: 'pending_' + Date.now(), // ID temporaneo, verrà sovrascritto dal listener
+                        id: 'pending_' + Date.now(),
                         workAreaId: areaIdToClockIn,
                         clockInTime: Timestamp.now(), 
                         pauses: [],
@@ -204,33 +267,61 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                     });
                     const area = allWorkAreas.find(a => a.id === areaIdToClockIn);
                     setWorkAreaName(area ? area.name : 'Sconosciuta');
+                    
+                    // SUONO DI SUCCESSO
+                    playSound('clock_in'); 
 
                 } else if (result.data.message) {
                      alert(result.data.message);
                 }
-                // **********************************************
                 
             } else if (action === 'clockOut') {
                 if (!currentActiveEntry) throw new Error("Nessuna timbratura attiva da chiudere.");
-                const isInPause = currentActiveEntry.pauses?.some(p => !p.end);
-                if (isInPause) throw new Error("Termina la pausa prima di timbrare l'uscita.");
+
+                // *** CONTROLLO GPS USCITA ***
+                if (isGpsRequired) {
+                     if (!inRangeArea) throw new Error("Devi essere all'interno di un'area rilevata per timbrare l'uscita.");
+                }
+
+                // Chiama la Cloud Function
                 result = await clockOut();
+                
+                // Logica di successo dopo la chiamata al backend
+                if (result.data.success) {
+                    playSound('clock_out'); 
+                    alert(result.data.message || 'Timbratura di uscita registrata.');
+                    
+                    // AGGIUNTA REFRESH FORZATO
+                    setTimeout(() => {
+                        window.location.reload(); 
+                    }, 500); 
+                    return;
 
-            } else if (action === 'clockPause') {
+                } else if (result.data.message) {
+                    alert(result.data.message);
+                }
+                
+            } else if (action === 'clockPause') { // AZIONE INIZIO PAUSA
                 if (!currentActiveEntry) throw new Error("Devi avere una timbratura attiva.");
-                const isInPause = currentActiveEntry.pauses?.some(p => !p.end);
+                const isInPauseFromDb = currentActiveEntry.pauses?.some(p => p.start && !p.end);
 
-                if (isInPause) {
-                    result = await endEmployeePause();
+                // *** BLOCCO ANTI DOPPIA PAUSA ***
+                if (isInPauseFromDb || isPauseAttempted) { 
+                    throw new Error("Pausa già attiva o tentativo in corso. Attendere l'aggiornamento.");
+                }
+
+                const currentArea = allWorkAreas.find(a => a.id === currentActiveEntry.workAreaId);
+                const pauseDuration = currentArea?.pauseDuration;
+
+                if (pauseDuration && pauseDuration > 0) {
+                    setIsPauseAttempted(true); 
+                    result = await applyAutoPauseEmployee({ durationMinutes: pauseDuration });
+                    
+                    // SUONO DI SUCCESSO
+                    playSound('pause_start'); 
+                    
                 } else {
-                    const currentArea = allWorkAreas.find(a => a.id === currentActiveEntry.workAreaId);
-                    const pauseDuration = currentArea?.pauseDuration;
-
-                    if (pauseDuration && pauseDuration > 0) {
-                        result = await applyAutoPauseEmployee({ durationMinutes: pauseDuration });
-                    } else {
-                        alert(`Nessuna pausa predefinita (>0 min) per l'area "${currentArea?.name || 'sconosciuta'}".`);
-                    }
+                    throw new Error(`Nessuna pausa predefinita (>0 min) per l'area "${currentArea?.name || 'sconosciuta'}".`);
                 }
             } else {
                 throw new Error("Azione non riconosciuta.");
@@ -249,43 +340,39 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     };
 
 
-    // Funzione generazione PDF (omessa per brevità, invariata)
-    const generatePdfReport = async () => {
-        setIsGeneratingPdf(true);
-        // Logica di generazione PDF (omessa per brevità)
+    // Logica handleExportExcel (Omessa per brevità)
+    const handleExportExcel = async () => {
+        setIsGenerating(true);
+
+        if (!employeeData || !employeeData.id) {
+             alert("Errore: Dati del dipendente non caricati. Ricarica la pagina.");
+             setIsGenerating(false);
+             return;
+        }
+        const employeeId = employeeData.id;
+        
         try {
             const startDate = new Date(selectedYear, selectedMonth, 1);
-            const endDate = new Date(selectedYear, selectedMonth + 1, 0, 23, 59, 59);
+            const nextMonth = selectedMonth === 11 ? 0 : selectedMonth + 1;
+            const nextYear = selectedMonth === 11 ? selectedYear + 1 : selectedYear;
+            const endDate = new Date(nextYear, nextMonth, 1); 
 
-            // Per il report completo (non per il listener) si usa employeeData.id
             const q = query(
                 collection(db, "time_entries"),
-                where("employeeId", "==", employeeData.id), 
+                where("employeeId", "==", employeeId), 
                 where("clockInTime", ">=", Timestamp.fromDate(startDate)),
-                where("clockInTime", "<=", Timestamp.fromDate(endDate)),
                 orderBy("clockInTime", "asc")
             );
 
             const querySnapshot = await getDocs(q);
             if (querySnapshot.empty) {
                 alert("Nessuna timbratura trovata per il periodo selezionato.");
-                setIsGeneratingPdf(false);
+                setIsGenerating(false);
                 return;
             }
 
-            // ... (logica generazione PDF completa) ...
-            const doc = new jsPDF();
-            const monthName = startDate.toLocaleString('it-IT', { month: 'long' });
-
-            doc.setFontSize(18);
-            doc.text(`Report Mensile Timbrature`, 14, 22);
-            doc.setFontSize(11);
-            doc.text(`Dipendente: ${employeeData.name} ${employeeData.surname}`, 14, 30);
-            doc.text(`Periodo: ${monthName.charAt(0).toUpperCase() + monthName.slice(1)} ${selectedYear}`, 14, 36);
-
-            const tableColumn = ["Data", "Area", "Entrata", "Uscita", "Ore Lavorate", "Note Pause"];
-            const tableRows = [];
-            let totalWorkedMillis = 0;
+            const dataToExport = [];
+            let totalWorkedMinutes = 0;
 
             querySnapshot.forEach(entryDoc => {
                 const data = entryDoc.data();
@@ -293,75 +380,74 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 const clockOut = data.clockOutTime ? data.clockOutTime.toDate() : null;
                 const area = allWorkAreas.find(a => a.id === data.workAreaId);
 
-                let workedMillis = 0;
-                let pauseNotes = "";
-                let pauseDurationMillis = 0;
+                let pauseDurationMinutes = 0;
 
                 if (data.pauses && data.pauses.length > 0) {
-                    pauseNotes = data.pauses.length + " pausa/e";
                     data.pauses.forEach(p => {
                         if (p.start && p.end) {
                             const startMillis = p.start.toMillis ? p.start.toMillis() : new Date(p.start).getTime();
                             const endMillis = p.end.toMillis ? p.end.toMillis() : new Date(p.end).getTime();
-                            if (endMillis > startMillis) {
-                                pauseDurationMillis += (endMillis - startMillis);
-                            }
+                            pauseDurationMinutes += Math.round((endMillis - startMillis) / 60000); // Minuti
                         }
                     });
                 }
 
                 if (clockOut) {
-                    const totalEntryMillis = clockOut.getTime() - clockIn.getTime();
-                    workedMillis = totalEntryMillis - pauseDurationMillis;
-                    if (workedMillis < 0) workedMillis = 0;
-                    totalWorkedMillis += workedMillis;
-                }
-
-                const hours = Math.floor(workedMillis / 3600000);
-                const minutes = Math.floor((workedMillis % 3600000) / 60000);
-                const totalHoursFormatted = clockOut ? `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}` : "N/A";
-
-                const entryData = [
-                    clockIn.toLocaleDateString('it-IT'),
-                    area ? area.name : 'Sconosciuta',
-                    clockIn.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
-                    clockOut ? clockOut.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : "In corso",
-                    totalHoursFormatted,
-                    pauseNotes
-                ];
-                tableRows.push(entryData);
-            });
-
-            const totalHours = Math.floor(totalWorkedMillis / 3600000);
-            const totalMinutes = Math.floor((totalWorkedMillis % 3600000) / 60000);
-            const totalHoursString = `Totale Ore Lavorate nel Mese: ${totalHours.toString().padStart(2, '0')}:${totalMinutes.toString().padStart(2, '0')}`;
-
-            doc.autoTable({
-                head: [tableColumn],
-                body: tableRows,
-                startY: 50,
-                didDrawPage: (data) => {
-                    if (data.pageNumber === doc.internal.getNumberOfPages()) {
-                        doc.setFontSize(10);
-                        doc.text(totalHoursString, 14, data.cursor.y + 10);
+                    const totalEntryMinutes = Math.round((clockOut.getTime() - clockIn.getTime()) / 60000);
+                    const workedMinutes = totalEntryMinutes - pauseDurationMinutes;
+                    if (workedMinutes > 0) {
+                        totalWorkedMinutes += workedMinutes;
                     }
+                    const hours = Math.floor(workedMinutes / 60);
+                    const minutes = Math.floor(workedMinutes % 60);
+                    const totalHoursFormatted = clockOut ? `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}` : "In corso";
+
+                    dataToExport.push({
+                        'Dipendente': `${employeeData.name} ${employeeData.surname}`,
+                        'Area': area ? area.name : 'Sconosciuta',
+                        'Data': clockIn.toLocaleDateString('it-IT'),
+                        'Entrata': clockIn.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' }),
+                        'Uscita': clockOut ? clockOut.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' }) : 'In corso',
+                        'Durata Lavorata (h:m)': totalHoursFormatted,
+                        'Pausa Totale (min)': pauseDurationMinutes,
+                        'Manual': data.isManual ? 'SI' : 'NO'
+                    });
                 }
             });
 
-            doc.save(`report_${employeeData.surname}_${selectedMonth + 1}_${selectedYear}.pdf`);
+            const totalH = Math.floor(totalWorkedMinutes / 60);
+            const totalM = totalWorkedMinutes % 60;
+            
+            dataToExport.push({}); 
+            dataToExport.push({
+                'Dipendente': 'TOTALE MESE:',
+                'Area': `${totalH.toString().padStart(2, '0')}:${totalM.toString().padStart(2, '0')}`, 
+                'Data': '',
+                'Entrata': '',
+                'Uscita': '',
+                'Durata Lavorata (h:m)': '',
+                'Pausa Totale (min)': '',
+                'Manual': ''
+            });
+
+            const ws = utils.json_to_sheet(dataToExport);
+            const wb = utils.book_new();
+            utils.book_append_sheet(wb, ws, "Report Ore");
+            ws['!cols'] = [
+                { wch: 25 }, { wch: 15 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 20 }, { wch: 20 }, { wch: 10 }
+            ];
+
+            writeFile(wb, `Report_${employeeData.surname}_${selectedMonth + 1}_${selectedYear}.xlsx`);
 
         } catch (error) {
-            console.error("Errore durante la generazione del PDF:", error);
+            console.error("Errore durante la generazione del Report Excel:", error);
             alert("Si è verificato un errore durante la generazione del report.");
         } finally {
-            setIsGeneratingPdf(false);
+            setIsGenerating(false);
         }
     };
-    // Fine funzione generazione PDF
+    // Fine funzione generazione Excel
 
-
-    // Calcolo stato pausa (controlla se c'è una pausa SENZA end)
-    const isInPause = activeEntry?.pauses?.some(p => p.start && !p.end);
 
     // Render iniziale se mancano dati dipendente
     if (!employeeData) return <div className="min-h-screen flex items-center justify-center">Caricamento dipendente...</div>;
@@ -369,10 +455,32 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     const months = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
     const years = [new Date().getFullYear(), new Date().getFullYear() - 1]; // Anno corrente e precedente
 
-    // --- Componente di stato GPS/Area (INVARIATO) ---
-    const GpsAreaStatusBlock = () => {
-        if (activeEntry) return null;
+    // Messaggio Dispositivo/Reset
+    const renderDeviceMessage = () => {
+        return (
+            <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-4" role="alert">
+                <p className="font-bold">Attenzione Dispositivo Registrato</p>
+                <p className="text-sm">In caso di guasto o cambio cellulare contattare Preposto o Admin.</p>
+            </div>
+        );
+    }; 
+    
+    // Funzione per forzare l'aggiornamento della pagina (Refresh Manuale)
+    const handleManualRefresh = () => {
+        window.location.reload();
+    };
 
+
+    // --- Componente di stato GPS/Area ---
+    const GpsAreaStatusBlock = () => {
+        if (employeeWorkAreas.length === 0) {
+            if (isGpsRequired) {
+                 return <div className="bg-white p-4 rounded-lg shadow-md mb-6"><p className="text-sm text-red-500 mt-2 text-center">❌ Controllo GPS richiesto ma nessuna area assegnata.</p></div>
+            } else {
+                 return null; 
+            }
+        }
+        
         return (
             <div className="bg-white p-4 rounded-lg shadow-md mb-6">
                 <h2 className="text-xl font-bold mb-3 text-center">Stato Posizione Richiesto</h2>
@@ -413,15 +521,27 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     return (
         <div className="p-4 max-w-lg mx-auto font-sans bg-gray-50 min-h-screen flex flex-col">
             <CompanyLogo />
+            
+            {/* Box Messaggio Dispositivo (Modificato) */}
+            {renderDeviceMessage()}
+
             {/* Box Orario e Info Dipendente */}
             <div className="text-center my-4 p-4 bg-white rounded-lg shadow-sm">
                 <p>Dipendente: <span className="font-semibold">{employeeData.name} {employeeData.surname}</span></p>
                 <p className="text-4xl font-bold">{currentTime.toLocaleTimeString('it-IT')}</p>
                 <p className="text-lg text-gray-500">{currentTime.toLocaleDateString('it-IT', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                
+                {/* PULSANTE AGGIORNA STATO */}
+                <button
+                    onClick={handleManualRefresh}
+                    className="mt-2 text-xs px-3 py-1 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+                >
+                    🔄 Aggiorna Stato
+                </button>
             </div>
 
-            {/* BLOCCO DI STATO AREA/GPS QUANDO NON ATTIVA */}
-            {!activeEntry && <GpsAreaStatusBlock />}
+            {/* BLOCCO DI STATO AREA/GPS */}
+            <GpsAreaStatusBlock />
             
 
             {/* Box Stato Timbratura e Azioni */}
@@ -434,19 +554,20 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                         {/* SEMAFORO QUANDO ATTIVO: 3 pulsanti */}
                         <div className="grid grid-cols-3 gap-3">
 
-                            {/* 1. PAUSA (ARANCIONE o VERDE per Termina) */}
+                            {/* 1. PAUSA (ARANCIONE o GRIGIO se già attiva) */}
                             <button
                                 onClick={() => handleAction('clockPause')}
-                                disabled={isProcessing}
+                                disabled={isProcessing || isInPause || isPauseAttempted} 
                                 className={`w-full font-bold rounded-lg shadow-lg transition-colors py-4 text-white ${
-                                    isInPause
-                                        ? 'bg-green-500 hover:bg-green-600' // TERMINA (VERDE)
-                                        : 'bg-orange-500 hover:bg-orange-600' // INIZIA (ARANCIONE)
+                                    isInPause || isPauseAttempted
+                                        ? 'bg-gray-400' 
+                                        : 'bg-orange-500 hover:bg-orange-600'
                                 } disabled:opacity-50 disabled:cursor-not-allowed`}
                             >
                                 <div className="text-2xl leading-none">🟡</div>
-                                <span className="text-sm block mt-1">{isInPause ? 'TERMINA' : 'INIZIA'} PAUSA</span>
+                                <span className="text-sm block mt-1">{isInPause || isPauseAttempted ? 'PAUSA ATTIVA' : 'INIZIA PAUSA'}</span>
                             </button>
+
 
                             {/* 2. TIMBRATURA (Visualizzazione Stato - NON cliccabile) */}
                             <div
@@ -461,7 +582,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                             {/* 3. USCITA (ROSSO) */}
                             <button
                                 onClick={() => handleAction('clockOut')}
-                                disabled={isProcessing || isInPause}
+                                disabled={isProcessing || isInPause || (isGpsRequired && !inRangeArea)}
                                 className={`w-full font-bold rounded-lg shadow-lg text-white transition-colors py-4 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed`}
                             >
                                 <div className="text-2xl leading-none">🔴</div>
@@ -482,8 +603,8 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                                 (isGpsRequired && !inRangeArea) || 
                                 (!isGpsRequired && employeeWorkAreas.length === 0)
                             }
-                            // Colore di sfondo fisso, opacità e cursore gestiti da disabled:
-                            className={`w-full mt-4 text-2xl font-bold py-6 px-4 rounded-lg shadow-lg text-white transition-colors bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed`}
+                            className={`w-full mt-4 text-2xl font-bold py-6 px-4 rounded-lg shadow-lg text-white transition-colors 
+                                ${false ? 'bg-gray-500' : 'bg-green-600 hover:bg-green-700'} disabled:opacity-50 disabled:cursor-not-allowed`}
                         >
                             🟢 TIMBRA ENTRATA
                         </button>
@@ -491,7 +612,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 )}
             </div>
             
-            {/* Box Cronologia Odierna (INVARIATO) */}
+            {/* Box Cronologia Odierna */}
             <div className="bg-white p-4 rounded-lg shadow-md mb-6">
                 <h2 className="text-xl font-bold mb-3">Timbrature di Oggi</h2>
                 <div className="space-y-2 max-h-40 overflow-y-auto">
@@ -516,9 +637,9 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 </div>
             </div>
 
-            {/* Box Report Mensile PDF (INVARIATO) */}
+            {/* Box Report Mensile Excel */}
             <div className="bg-white p-4 rounded-lg shadow-md mb-6">
-                <h2 className="text-xl font-bold mb-3">Report Mensile PDF</h2>
+                <h2 className="text-xl font-bold mb-3">Report Mensile Excel</h2>
                 <div className="grid grid-cols-2 gap-4 mb-4">
                     {/* Select Mese */}
                     <div>
@@ -547,11 +668,11 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 </div>
                 {/* Pulsante Scarica Report */}
                 <button
-                    onClick={generatePdfReport}
-                    disabled={isGeneratingPdf}
-                    className="w-full text-lg font-bold py-3 px-4 rounded-lg shadow-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={handleExportExcel}
+                    disabled={isGenerating}
+                    className="w-full text-lg font-bold py-3 px-4 rounded-lg shadow-md text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                    {isGeneratingPdf ? 'Generazione in corso...' : 'Scarica Report PDF'}
+                    {isGenerating ? 'Generazione in corso...' : 'Scarica Report Excel'}
                 </button>
             </div>
 
@@ -560,5 +681,4 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
         </div>
     );
 };
-
 export default EmployeeDashboard;
