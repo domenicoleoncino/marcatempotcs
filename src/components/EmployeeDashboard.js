@@ -1,4 +1,4 @@
-// File: src/js/components/EmployeeDashboard.js (SENZA PULSANTE AGGIORNA STATO)
+// File: src/js/components/EmployeeDashboard.js (Correzioni Finali e Robustezza)
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../firebase';
@@ -7,8 +7,6 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import CompanyLogo from './CompanyLogo';
 // === NUOVE IMPORTAZIONI PER EXCEL ===
 import { utils, writeFile } from 'xlsx';
-
-// RIMOZIONE: const requiredRestHours = 8; 
 
 // Funzione distanza GPS (invariata)
 function getDistanceInMeters(lat1, lon1, lat2, lon2) {
@@ -32,8 +30,6 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     const [isPauseAttempted, setIsPauseAttempted] = useState(false); // Flag di tentativo di pausa
     const [locationError, setLocationError] = useState(null);
     const [inRangeArea, setInRangeArea] = useState(null);
-    // RIMOZIONE: [lastClockOutTime, setLastClockOutTime]
-    // RIMOZIONE: [isRestBypassActive, setIsRestBypassActive]
 
     // Stati per report Excel
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
@@ -44,17 +40,16 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     const functions = getFunctions(undefined, 'europe-west1');
     const clockIn = httpsCallable(functions, 'clockEmployeeIn');
     const clockOut = httpsCallable(functions, 'clockEmployeeOut');
-    const applyAutoPauseEmployee = httpsCallable(functions, 'applyAutoPauseEmployee');
+    const applyAutoPauseEmployee = httpsCallable(functions, 'applyAutoPauseEmployee'); 
 
 
-    // === FUNZIONE HELPER AUDIO ===
+    // === FUNZIONE HELPER AUDIO (Corretta per Autoplay) ===
     const playSound = (fileName) => {
-        const audioPath = process.env.PUBLIC_URL + `/sounds/${fileName}.mp3`;
+        const audioPath = `/sounds/${fileName}.mp3`;
         try {
             const audio = new Audio(audioPath);
             audio.play().catch(e => {
-                // Cattura l'errore NotAllowedError
-                console.warn(`Riproduzione audio fallita per ${fileName}:`, e);
+                console.warn(`Riproduzione audio fallita per ${fileName} (blocco browser):`, e);
             });
         } catch (e) {
             console.warn("Errore creazione oggetto Audio:", e);
@@ -62,14 +57,11 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     };
     // =============================
 
-    // RIMOZIONE: Funzione handleManualRefresh
-
     // Aggiorna ora corrente
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
         
-        // SUONO ALL'APERTURA DELL'APP
-        playSound('app_open');
+        // RIMOZIONE: playSound('app_open')
         
         return () => clearInterval(timer);
     }, []);
@@ -84,12 +76,12 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     const isGpsRequired = employeeData?.controlloGpsRichiesto ?? true;
 
 
-    // Logica GPS (watchPosition per aggiornamenti continui)
+    // Logica GPS (watchPosition per aggiornamenti continui) - INVARIATA
     useEffect(() => {
         if (employeeWorkAreas.length === 0 || !isGpsRequired) {
             setLocationError(null);
             setInRangeArea(null);
-            return; // Non serve GPS
+            return; 
         }
 
         if (!navigator.geolocation) {
@@ -162,7 +154,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
         }
     }, [isInPause, isPauseAttempted]);
 
-    // Listener Firestore per timbratura attiva e timbrature odierne
+    // Listener Firestore per timbratura attiva e timbrature odierne (Aggiunta Robustezza)
     useEffect(() => {
         if (!user?.uid || !employeeData?.id || !Array.isArray(allWorkAreas)) {
              setActiveEntry(null);
@@ -171,7 +163,9 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
              return;
         }
 
-        // 1. Listener timbratura attiva (FIX: rimosso orderBy)
+        let isMounted = true; // Flag per prevenire l'errore 'cannot update state on unmounted component'
+
+        // 1. Listener timbratura attiva
         const qActive = query(collection(db, "time_entries"),
                                where("employeeId", "==", employeeData.id),
                                where("status", "==", "clocked-in"),
@@ -188,6 +182,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
 
         // Esegue l'ascolto per la timbratura attiva
         unsubscribeActive = onSnapshot(qActive, (snapshot) => {
+            if (!isMounted) return; // Controllo smontaggio
             if (!snapshot.empty) {
                 const entryData = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
                 setActiveEntry(entryData);
@@ -196,26 +191,23 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             } else {
                 setActiveEntry(null);
                 setWorkAreaName('');
-                
-                // RIMOZIONE: Logica di ricerca ultima uscita (Regola 8h di riposo)
             }
         }, (error) => console.error("Errore listener timbratura attiva:", error));
 
         // Esegue l'ascolto per le timbrature odierne
         unsubscribeTodays = onSnapshot(qTodays, (snapshot) => {
+            if (!isMounted) return; // Controllo smontaggio
             setTodaysEntries(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         }, (error) => console.error("Errore listener timbratura attiva:", error));
         
 
         // Funzione di pulizia
         return () => {
+             isMounted = false; // Smontaggio
              unsubscribeActive();
              unsubscribeTodays();
         };
     }, [user?.uid, employeeData?.id, allWorkAreas]);
-
-
-    // RIMOZIONE: Logica useMemo isRestPeriodRequired (è sempre false)
 
 
     // --- GESTIONE AZIONI TIMBRATURA/PAUSA ---
@@ -229,8 +221,6 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             const currentActiveEntry = activeEntry;
 
             if (action === 'clockIn') {
-                
-                // RIMOZIONE: BLOCCO CONTROLLO RIPOSO 8 ORE
                 
                 let areaIdToClockIn = null;
                 const note = isGpsRequired ? '' : 'senza GPS Manutentore'; 
@@ -283,11 +273,6 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 if (result.data.success) {
                     playSound('clock_out'); 
                     alert(result.data.message || 'Timbratura di uscita registrata.');
-                    
-                    // AGGIUNTA REFRESH FORZATO
-                    setTimeout(() => {
-                        window.location.reload(); 
-                    }, 500); 
                     return;
 
                 } else if (result.data.message) {
@@ -308,7 +293,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
 
                 if (pauseDuration && pauseDuration > 0) {
                     setIsPauseAttempted(true); 
-                    result = await applyAutoPauseEmployee({ durationMinutes: pauseDuration });
+                    result = await applyAutoPauseEmployee({ durationMinutes: pauseDuration }); 
                     
                     // SUONO DI SUCCESSO
                     playSound('pause_start'); 
@@ -316,11 +301,11 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 } else {
                     throw new Error(`Nessuna pausa predefinita (>0 min) per l'area "${currentArea?.name || 'sconosciuta'}".`);
                 }
-            } else {
+            } else { // Nessun altro blocco (Rimosso endPause)
                 throw new Error("Azione non riconosciuta.");
             }
 
-            if (action !== 'clockIn' && result?.data?.message) {
+            if ((action === 'clockPause' || action === 'clockOut') && result?.data?.message) {
                 alert(result.data.message);
             }
 
@@ -333,7 +318,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     };
 
 
-    // Logica handleExportExcel (Omessa per brevità)
+    // Logica handleExportExcel (Correzione Linter/Query)
     const handleExportExcel = async () => {
         setIsGenerating(true);
 
@@ -349,11 +334,12 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             const nextMonth = selectedMonth === 11 ? 0 : selectedMonth + 1;
             const nextYear = selectedMonth === 11 ? selectedYear + 1 : selectedYear;
             const endDate = new Date(nextYear, nextMonth, 1); 
-
+            
             const q = query(
                 collection(db, "time_entries"),
                 where("employeeId", "==", employeeId), 
                 where("clockInTime", ">=", Timestamp.fromDate(startDate)),
+                where("clockInTime", "<", Timestamp.fromDate(endDate)), // FILTRO ENDDATE AGGIUNTO (FIX LINTER)
                 orderBy("clockInTime", "asc")
             );
 
@@ -458,10 +444,6 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
         );
     }; 
     
-    // Funzione per forzare l'aggiornamento della pagina (Refresh Manuale)
-    // RIMOZIONE: handleManualRefresh (era una funzione di debug)
-
-
     // --- Componente di stato GPS/Area ---
     const GpsAreaStatusBlock = () => {
         if (employeeWorkAreas.length === 0) {
@@ -521,8 +503,6 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 <p>Dipendente: <span className="font-semibold">{employeeData.name} {employeeData.surname}</span></p>
                 <p className="text-4xl font-bold">{currentTime.toLocaleTimeString('it-IT')}</p>
                 <p className="text-lg text-gray-500">{currentTime.toLocaleDateString('it-IT', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                
-                {/* RIMOZIONE: PULSANTE AGGIORNA STATO */}
             </div>
 
             {/* BLOCCO DI STATO AREA/GPS */}
@@ -532,21 +512,22 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             {/* Box Stato Timbratura e Azioni */}
             <div className="bg-white p-4 rounded-lg shadow-md mb-6">
                 <h2 className="text-xl font-bold mb-3 text-center">Azioni Rapide</h2>
-                {activeEntry ? ( // Se l'utente è timbrato
+                {activeEntry ? ( // Se l'utente è timbrato (Stato Reale)
                     <div>
                         <p className="text-center text-green-600 font-semibold text-lg mb-4">Timbratura ATTIVA su: <span className="font-bold">{workAreaName}</span></p>
                         
                         {/* SEMAFORO QUANDO ATTIVO: 3 pulsanti */}
                         <div className="grid grid-cols-3 gap-3">
 
-                            {/* 1. PAUSA (ARANCIONE o GRIGIO se già attiva) */}
+                            {/* 1. PAUSA (Solo Inizio Pausa, Disabilitato se in Pausa Fissa) */}
                             <button
-                                onClick={() => handleAction('clockPause')}
+                                onClick={() => handleAction('clockPause')} 
+                                // Disabilitato se Pausa già Attiva o in attesa di conferma
                                 disabled={isProcessing || isInPause || isPauseAttempted} 
                                 className={`w-full font-bold rounded-lg shadow-lg transition-colors py-4 text-white ${
                                     isInPause || isPauseAttempted
-                                        ? 'bg-gray-400' 
-                                        : 'bg-orange-500 hover:bg-orange-600'
+                                        ? 'bg-gray-400' // GRIGIO se Pausa Attiva (bloccato)
+                                        : 'bg-orange-500 hover:bg-orange-600' // ARANCIONE per INIZIARE PAUSA
                                 } disabled:opacity-50 disabled:cursor-not-allowed`}
                             >
                                 <div className="text-2xl leading-none">🟡</div>
@@ -554,20 +535,21 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                             </button>
 
 
-                            {/* 2. TIMBRATURA (Visualizzazione Stato - NON cliccabile) */}
+                            {/* 2. TIMBRATURA (Visualizzazione Stato) */}
                             <div
                                 className={`w-full font-bold rounded-lg shadow-lg text-white text-center py-4 ${
                                     isInPause ? 'bg-orange-600' : 'bg-green-600'
                                 }`}
                             >
                                 <div className="text-2xl leading-none">🟢</div>
-                                <span className="text-sm block mt-1">{isInPause ? 'PAUSA ATTIVA' : 'IN CORSO'}</span>
+                                <span className="text-sm block mt-1">{isInPause ? 'IN PAUSA' : 'IN CORSO'}</span>
                             </div>
 
                             {/* 3. USCITA (ROSSO) */}
                             <button
                                 onClick={() => handleAction('clockOut')}
-                                disabled={isProcessing || isInPause || (isGpsRequired && !inRangeArea)}
+                                // L'uscita è permessa anche se in pausa
+                                disabled={isProcessing || (isGpsRequired && !inRangeArea)}
                                 className={`w-full font-bold rounded-lg shadow-lg text-white transition-colors py-4 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed`}
                             >
                                 <div className="text-2xl leading-none">🔴</div>
@@ -588,8 +570,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                                 (isGpsRequired && !inRangeArea) || 
                                 (!isGpsRequired && employeeWorkAreas.length === 0)
                             }
-                            className={`w-full mt-4 text-2xl font-bold py-6 px-4 rounded-lg shadow-lg text-white transition-colors 
-                                ${false ? 'bg-gray-500' : 'bg-green-600 hover:bg-green-700'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                            className={`w-full mt-4 text-2xl font-bold py-6 px-4 rounded-lg shadow-lg text-white transition-colors bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed`}
                         >
                             🟢 TIMBRA ENTRATA
                         </button>
@@ -597,7 +578,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 )}
             </div>
             
-            {/* Box Cronologia Odierna */}
+            {/* Box Cronologia Odierna - INVARIATO */}
             <div className="bg-white p-4 rounded-lg shadow-md mb-6">
                 <h2 className="text-xl font-bold mb-3">Timbrature di Oggi</h2>
                 <div className="space-y-2 max-h-40 overflow-y-auto">
@@ -622,7 +603,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 </div>
             </div>
 
-            {/* Box Report Mensile Excel */}
+            {/* Box Report Mensile Excel - INVARIATO */}
             <div className="bg-white p-4 rounded-lg shadow-md mb-6">
                 <h2 className="text-xl font-bold mb-3">Report Mensile Excel</h2>
                 <div className="grid grid-cols-2 gap-4 mb-4">
