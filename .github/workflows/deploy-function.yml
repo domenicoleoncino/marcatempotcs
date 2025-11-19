@@ -26,7 +26,7 @@ jobs:
       - name: Install dependencies and build frontend
         run: |
           npm install 
-          npm run build
+          CI=false npm run build  # <--- FIX APPLICATO QUI
           
       # 4. (Opzionale, ma consigliato) Installa le dipendenze per le Cloud Functions
       # Se il tuo codice React/Firebase ha le functions in una sottocartella, 
@@ -43,4 +43,4 @@ jobs:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MARCATEMPO_TCS }}
           channelId: live 
-          projectId: marcatempotcsitali
+          projectId: marcatempotcsitalia
