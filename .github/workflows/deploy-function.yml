@@ -1,13 +1,11 @@
-name: Deploy to Firebase Hosting
+name: Deploy to Firebase Hosting and Functions
 
 on:
+  # Attiva l'azione per ogni push sul branch 'main'
   push:
     branches:
       - main
-    paths:
-      - 'functions/**'
-      - '.github/workflows/deploy-function.yml'
-
+    
 jobs:
   build_and_deploy:
     runs-on: ubuntu-latest
@@ -24,17 +22,25 @@ jobs:
           node-version: '20'
           cache: 'npm' # Manteniamo la cache standard
 
-      # 3. Installa le dipendenze e crea la versione di produzione del sito
-      - name: Install dependencies and build
+      # 3. Installa le dipendenze e crea la versione di produzione del SITO (Frontend)
+      - name: Install dependencies and build frontend
         run: |
           npm install 
           npm run build
-
-      # 4. Fa il deploy su Firebase Hosting
-      - name: Deploy to Firebase Hosting
+          
+      # 4. (Opzionale, ma consigliato) Installa le dipendenze per le Cloud Functions
+      # Se il tuo codice React/Firebase ha le functions in una sottocartella, 
+      # è necessario installare anche le loro dipendenze prima del deploy completo.
+      - name: Install dependencies for Functions
+        run: |
+          cd functions
+          npm install
+        
+      # 5. Fa il deploy su Firebase Hosting e Functions
+      - name: Deploy to Firebase Hosting and Functions
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MARCATEMPO_TCS }}
           channelId: live 
-          projectId: marcatempotcsitalia
+          projectId: marcatempotcsitali
