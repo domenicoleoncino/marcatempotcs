@@ -1,15 +1,34 @@
-// File: src/js/App.js (Completo e Corretto)
+// File: src/js/App.js (Versione con Logica Device TEMPORANEAMENTE COMMENTATA)
 
 import React, { useState, useEffect } from 'react';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, collection, getDocs, query, where, onSnapshot, updateDoc } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions'; // Lasciato import, commentata funzione
+import { v4 as uuidv4 } from 'uuid'; // Lasciato import, commentata funzione
 import LoginScreen from './components/LoginScreen';
 import AdminDashboard from './components/AdminDashboard';
 import EmployeeDashboard from './components/EmployeeDashboard';
 import ChangePasswordScreen from './components/ChangePasswordScreen';
 
 console.log("PROGETTO ATTUALMENTE IN USO:", process.env.REACT_APP_PROJECT_ID);
+
+// -----------------------------------------------------------------
+// FUNZIONE HELPER: GENERAZIONE ID DISPOSITIVO (COMMENTATA)
+// -----------------------------------------------------------------
+/*
+const getDeviceId = () => {
+    let deviceId = localStorage.getItem('marcatempoDeviceId');
+    if (!deviceId) {
+        // Se non esiste, genera un nuovo ID e salvalo
+        deviceId = uuidv4();
+        localStorage.setItem('marcatempoDeviceId', deviceId);
+    }
+    return deviceId;
+};
+*/
+// -----------------------------------------------------------------
+
 
 const App = () => {
     const [user, setUser] = useState(null);
@@ -33,7 +52,7 @@ const App = () => {
         return () => unsubscribe();
     }, []);
 
-    // Effect #2: Autenticazione e Caricamento Dati Utente
+    // Effect #2: Autenticazione e Caricamento Dati Utente (MODIFICATO: Rimosso blocco device)
     useEffect(() => {
         if (!appStatusChecked) return; // Aspetta controllo kill switch
 
@@ -50,6 +69,40 @@ const App = () => {
 
             // Utente loggato
             setUser(authenticatedUser);
+            
+            // ===============================================
+            // INIZIO: LOGICA CONTROLLO DISPOSITIVO (COMMENTATA)
+            // ===============================================
+            /*
+            const deviceId = getDeviceId();
+            
+            try {
+                const functions = getFunctions(undefined, 'europe-west1'); // REGIONE DA CONFERMARE
+                const registerDevice = httpsCallable(functions, 'registerDeviceAndCheckAccess');
+                
+                const result = await registerDevice({ deviceId: deviceId });
+                
+                if (result.data.status === 'blocked') {
+                    // Se il backend risponde BLOCKED, forziamo il logout
+                    alert(result.data.message || "Accesso bloccato: dispositivo non autorizzato. Contatta l'amministratore.");
+                    await signOut(auth); 
+                    return; // BLOCCA IL CARICAMENTO DEI DATI
+                }
+                
+                console.log("Controllo dispositivo superato. Dispositivo ID:", deviceId);
+            } catch (deviceError) {
+                console.error("ERRORE CRITICO: Fallimento verifica dispositivo:", deviceError);
+                // In caso di errore di rete/backend grave, blocca l'utente come misura di sicurezza
+                alert("Errore durante la verifica del dispositivo. Esegui il logout e riprova.");
+                await signOut(auth);
+                return;
+            }
+            */
+            // ===============================================
+            // FINE: LOGICA CONTROLLO DISPOSITIVO
+            // ===============================================
+
+
             console.log("1. Utente autenticato:", authenticatedUser.uid, authenticatedUser.email);
 
             // Forza refresh token per ottenere claim aggiornati (importante!)
@@ -67,64 +120,53 @@ const App = () => {
                 const userDocSnap = await getDoc(userDocRef);
 
                 if (userDocSnap.exists()) {
-                    const baseProfile = userDocSnap.data(); // Contiene role, email, name, surname, managedAreaIds (se preposto), mustChangePassword
+                    const baseProfile = userDocSnap.data(); 
                     console.log("2. Profilo base 'users' trovato:", baseProfile);
 
                     // Gestione ruoli e unione con profilo 'employees'
                     if (baseProfile.role === 'admin') {
-                        // Per l'admin, usiamo direttamente il profilo 'users'
-                        console.log("Ruolo Admin, uso profilo 'users'.");
-                        setUserData({ ...baseProfile, id: authenticatedUser.uid }); // Aggiungiamo l'ID per coerenza
+                        setUserData({ ...baseProfile, id: authenticatedUser.uid }); 
                     } else if (baseProfile.role === 'dipendente' || baseProfile.role === 'preposto') {
                         console.log(`Ruolo ${baseProfile.role}, cerco profilo 'employees'...`);
                         const q = query(collection(db, 'employees'), where("userId", "==", authenticatedUser.uid));
                         const employeeQuerySnapshot = await getDocs(q);
                         if (!employeeQuerySnapshot.empty) {
                             const employeeDoc = employeeQuerySnapshot.docs[0];
-                            const employeeData = employeeDoc.data(); // Contiene workAreaIds, deviceIds, (name, surname ridondanti)
+                            const employeeData = employeeDoc.data(); 
                             console.log("3. Profilo 'employees' trovato:", employeeData);
 
-                            // --- MODIFICA CHIAVE QUI (Corretta) ---
-                            // Uniamo i dati: diamo priorità ai campi di baseProfile (users)
-                            // così 'managedAreaIds' (da users) non viene sovrascritto se per caso esistesse in employees.
-                            // Aggiungiamo anche l'ID del documento 'employees' che è utile.
                             const fullProfile = {
-                                ...employeeData,   // Dati da employees (es. workAreaIds)
-                                ...baseProfile,    // Dati da users (sovrascrive name/surname, aggiunge role, email, managedAreaIds, mustChangePassword)
-                                id: employeeDoc.id // ID del documento 'employees'
+                                ...employeeData,   
+                                ...baseProfile,    
+                                id: employeeDoc.id 
                             };
-                            // --- FINE MODIFICA ---
 
                             console.log("4. Profilo completo unito:", fullProfile);
                             setUserData(fullProfile);
                         } else {
                             console.error(`ERRORE: Utente '${baseProfile.role}' (UID: ${authenticatedUser.uid}) non ha profilo 'employees'.`);
-                            // Manteniamo i dati base per mostrare l'errore, aggiungendo l'ID user
                             setUserData({ ...baseProfile, id: authenticatedUser.uid, role: 'dati_corrotti' });
                         }
                     } else {
                         console.error(`ERRORE: Ruolo '${baseProfile.role}' non riconosciuto.`);
-                         // Manteniamo i dati base per mostrare l'errore, aggiungendo l'ID user
                         setUserData({ ...baseProfile, id: authenticatedUser.uid });
                     }
                 } else {
                     console.error("ERRORE: Utente non trovato in 'users'. (UID: " + authenticatedUser.uid + ")");
-                    // Impostiamo uno stato di errore ma includiamo l'ID user
                     setUserData({ role: 'sconosciuto', id: authenticatedUser.uid });
                 }
             } catch (dbError) {
                 console.error("Errore durante lettura dati utente da Firestore:", dbError);
-                // Impostiamo uno stato di errore ma includiamo l'ID user
                 setUserData({ role: 'errore_db', id: authenticatedUser.uid });
             } finally {
                 setAuthChecked(true); // Fine caricamento (anche in caso di errore)
             }
         });
-        return () => unsubscribe(); // Pulisce listener
+        return () => unsubscribe(); 
    }, [appStatusChecked]);
 
 
-    // Effect #3: Carica aree (per dipendente/preposto)
+    // Effect #3: Carica aree (per dipendente/preposto) - INVARIATO
     useEffect(() => {
         // Carica aree solo se l'utente è dipendente o preposto E i suoi dati sono caricati
         if (userData && (userData.role === 'dipendente' || userData.role === 'preposto')) {
@@ -138,7 +180,7 @@ const App = () => {
                         console.log("Aree caricate:", areas.length);
                     }, (error) => {
                         console.error("Errore (snapshot) caricamento aree:", error);
-                        setAllWorkAreas([]); // Resetta in caso di errore
+                        setAllWorkAreas([]); 
                     });
                     // Ritorna la funzione di unsubscribe per pulire il listener
                     return unsubscribe;
@@ -158,9 +200,9 @@ const App = () => {
                 }
             };
         } else {
-            setAllWorkAreas([]); // Resetta le aree se l'utente non è dipendente/preposto
+            setAllWorkAreas([]); 
         }
-    }, [userData]); // Si attiva quando cambiano i dati utente
+    }, [userData]); 
 
 
     const handleLogout = async () => {
@@ -171,23 +213,20 @@ const App = () => {
         }
     };
 
-    // Funzione chiamata da ChangePasswordScreen dopo il successo
+    // Funzione chiamata da ChangePasswordScreen dopo il successo - INVARIATA
     const handlePasswordChanged = async () => {
-        if (!user) return; // Sicurezza
+        if (!user) return; 
         const userDocRef = doc(db, 'users', user.uid);
         try {
-            // Aggiorna il flag in Firestore a false
             await updateDoc(userDocRef, { mustChangePassword: false });
-            // Aggiorna lo stato locale userData
             setUserData(prevData => {
-                if (!prevData) return null; // Sicurezza
+                if (!prevData) return null; 
                 return { ...prevData, mustChangePassword: false };
             });
             console.log("Flag mustChangePassword aggiornato a false.");
         } catch (error) {
             console.error("Errore nell'aggiornare il flag mustChangePassword:", error);
             alert("Si è verificato un errore nell'aggiornamento del profilo. Riesegui il login.");
-            // Forzare logout in caso di errore grave
             await handleLogout();
         }
     };
@@ -228,24 +267,20 @@ const App = () => {
          );
     }
 
-    // --- 5. CONTROLLO CAMBIO PASSWORD OBBLIGATORIO ---
+    // 5. CONTROLLO CAMBIO PASSWORD OBBLIGATORIO
     if (userData && userData.mustChangePassword === true) {
         return <ChangePasswordScreen user={user} onPasswordChanged={handlePasswordChanged} />;
     }
-    // --- FINE CONTROLLO CAMBIO PASSWORD ---
 
-
-    // 6. Routing basato sul ruolo (se cambio password non necessario)
-    // Passiamo l'intero userData ad AdminDashboard
+    // 6. Routing basato sul ruolo 
     if (userData.role === 'admin' || userData.role === 'preposto') {
         return <AdminDashboard user={user} userData={userData} handleLogout={handleLogout} allWorkAreas={allWorkAreas} />;
     }
-    // Passiamo l'intero userData (che ora contiene tutti i dati uniti) a EmployeeDashboard
     if (userData.role === 'dipendente') {
         return <EmployeeDashboard user={user} employeeData={userData} handleLogout={handleLogout} allWorkAreas={allWorkAreas} />;
     }
 
-    // 7. Schermata di Errore (ruolo non riconosciuto, dati corrotti, errore db)
+    // 7. Schermata di Errore 
     return (
         <div style={{ padding: '20px', textAlign: 'center', color: 'red' }}>
             <h1>Errore di Configurazione o Dati</h1>

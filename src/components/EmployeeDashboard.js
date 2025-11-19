@@ -1,6 +1,6 @@
-// File: src/js/components/EmployeeDashboard.js (Correzioni Finali e Robustezza)
+// File: src/components/EmployeeDashboard.js (Correzione definitiva Pausa Unica, Robustezza e Audio)
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db } from '../firebase';
 import { collection, query, where, onSnapshot, orderBy, getDocs, Timestamp, limit } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
@@ -40,7 +40,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     const functions = getFunctions(undefined, 'europe-west1');
     const clockIn = httpsCallable(functions, 'clockEmployeeIn');
     const clockOut = httpsCallable(functions, 'clockEmployeeOut');
-    const applyAutoPauseEmployee = httpsCallable(functions, 'applyAutoPauseEmployee'); 
+    const applyAutoPauseEmployee = httpsCallable(functions, 'applyAutoPauseEmployee');
 
 
     // === FUNZIONE HELPER AUDIO (Corretta per Autoplay) ===
@@ -49,6 +49,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
         try {
             const audio = new Audio(audioPath);
             audio.play().catch(e => {
+                // Questo catch cattura il blocco dell'autoplay
                 console.warn(`Riproduzione audio fallita per ${fileName} (blocco browser):`, e);
             });
         } catch (e) {
@@ -60,9 +61,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     // Aggiorna ora corrente
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-        
-        // RIMOZIONE: playSound('app_open')
-        
+        // *** RIMOZIONE AUDIO: playSound('app_open') - Bloccato in produzione ***
         return () => clearInterval(timer);
     }, []);
 
@@ -81,7 +80,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
         if (employeeWorkAreas.length === 0 || !isGpsRequired) {
             setLocationError(null);
             setInRangeArea(null);
-            return; 
+            return; // Non serve GPS
         }
 
         if (!navigator.geolocation) {
@@ -147,6 +146,9 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     // Calcolo stato pausa (controlla se c'è una pausa SENZA end)
     const isInPause = activeEntry?.pauses?.some(p => p.start && !p.end);
     
+    // NUOVO: Controlla se una pausa è stata completata (per bloccare ulteriori pause)
+    const hasCompletedPause = activeEntry?.pauses?.some(p => p.start && p.end);
+    
     // Logica di Reset del flag di tentativo pausa
     useEffect(() => {
         if (!isInPause && isPauseAttempted) {
@@ -154,7 +156,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
         }
     }, [isInPause, isPauseAttempted]);
 
-    // Listener Firestore per timbratura attiva e timbrature odierne (Aggiunta Robustezza)
+    // Listener Firestore per timbratura attiva e timbrature odierne (ROBUSTO)
     useEffect(() => {
         if (!user?.uid || !employeeData?.id || !Array.isArray(allWorkAreas)) {
              setActiveEntry(null);
@@ -162,9 +164,9 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
              setWorkAreaName('');
              return;
         }
-
-        let isMounted = true; // Flag per prevenire l'errore 'cannot update state on unmounted component'
-
+        
+        let isMounted = true; // Flag di montaggio
+        
         // 1. Listener timbratura attiva
         const qActive = query(collection(db, "time_entries"),
                                where("employeeId", "==", employeeData.id),
@@ -182,7 +184,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
 
         // Esegue l'ascolto per la timbratura attiva
         unsubscribeActive = onSnapshot(qActive, (snapshot) => {
-            if (!isMounted) return; // Controllo smontaggio
+            if (!isMounted) return; // Controllo di smontaggio
             if (!snapshot.empty) {
                 const entryData = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
                 setActiveEntry(entryData);
@@ -192,18 +194,22 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 setActiveEntry(null);
                 setWorkAreaName('');
             }
-        }, (error) => console.error("Errore listener timbratura attiva:", error));
+        }, (error) => {
+            if (isMounted) console.error("Errore listener timbratura attiva:", error);
+        });
 
         // Esegue l'ascolto per le timbrature odierne
         unsubscribeTodays = onSnapshot(qTodays, (snapshot) => {
-            if (!isMounted) return; // Controllo smontaggio
+            if (!isMounted) return; // Controllo di smontaggio
             setTodaysEntries(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        }, (error) => console.error("Errore listener timbratura attiva:", error));
+        }, (error) => {
+            if (isMounted) console.error("Errore listener timbratura odierna:", error);
+        });
         
 
         // Funzione di pulizia
         return () => {
-             isMounted = false; // Smontaggio
+             isMounted = false; // Imposta a false allo smontaggio
              unsubscribeActive();
              unsubscribeTodays();
         };
@@ -281,11 +287,12 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 
             } else if (action === 'clockPause') { // AZIONE INIZIO PAUSA
                 if (!currentActiveEntry) throw new Error("Devi avere una timbratura attiva.");
-                const isInPauseFromDb = currentActiveEntry.pauses?.some(p => p.start && !p.end);
-
-                // *** BLOCCO ANTI DOPPIA PAUSA ***
-                if (isInPauseFromDb || isPauseAttempted) { 
-                    throw new Error("Pausa già attiva o tentativo in corso. Attendere l'aggiornamento.");
+                
+                // *** BLOCCO ANTI DOPPIA PAUSA (ANCHE SE TERMINATA) ***
+                if (isInPause || isPauseAttempted || hasCompletedPause) { 
+                    throw new Error(hasCompletedPause 
+                        ? "Hai già effettuato la pausa in questo turno." 
+                        : "Pausa già attiva o tentativo in corso. Attendere l'aggiornamento.");
                 }
 
                 const currentArea = allWorkAreas.find(a => a.id === currentActiveEntry.workAreaId);
@@ -318,7 +325,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     };
 
 
-    // Logica handleExportExcel (Correzione Linter/Query)
+    // Logica handleExportExcel (Omessa per brevità) - INVARIATA
     const handleExportExcel = async () => {
         setIsGenerating(true);
 
@@ -334,12 +341,13 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             const nextMonth = selectedMonth === 11 ? 0 : selectedMonth + 1;
             const nextYear = selectedMonth === 11 ? selectedYear + 1 : selectedYear;
             const endDate = new Date(nextYear, nextMonth, 1); 
-            
+
             const q = query(
                 collection(db, "time_entries"),
                 where("employeeId", "==", employeeId), 
                 where("clockInTime", ">=", Timestamp.fromDate(startDate)),
-                where("clockInTime", "<", Timestamp.fromDate(endDate)), // FILTRO ENDDATE AGGIUNTO (FIX LINTER)
+                // FIX: Includiamo endDate per delimitare l'intervallo 
+                where("clockInTime", "<", Timestamp.fromDate(endDate)),
                 orderBy("clockInTime", "asc")
             );
 
@@ -512,26 +520,32 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             {/* Box Stato Timbratura e Azioni */}
             <div className="bg-white p-4 rounded-lg shadow-md mb-6">
                 <h2 className="text-xl font-bold mb-3 text-center">Azioni Rapide</h2>
-                {activeEntry ? ( // Se l'utente è timbrato (Stato Reale)
+                {activeEntry ? ( // Se l'utente è timbrato
                     <div>
                         <p className="text-center text-green-600 font-semibold text-lg mb-4">Timbratura ATTIVA su: <span className="font-bold">{workAreaName}</span></p>
                         
                         {/* SEMAFORO QUANDO ATTIVO: 3 pulsanti */}
                         <div className="grid grid-cols-3 gap-3">
 
-                            {/* 1. PAUSA (Solo Inizio Pausa, Disabilitato se in Pausa Fissa) */}
+                            {/* 1. PAUSA (Solo Inizio Pausa, Disabilitato se in Pausa o Pausa Effettuata) */}
                             <button
                                 onClick={() => handleAction('clockPause')} 
-                                // Disabilitato se Pausa già Attiva o in attesa di conferma
-                                disabled={isProcessing || isInPause || isPauseAttempted} 
+                                // Disabilitato se Pausa già Attiva, in attesa, o GIA' COMPLETATA
+                                disabled={isProcessing || isInPause || isPauseAttempted || hasCompletedPause} 
                                 className={`w-full font-bold rounded-lg shadow-lg transition-colors py-4 text-white ${
-                                    isInPause || isPauseAttempted
-                                        ? 'bg-gray-400' // GRIGIO se Pausa Attiva (bloccato)
+                                    isInPause || isPauseAttempted || hasCompletedPause
+                                        ? 'bg-gray-400' // GRIGIO se Pausa Attiva/Effettuata (bloccato)
                                         : 'bg-orange-500 hover:bg-orange-600' // ARANCIONE per INIZIARE PAUSA
                                 } disabled:opacity-50 disabled:cursor-not-allowed`}
                             >
                                 <div className="text-2xl leading-none">🟡</div>
-                                <span className="text-sm block mt-1">{isInPause || isPauseAttempted ? 'PAUSA ATTIVA' : 'INIZIA PAUSA'}</span>
+                                <span className="text-sm block mt-1">
+                                    {isInPause || isPauseAttempted 
+                                        ? 'PAUSA ATTIVA' 
+                                        : hasCompletedPause 
+                                            ? 'PAUSA EFFETTUATA' 
+                                            : 'INIZIA PAUSA'}
+                                </span>
                             </button>
 
 
@@ -578,7 +592,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 )}
             </div>
             
-            {/* Box Cronologia Odierna - INVARIATO */}
+            {/* Box Cronologia Odierna */}
             <div className="bg-white p-4 rounded-lg shadow-md mb-6">
                 <h2 className="text-xl font-bold mb-3">Timbrature di Oggi</h2>
                 <div className="space-y-2 max-h-40 overflow-y-auto">
@@ -603,7 +617,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 </div>
             </div>
 
-            {/* Box Report Mensile Excel - INVARIATO */}
+            {/* Box Report Mensile Excel */}
             <div className="bg-white p-4 rounded-lg shadow-md mb-6">
                 <h2 className="text-xl font-bold mb-3">Report Mensile Excel</h2>
                 <div className="grid grid-cols-2 gap-4 mb-4">

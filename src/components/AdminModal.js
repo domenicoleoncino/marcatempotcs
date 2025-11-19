@@ -275,7 +275,14 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                     const isClockIn = type === 'manualClockIn' || type === 'adminClockIn';
                     if (!formData.selectedAreaId && isClockIn) throw new Error('Seleziona un\'area.');
                     if (!manualTime) throw new Error('Seleziona un orario.');
-                    if (!formData.note) throw new Error('Il Motivo della timbratura manuale è obbligatorio.'); // Motivo obbligatorio
+                    
+                    // --- MODIFICA RICHIESTA: La nota è obbligatoria solo per 'adminClockIn' ---
+                    const isNoteRequired = type === 'adminClockIn'; 
+                    if (isNoteRequired && !formData.note) {
+                        throw new Error('Il Motivo della timbratura manuale è obbligatorio per le timbrature forzate su altri dipendenti.');
+                    }
+                    // --------------------------------------------------------------------------
+
                     if (!user.uid) throw new Error("Utente non autenticato.");
 
                     const functionName = isClockIn ? 'manualClockIn' : 'manualClockOut';
@@ -516,6 +523,8 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                 );
 
                 const isTimbraturaForzata = type === 'manualClockIn' || type === 'adminClockIn';
+                // La nota è obbligatoria solo per le timbrature forzate per altri dipendenti
+                const noteIsRequired = type === 'adminClockIn'; 
 
                 body = (
                     <div className="space-y-4">
@@ -530,16 +539,18 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                             : <p className="text-sm text-red-500">Nessuna area disponibile.</p>
                         )}
 
-                        {/* CAMPO MOTIVO (Obbligatorio) */}
+                        {/* CAMPO MOTIVO (Obbligatorio solo per timbrature di altri dipendenti) */}
                         <div>
-                             <label htmlFor="note" className="block text-sm font-medium text-gray-700">Motivo Timbratura Manuale (Obbligatorio)</label>
+                             <label htmlFor="note" className="block text-sm font-medium text-gray-700">
+                                 Motivo Timbratura Manuale ({noteIsRequired ? 'Obbligatorio' : 'Opzionale'})
+                             </label>
                              <textarea
                                  id="note"
                                  name="note"
                                  value={formData.note ?? ''}
                                  onChange={handleChange}
                                  rows="2"
-                                 required
+                                 required={noteIsRequired}
                                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                              />
                         </div>
