@@ -1,4 +1,4 @@
-// File: src/js/components/EmployeeDashboard.js (SINTASSI RIPRISTINATA)
+// File: src/js/components/EmployeeDashboard.js (SENZA PULSANTE AGGIORNA STATO)
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../firebase';
@@ -62,11 +62,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     };
     // =============================
 
-    // Funzione per forzare l'aggiornamento della pagina (Refresh Manuale)
-    const handleManualRefresh = () => {
-        window.location.reload();
-    };
-
+    // RIMOZIONE: Funzione handleManualRefresh
 
     // Aggiorna ora corrente
     useEffect(() => {
@@ -210,14 +206,11 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             setTodaysEntries(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         }, (error) => console.error("Errore listener timbratura attiva:", error));
         
-        // RIMOZIONE: Esegue l'ascolto per il bypass
-
 
         // Funzione di pulizia
         return () => {
              unsubscribeActive();
              unsubscribeTodays();
-             // RIMOZIONE: unsubscribeBypass();
         };
     }, [user?.uid, employeeData?.id, allWorkAreas]);
 
@@ -465,10 +458,8 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
         );
     }; 
     
-    
-
-
-    
+    // Funzione per forzare l'aggiornamento della pagina (Refresh Manuale)
+    // RIMOZIONE: handleManualRefresh (era una funzione di debug)
 
 
     // --- Componente di stato GPS/Area ---
@@ -531,13 +522,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 <p className="text-4xl font-bold">{currentTime.toLocaleTimeString('it-IT')}</p>
                 <p className="text-lg text-gray-500">{currentTime.toLocaleDateString('it-IT', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
                 
-                {/* PULSANTE AGGIORNA STATO */}
-                <button
-                    onClick={handleManualRefresh}
-                    className="mt-2 text-xs px-3 py-1 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
-                >
-                    🔄 Aggiorna Stato
-                </button>
+                {/* RIMOZIONE: PULSANTE AGGIORNA STATO */}
             </div>
 
             {/* BLOCCO DI STATO AREA/GPS */}
@@ -681,4 +666,5 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
         </div>
     );
 };
+
 export default EmployeeDashboard;

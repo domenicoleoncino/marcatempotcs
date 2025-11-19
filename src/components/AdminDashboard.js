@@ -1,6 +1,5 @@
 /* eslint-disable no-unused-vars */
 /* global __firebase_config, __initial_auth_token, __app_id */
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db } from '../firebase';
 import {
@@ -158,11 +157,7 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                             {/* Pulsanti specifici per Preposto/Admin - RESET DEVICE */}
                                             <div className='flex gap-2'>
                                                 {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (
-                                                    <button onClick={() => openModal('bypassRestPeriod', emp)} className="text-xs px-2 py-1 bg-purple-500 text-white rounded-md hover:bg-purple-600 whitespace-nowrap">
-                                                        Sblocca Riposo
-                                                    </button>
-                                                )}
-                                                {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (
+                                                    // RIMOZIONE: Pulsante Sblocca Riposo
                                                     <button onClick={() => handleResetEmployeeDevice(emp)} disabled={emp.deviceIds?.length === 0} className="text-xs px-2 py-1 bg-yellow-500 text-gray-800 rounded-md hover:bg-yellow-600 whitespace-nowrap disabled:bg-gray-400 disabled:cursor-not-allowed">
                                                         Reset Device
                                                     </button>
@@ -419,6 +414,8 @@ const ReportView = ({ reports, title, handleExportXml }) => {
 
 // --- COMPONENTE PRINCIPALE ---
 const AdminDashboard = ({ user, handleLogout, userData }) => {
+
+    console.log('[AdminDashboard] Ricevuto userData:', userData);
 
     const [view, setView] = useState('dashboard');
     const [allEmployees, setAllEmployees] = useState([]); 
@@ -803,14 +800,15 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
                 if (clockOut) {
                     const totalMs = clockOut.getTime() - clockIn.getTime();
-                    const pauseMs = (entry.pauses || []).reduce((acc, p) => {
+                    // Correzione: La variabile pauseMs è stata rimossa, usiamo direttamente il calcolo
+                    const pauseDurationMs = (entry.pauses || []).reduce((acc, p) => {
                         if (p.start && p.end) {
                             const startMillis = p.start.toMillis ? p.start.toMillis() : new Date(p.start).getTime();
                             const endMillis = p.end.toMillis ? p.end.toMillis() : new Date(p.end).getTime();
                             return acc + (endMillis - startMillis);
                         } return acc;
                     }, 0);
-                    let calculatedDurationMs = totalMs - pauseMs;
+                    let calculatedDurationMs = totalMs - pauseDurationMs;
                     durationHours = calculatedDurationMs > 0 ? (calculatedDurationMs / 3600000) : 0;
                     areaHoursMap.set(area.id, (areaHoursMap.get(area.id) || 0) + durationHours);
                 }
@@ -913,7 +911,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                              ) : (
                                  <div>
                                      <p className="text-sm font-semibold text-red-600">Non sei al lavoro</p>
-                                     {/* CORREZIONE: Apre la modale per la rettifica ora/area/motivo */}
+                                     {/* CORREZIONE: Apre la modale per la rettifica ora/area/motifica */}
                                      <button onClick={() => openModal('manualClockIn', adminEmployeeProfile)} disabled={isActionLoading} className="mt-1 text-xs px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50">Timbra Entrata</button>
                                  </div>
                              )}
@@ -953,33 +951,19 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
                             <div className="lg:col-span-1"><label htmlFor="startDate" className="block text-sm font-medium text-gray-700 mb-1">Da:</label><input type="date" id="startDate" value={dateRange.start} onChange={e => setDateRange({ ...dateRange, start: e.target.value })} className="p-2 border border-gray-300 rounded-md w-full text-sm" /></div>
                             <div className="lg:col-span-1"><label htmlFor="endDate" className="block text-sm font-medium text-gray-700 mb-1">A:</label><input type="date" id="endDate" value={dateRange.end} onChange={e => setDateRange({ ...dateRange, end: e.target.value })} className="p-2 border border-gray-300 rounded-md w-full text-sm" /></div>
-                            <div className="lg:col-span-1">
-                                <label htmlFor="areaFilter" className="block text-sm font-medium text-gray-700 mb-1">Filtra Area:</label>
-                                <select id="areaFilter" value={reportAreaFilter} onChange={e => setReportAreaFilter(e.target.value)} className="p-2 border border-gray-300 rounded-md w-full text-sm">
-                                    <option value="all">Tutte le Aree</option>
-                                    {allWorkAreas.map(area => <option key={area.id} value={area.id}>{area.name}</option>)}
-                                </select>
-                            </div>
-                            <div className="lg:col-span-1">
-                                <label htmlFor="employeeFilter" className="block text-sm font-medium text-gray-700 mb-1">Filtra Dipendente:</label>
-                                <select id="employeeFilter" value={reportEmployeeFilter} onChange={e => setReportEmployeeFilter(e.target.value)} className="p-2 border border-gray-300 rounded-md w-full text-sm">
-                                    <option value="all">Tutti i Dipendenti</option>
-                                    {managedEmployees.map(emp => <option key={emp.id} value={emp.id}>{emp.name} {emp.surname}</option>)}
-                                </select>
-                            </div>
-                            <div className="lg:col-span-1">
-                                <button onClick={generateReport} disabled={isLoading || isActionLoading} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 w-full disabled:bg-gray-400 text-sm">
-                                    Genera Report
-                                </button>
-                            </div>
+                            <div className="lg:col-span-1"><label htmlFor="areaFilter" className="block text-sm font-medium text-gray-700 mb-1">Area:</label><select id="areaFilter" value={reportAreaFilter} onChange={e => setReportAreaFilter(e.target.value)} className="p-2 border border-gray-300 rounded-md w-full text-sm bg-white"><option value="all">Tutte le Aree</option>{(currentUserRole === 'admin' ? allWorkAreas : allWorkAreas.filter(a => userData?.managedAreaIds?.includes(a.id))).sort((a,b) => a.name.localeCompare(b.name)).map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}</select></div>
+                            <div className="lg:col-span-1"><label htmlFor="employeeFilter" className="block text-sm font-medium text-gray-700 mb-1">Dipendente:</label><select id="employeeFilter" value={reportEmployeeFilter} onChange={e => setReportEmployeeFilter(e.target.value)} className="p-2 border border-gray-300 rounded-md w-full text-sm bg-white"><option value="all">Tutti i Dipendenti</option>{(currentUserRole === 'admin' ? allEmployees : managedEmployees).sort((a,b) => `${a.name} ${a.surname}`.localeCompare(`${b.name} ${b.surname}`)).map(emp => (<option key={emp.id} value={emp.id}>{emp.name} {emp.surname}</option>))}</select></div>
+                            <div className="lg:col-span-1"><button onClick={generateReport} disabled={isLoading || isActionLoading} className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm w-full disabled:opacity-50">Genera Report</button></div>
                         </div>
                     </div>
                 )}
 
-
-                <main className="space-y-8">
-                    {view === 'dashboard' && <DashboardView totalEmployees={allEmployees.length} activeEmployeesDetails={activeEmployeesDetails} totalDayHours={totalDayHours} />}
-                    {view === 'employees' && <EmployeeManagementView employees={sortedAndFilteredEmployees} openModal={openModal} currentUserRole={currentUserRole} sortConfig={sortConfig} requestSort={requestSort} searchTerm={searchTerm} setSearchTerm={setSearchTerm} handleResetEmployeeDevice={handleResetEmployeeDevice} />}
+                {/* Render della vista corrente */}
+                <main>
+                    {/* CORREZIONE: Mostra DashboardView solo quando view è 'dashboard' */}
+                    {view === 'dashboard' && <DashboardView totalEmployees={managedEmployees.length} activeEmployeesDetails={activeEmployeesDetails} totalDayHours={totalDayHours} />}
+                    
+                    {view === 'employees' && <EmployeeManagementView employees={sortedAndFilteredEmployees} openModal={openModal} currentUserRole={currentUserRole} requestSort={requestSort} sortConfig={sortConfig} searchTerm={searchTerm} setSearchTerm={setSearchTerm} handleResetEmployeeDevice={handleResetEmployeeDevice} />}
                     {view === 'areas' && <AreaManagementView workAreas={workAreasWithHours} openModal={openModal} currentUserRole={currentUserRole} />}
                     {view === 'admins' && currentUserRole === 'admin' && <AdminManagementView admins={admins} openModal={openModal} user={user} superAdminEmail={superAdminEmail} currentUserRole={currentUserRole} onDataUpdate={fetchData} />}
                     {view === 'reports' && <ReportView reports={reports} title={reportTitle} handleExportXml={handleExportXml} />}
@@ -998,7 +982,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                      superAdminEmail={superAdminEmail}
                      allEmployees={allEmployees}
                      currentUserRole={currentUserRole}
-                     userData={userData} // Passa i dati dell'utente loggato
+                     userData={userData} 
                      onAdminClockIn={handleAdminClockIn}
                      onAdminApplyPause={handleAdminApplyPause}
                  />
