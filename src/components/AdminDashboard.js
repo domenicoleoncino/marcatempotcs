@@ -1,5 +1,6 @@
 /* eslint-disable no-unused-vars */
 /* global __firebase_config, __initial_auth_token, __app_id */
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db } from '../firebase';
 import {
