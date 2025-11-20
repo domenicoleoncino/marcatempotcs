@@ -20,7 +20,7 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours }
         <div className="flex flex-col md:grid md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
             <div className="bg-white p-4 rounded-lg shadow-md text-center sm:text-left">
                 <p className="text-sm text-gray-500">Dipendenti Attivi</p>
-                <p className="text-2xl font-bold text-gray-800">{activeEmployeesDetails.length} / {totalEmployees}</p>
+                <p className="2xl font-bold text-gray-800">{activeEmployeesDetails.length} / {totalEmployees}</p>
             </div>
             <div className="bg-white p-4 rounded-lg shadow-md text-center sm:text-left">
                 <p className="text-sm text-gray-500">Ore Lavorate Oggi (Totali)</p>
@@ -57,7 +57,7 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours }
     </div>
 );
 
-const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortConfig, requestSort, searchTerm, setSearchTerm, handleResetEmployeeDevice }) => {
+const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortConfig, requestSort, searchTerm, setSearchTerm, handleResetEmployeeDevice, adminEmployeeId }) => { // <--- AGGIUNTO adminEmployeeId
     const getSortIndicator = (key) => {
         if (!sortConfig || sortConfig.key !== key) return '';
         return sortConfig.direction === 'ascending' ? ' ▲' : ' ▼';
@@ -100,79 +100,88 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                        {employees.map(emp => ( 
-                            <tr key={emp.id}>
-                                <td className="px-4 py-2 whitespace-nowrap">
-                                    <div className="text-sm font-medium text-gray-900">{emp.name} {emp.surname}</div>
-                                    <div className="text-xs text-gray-500 break-all">{emp.email}</div>
-                                </td>
-                                <td className="px-4 py-2 whitespace-nowrap">
-                                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${emp.activeEntry ? (emp.activeEntry.status === 'In Pausa' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800') : 'bg-red-100 text-red-800'}`}>
-                                        {emp.activeEntry ? emp.activeEntry.status : 'Non al Lavoro'}
-                                    </span>
-                                </td>
-                                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{emp.workAreaNames?.join(', ') || 'Nessuna'}</td>
-                                <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
-                                    <div className="flex flex-col items-start gap-1">
-                                        {/* Pulsanti Timbratura/Pausa (visibili a tutti) */}
-                                        {emp.activeEntry ? (
-                                            <>
-                                                {/* CORREZIONE TIMBRA USCITA: Deve usare 'adminClockIn' per forzare la nota */}
-                                                <button
-                                                    onClick={() => openModal('adminClockIn', emp)} // *** MODIFICATO: Usa adminClockIn ***
-                                                    disabled={emp.activeEntry.status === 'In Pausa'}
-                                                    className={`px-2 py-1 text-xs text-white rounded-md w-full text-center ${
-                                                        emp.activeEntry.status === 'In Pausa'
-                                                        ? 'bg-gray-400 cursor-not-allowed'
-                                                        : 'bg-yellow-500 hover:bg-yellow-600'
-                                                    }`}
-                                                >
-                                                    Timbra Uscita
-                                                </button>
+                        {employees.map(emp => {
+                            
+                            // *** LOGICA DI DISCRIMINAZIONE PER LA TIMBRATURA ***
+                            const isSelfClockIn = emp.id === adminEmployeeId;
+                            const clockInType = isSelfClockIn ? 'manualClockIn' : 'adminClockIn';
+                            const clockOutType = isSelfClockIn ? 'manualClockOut' : 'adminClockIn';
+                            // ************************************************
 
-                                                <button
-                                                    onClick={() => openModal('applyPredefinedPause', emp)}
-                                                    disabled={emp.activeEntry.status === 'In Pausa'}
-                                                    className={`px-2 py-1 text-xs text-white rounded-md w-full text-center mt-1 ${
-                                                        emp.activeEntry.status === 'In Pausa'
-                                                        ? 'bg-gray-400 cursor-not-allowed'
-                                                        : 'bg-orange-500 hover:bg-orange-600'
-                                                    }`}
-                                                >
-                                                    Applica Pausa
-                                                </button>
-                                            </>
-                                        ) : (
-                                            /* CORREZIONE TIMBRA ENTRATA: Deve usare 'adminClockIn' per forzare la nota */
-                                            <button onClick={() => openModal('adminClockIn', emp)} className="px-2 py-1 text-xs bg-blue-500 text-white rounded-md hover:bg-blue-600 w-full text-center">Timbra Entrata</button> // *** MODIFICATO: Usa adminClockIn ***
-                                        )}
-                                        {/* Pulsanti specifici per Admin */}
-                                        <div className="flex flex-col sm:flex-row gap-2 w-full justify-start mt-1 items-start sm:items-center">
-                                            {currentUserRole === 'admin' && (
+                            return ( 
+                                <tr key={emp.id}>
+                                    <td className="px-4 py-2 whitespace-nowrap">
+                                        <div className="text-sm font-medium text-gray-900">{emp.name} {emp.surname}</div>
+                                        <div className="text-xs text-gray-500 break-all">{emp.email}</div>
+                                    </td>
+                                    <td className="px-4 py-2 whitespace-nowrap">
+                                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${emp.activeEntry ? (emp.activeEntry.status === 'In Pausa' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800') : 'bg-red-100 text-red-800'}`}>
+                                            {emp.activeEntry ? emp.activeEntry.status : 'Non al Lavoro'}
+                                        </span>
+                                    </td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{emp.workAreaNames?.join(', ') || 'Nessuna'}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
+                                        <div className="flex flex-col items-start gap-1">
+                                            {/* Pulsanti Timbratura/Pausa (visibili a tutti) */}
+                                            {emp.activeEntry ? (
                                                 <>
-                                                    <button onClick={() => openModal('assignArea', emp)} className="text-xs text-indigo-600 hover:text-indigo-900 whitespace-nowrap">Assegna Aree (Tutte)</button>
-                                                    <button onClick={() => openModal('editEmployee', emp)} className="text-xs text-green-600 hover:text-green-900">Modifica</button>
-                                                    <button onClick={() => openModal('deleteEmployee', emp)} className="text-xs text-red-600 hover:text-red-900">Elimina</button>
-                                                </>
-                                            )}
-                                            {/* Pulsanti specifici per Preposto/Admin - RESET DEVICE */}
-                                            <div className="flex gap-2">
-                                                {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (
-                                                    // RIMOZIONE: Pulsante Sblocca Riposo
-                                                    <button onClick={() => handleResetEmployeeDevice(emp)} disabled={emp.deviceIds?.length === 0} className="text-xs px-2 py-1 bg-yellow-500 text-gray-800 rounded-md hover:bg-yellow-600 whitespace-nowrap disabled:bg-gray-400 disabled:cursor-not-allowed">
-                                                        Reset Device
+                                                    {/* TIMBRA USCITA */}
+                                                    <button
+                                                        onClick={() => openModal(clockOutType, emp)} // <-- USA clockOutType
+                                                        disabled={emp.activeEntry.status === 'In Pausa'}
+                                                        className={`px-2 py-1 text-xs text-white rounded-md w-full text-center ${
+                                                            emp.activeEntry.status === 'In Pausa'
+                                                            ? 'bg-gray-400 cursor-not-allowed'
+                                                            : 'bg-yellow-500 hover:bg-yellow-600'
+                                                        }`}
+                                                    >
+                                                        Timbra Uscita
                                                     </button>
+
+                                                    {/* APPLICA PAUSA */}
+                                                    <button
+                                                        onClick={() => openModal('applyPredefinedPause', emp)}
+                                                        disabled={!emp.activeEntry || emp.activeEntry.status === 'In Pausa'}
+                                                        className={`px-2 py-1 text-xs text-white rounded-md w-full text-center mt-1 ${
+                                                            !emp.activeEntry || emp.activeEntry.status === 'In Pausa' 
+                                                            ? 'bg-gray-400 cursor-not-allowed'
+                                                            : 'bg-orange-500 hover:bg-orange-600'
+                                                        }`}
+                                                    >
+                                                        Applica Pausa
+                                                    </button>
+                                                </>
+                                            ) : (
+                                                /* TIMBRA ENTRATA */
+                                                <button onClick={() => openModal(clockInType, emp)} className="px-2 py-1 text-xs bg-blue-500 text-white rounded-md hover:bg-blue-600 w-full text-center">Timbra Entrata</button> // <-- USA clockInType
+                                            )}
+                                            {/* Pulsanti specifici per Admin */}
+                                            <div className="flex flex-col sm:flex-row gap-2 w-full justify-start mt-1 items-start sm:items-center">
+                                                {currentUserRole === 'admin' && (
+                                                    <>
+                                                        <button onClick={() => openModal('assignArea', emp)} className="text-xs text-indigo-600 hover:text-indigo-900 whitespace-nowrap">Assegna Aree (Tutte)</button>
+                                                        <button onClick={() => openModal('editEmployee', emp)} className="text-xs text-green-600 hover:text-green-900">Modifica</button>
+                                                        <button onClick={() => openModal('deleteEmployee', emp)} className="text-xs text-red-600 hover:text-red-900">Elimina</button>
+                                                    </>
+                                                )}
+                                                {/* Pulsanti specifici per Preposto/Admin - RESET DEVICE */}
+                                                <div className="flex gap-2">
+                                                    {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (
+                                                        <button onClick={() => handleResetEmployeeDevice(emp)} disabled={emp.deviceIds?.length === 0} className="text-xs px-2 py-1 bg-yellow-500 text-gray-800 rounded-md hover:bg-yellow-600 whitespace-nowrap disabled:bg-gray-400 disabled:cursor-not-allowed">
+                                                            Reset Device
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                
+                                                {currentUserRole === 'preposto' && (
+                                                    <button onClick={() => openModal('assignEmployeeToPrepostoArea', emp)} className="text-xs text-blue-600 hover:text-blue-900 whitespace-nowrap">Gestisci Mie Aree</button>
                                                 )}
                                             </div>
-                                            
-                                            {currentUserRole === 'preposto' && (
-                                                <button onClick={() => openModal('assignEmployeeToPrepostoArea', emp)} className="text-xs text-blue-600 hover:text-blue-900 whitespace-nowrap">Gestisci Mie Aree</button>
-                                            )}
                                         </div>
-                                    </div>
-                                </td>
-                            </tr>
-                        ))}
+                                    </td>
+                                </tr>
+                            );
+                        })}
                     </tbody>
                 </table>
                  {/* Aggiunta messaggio se la lista filtrata è vuota */}
@@ -295,7 +304,7 @@ const AddAdminForm = ({ onCancel, onDataUpdate, user }) => {
     );
 };
 
-const AdminManagementView = ({ admins, openModal, user, superAdminEmail, currentUserRole, onDataUpdate }) => {
+const AdminManagementView = ({ admins, openModal, user, superAdminEmail, currentUserRole, onDataUpdate, showModal }) => { 
     const [showForm, setShowForm] = useState(false);
     return (
         <div>
@@ -340,7 +349,8 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
                     </tbody>
                 </table>
             </div>
-            {showForm && <AddAdminForm onCancel={() => setShowForm(false)} onDataUpdate={onDataUpdate} user={user} />}
+            {/* CORREZIONE: Aggiunto !showModal come condizione per nascondere il form quando la modale è aperta */}
+            {showForm && !showModal && <AddAdminForm onCancel={() => setShowForm(false)} onDataUpdate={onDataUpdate} user={user} />}
         </div>
     );
 };
@@ -697,7 +707,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             if (isMounted) { // Controllo di smontaggio
                  console.error("Errore listener ore totali:", error);
                  alert("Errore aggiornamento ore totali.");
-            }
+             }
         });
         return () => {
             isMounted = false; // Imposta a false allo smontaggio
@@ -731,8 +741,13 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     }, [adminActiveEntry]);
 
     const handleAdminApplyPause = useCallback(async (employee) => {
-        if (!employee || !employee.activeEntry) return alert("Nessuna timbratura attiva per questo dipendente.");
+        // *** Verifica più robusta dell'ID della Timbratura ***
+        const timeEntryId = employee?.activeEntry?.id; 
+
+        if (!timeEntryId) return alert("Errore: ID della timbratura attiva non trovato.");
+        
         const workArea = allWorkAreas.find(area => area.id === employee.activeEntry.workAreaId);
+        
         if (!workArea || !workArea.pauseDuration || workArea.pauseDuration <= 0) {
             return alert(`Nessuna pausa predefinita configurata per l'area "${workArea?.name || 'sconosciuta'}". Modifica l'area per aggiungerla.`);
         }
@@ -741,10 +756,13 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         setIsActionLoading(true);
         try {
             const applyPauseFunction = httpsCallable(getFunctions(undefined, 'europe-west1'), 'applyAutoPauseEmployee');
-            await applyPauseFunction({ timeEntryId: employee.activeEntry.id, durationMinutes: pauseDurationInMinutes });
+            await applyPauseFunction({ timeEntryId: timeEntryId, durationMinutes: pauseDurationInMinutes });
             alert(`Pausa predefinita di ${pauseDurationInMinutes} minuti applicata a ${employee.name}.`);
             setShowModal(false);
-        } catch (error) { alert(`Errore applicazione pausa: ${error.message}`); console.error(error); }
+        } catch (error) { 
+            console.error("Errore applicazione pausa (Server):", error);
+            alert(`Errore applicazione pausa: ${error.message || 'Errore Server.'}`); 
+        }
         finally {
             setIsActionLoading(false);
         }
@@ -805,8 +823,9 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             const areaHoursMap = new Map(allWorkAreas.map(area => [area.id, 0]));
             const reportData = finalEntries.map(entry => {
                 const employee = allEmployees.find(e => e.id === entry.employeeId);
+                if (!employee) return null;
                 const area = allWorkAreas.find(a => a.id === entry.workAreaId);
-                if (!entry.clockInTime || !employee || !area) return null;
+                if (!entry.clockInTime || !area) return null;
 
                 const clockIn = entry.clockInTime.toDate();
                 const clockOut = entry.clockOutTime ? entry.clockOutTime.toDate() : null;
@@ -994,11 +1013,11 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 <main>
                     {view === 'dashboard' && <DashboardView totalEmployees={managedEmployees.length} activeEmployeesDetails={activeEmployeesDetails} totalDayHours={totalDayHours} />}
                     
-                    {view === 'employees' && <EmployeeManagementView employees={sortedAndFilteredEmployees} openModal={openModal} currentUserRole={currentUserRole} requestSort={requestSort} sortConfig={sortConfig} searchTerm={searchTerm} setSearchTerm={setSearchTerm} handleResetEmployeeDevice={handleResetEmployeeDevice} />}
+                    {view === 'employees' && <EmployeeManagementView employees={sortedAndFilteredEmployees} openModal={openModal} currentUserRole={currentUserRole} requestSort={requestSort} sortConfig={sortConfig} searchTerm={searchTerm} setSearchTerm={setSearchTerm} handleResetEmployeeDevice={handleResetEmployeeDevice} adminEmployeeId={adminEmployeeProfile?.id} />}
                     
                     {view === 'areas' && <AreaManagementView workAreas={workAreasWithHours} openModal={openModal} currentUserRole={currentUserRole} />}
                     
-                    {view === 'admins' && currentUserRole === 'admin' && <AdminManagementView admins={admins} openModal={openModal} user={user} superAdminEmail={superAdminEmail} currentUserRole={currentUserRole} onDataUpdate={fetchData} />}
+                    {view === 'admins' && currentUserRole === 'admin' && <AdminManagementView admins={admins} openModal={openModal} user={user} superAdminEmail={superAdminEmail} currentUserRole={currentUserRole} onDataUpdate={fetchData} showModal={showModal} />}
                     
                     {view === 'reports' && <ReportView 
                          reports={reports} 
@@ -1029,7 +1048,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                      setShowModal={setShowModal}
                      workAreas={allWorkAreas}
                      onDataUpdate={fetchData}
-                     showModal={showModal} // <--- AGGIUNTO
                      user={user}
                      superAdminEmail={superAdminEmail}
                      allEmployees={allEmployees}
