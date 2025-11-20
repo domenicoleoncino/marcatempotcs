@@ -277,6 +277,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                     if (!manualTime) throw new Error('Seleziona un orario.');
                     
                     // --- MODIFICA RICHIESTA: La nota è obbligatoria solo per 'adminClockIn' ---
+                    // 'adminClockIn' è l'unico tipo che richiede la nota obbligatoria (timbratura forzata per altri)
                     const isNoteRequired = type === 'adminClockIn'; 
                     if (isNoteRequired && !formData.note) {
                         throw new Error('Il Motivo della timbratura manuale è obbligatorio per le timbrature forzate su altri dipendenti.');
@@ -523,7 +524,8 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                 );
 
                 const isTimbraturaForzata = type === 'manualClockIn' || type === 'adminClockIn';
-                // La nota è obbligatoria solo per le timbrature forzate per altri dipendenti
+                
+                // La nota è obbligatoria solo per 'adminClockIn' (timbratura forzata per altri)
                 const noteIsRequired = type === 'adminClockIn'; 
 
                 body = (
