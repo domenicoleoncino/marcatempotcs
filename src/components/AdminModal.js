@@ -1,4 +1,4 @@
-// File: src/js/components/AdminModal.js (FINALE: SENZA LOGICA RIPOSO 8H)
+// File: src/js/components/AdminModal.js (FINALE: STABILE CON CORREZIONE PAYLOAD E NOTA)
 
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
@@ -303,7 +303,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                         timestamp: manualTime, 
                         note: formData.note, 
                         adminId: user.uid,
-                        timezone: clientTimezone, // <-- INVIA IL FUSO ORARIO RICHIESTO
+                        timezone: clientTimezone, // <-- INVIO DEL FUSO ORARIO RICHIESTO
                         // entryId è richiesto solo per manualClockOut. Lo recuperiamo se attivo
                         entryId: !isClockIn ? item.activeEntry?.id : undefined
                     };
