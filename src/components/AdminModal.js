@@ -167,6 +167,13 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
         }
         // ****************************************************
 
+        // --- AGGIUNTA: Determina il Fuso Orario del Client ---
+        const clientTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (!clientTimezone) {
+             throw new Error("Impossibile determinare il Fuso Orario locale (timezone).");
+        }
+        // ----------------------------------------------------
+
         try {
             switch (type) {
                 case 'bypassRestPeriod': // RIMOZIONE: la modale non è più utilizzata
@@ -276,8 +283,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                     if (!formData.selectedAreaId && isClockIn) throw new Error('Seleziona un\'area.');
                     if (!manualTime) throw new Error('Seleziona un orario.');
                     
-                    // --- MODIFICA RICHIESTA: La nota è obbligatoria solo per 'adminClockIn' ---
-                    // 'adminClockIn' è l'unico tipo che richiede la nota obbligatoria (timbratura forzata per altri)
+                    // Controlli di obbligatorietà nota
                     const isNoteRequired = type === 'adminClockIn'; 
                     if (isNoteRequired && !formData.note) {
                         throw new Error('Il Motivo della timbratura manuale è obbligatorio per le timbrature forzate su altri dipendenti.');
@@ -289,13 +295,20 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                     const functionName = isClockIn ? 'manualClockIn' : 'manualClockOut';
                     const clockFunction = httpsCallable(functions, functionName);
                     
-                    await clockFunction({
+                    // --- PAYLOAD AGGIORNATO E COMPLETO ---
+                    const payload = {
                         employeeId: formData.selectedEmployeeId, 
-                        workAreaId: formData.selectedAreaId,
-                        timestamp: manualTime, // Tempo formattato in YYYY-MM-DDTHH:mm
+                        // workAreaId è richiesto solo per clockIn
+                        workAreaId: isClockIn ? formData.selectedAreaId : undefined,
+                        timestamp: manualTime, 
                         note: formData.note, 
-                        adminId: user.uid
-                    });
+                        adminId: user.uid,
+                        timezone: clientTimezone, // <-- INVIA IL FUSO ORARIO RICHIESTO
+                        // entryId è richiesto solo per manualClockOut
+                        entryId: !isClockIn ? item.activeEntry?.id : undefined
+                    };
+                    
+                    await clockFunction(payload);
 
                     alert(`Timbratura ${isClockIn ? 'di entrata' : 'di uscita'} registrata.`);
                     break;
