@@ -304,7 +304,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                         note: formData.note, 
                         adminId: user.uid,
                         timezone: clientTimezone, // <-- INVIA IL FUSO ORARIO RICHIESTO
-                        // entryId è richiesto solo per manualClockOut
+                        // entryId è richiesto solo per manualClockOut. Lo recuperiamo se attivo
                         entryId: !isClockIn ? item.activeEntry?.id : undefined
                     };
                     
