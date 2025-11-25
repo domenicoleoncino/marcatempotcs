@@ -1,4 +1,4 @@
-// File: src/components/EmployeeDashboard.js (Correzione definitiva Pausa Unica, Robustezza e Audio)
+// File: src/components/EmployeeDashboard.js (Correzione definitiva Pausa Unica, Robustezza e Avviso Uscita SEMPLIFICATO - AGGIUNTO STATO DISPOSITIVO)
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db } from '../firebase';
@@ -20,6 +20,16 @@ function getDistanceInMeters(lat1, lon1, lat2, lon2) {
     return R * c; // Distanza in metri
 }
 
+// === MOTIVI DI MANCATA PAUSA STRUTTURATI E SEMPLIFICATI ===
+const PAUSE_REASONS = [
+    { code: '01', reason: 'Mancata pausa per intervento urgente.' },
+    { code: '02', reason: 'Mancata pausa per ore non complete.' },
+    { code: '03', reason: 'Mancata pausa per richiesta cantiere.' },
+    { code: '04', reason: 'Altro... (specificare).' }
+];
+// =========================================================
+
+
 const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) => {
     // Stati
     const [currentTime, setCurrentTime] = useState(new Date());
@@ -29,7 +39,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     const [isProcessing, setIsProcessing] = useState(false);
     const [isPauseAttempted, setIsPauseAttempted] = useState(false); // Flag di tentativo di pausa
     const [locationError, setLocationError] = useState(null);
-    const [inRangeArea, setInRangeArea] = useState(null);
+    const [inRangeArea, setInRangeArea] = useState(null); // Rimosso setDeviceId (non necessario qui)
 
     // Stati per report Excel
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
@@ -225,14 +235,22 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
         try {
             let result;
             const currentActiveEntry = activeEntry;
+            
+            // --- VARIABILI DI CONTROLLO GPS/Device ---
+            const isGpsRequiredCheck = isGpsRequired; 
+            const currentLat = inRangeArea?.latitude;
+            const currentLon = inRangeArea?.longitude;
+            // Utilizza il primo ID del dispositivo registrato o, se l'array è vuoto, usa l'UID come ID iniziale del dispositivo (che verrà registrato)
+            const deviceId = employeeData.deviceIds?.[0] || user.uid; 
+            // -----------------------------------
 
             if (action === 'clockIn') {
                 
                 let areaIdToClockIn = null;
-                const note = isGpsRequired ? '' : 'senza GPS Manutentore'; 
+                const note = isGpsRequiredCheck ? '' : 'senza GPS Manutentore'; 
 
                 // Logica GPS Entrata
-                if (isGpsRequired) {
+                if (isGpsRequiredCheck) {
                     if (!inRangeArea) throw new Error("Devi essere all'interno di un'area rilevata per timbrare l'entrata.");
                     areaIdToClockIn = inRangeArea.id;
                 } else {
@@ -243,7 +261,14 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 }
                 
                 // Chiama la Cloud Function
-                result = await clockIn({ areaId: areaIdToClockIn, note: note }); 
+                result = await clockIn({ 
+                    areaId: areaIdToClockIn, 
+                    note: note, 
+                    deviceId: deviceId, 
+                    isGpsRequired: isGpsRequiredCheck,
+                    currentLat: inRangeArea?.latitude,
+                    currentLon: inRangeArea?.longitude
+                }); 
                 
                 // Aggiornamento ottimistico stato
                 if (result.data.success) {
@@ -267,13 +292,63 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             } else if (action === 'clockOut') {
                 if (!currentActiveEntry) throw new Error("Nessuna timbratura attiva da chiudere.");
 
+                let finalReasonCode = null;
+                let finalNoteText = '';
+                const currentArea = allWorkAreas.find(a => a.id === currentActiveEntry.workAreaId);
+                const pauseDuration = currentArea?.pauseDuration || 0;
+                
+                // === LOGICA CHIAVE: AVVISO PAUSA MANCANTE + MOTIVO STRUTTURATO ===
+                // Verifica se l'area ha una pausa predefinita E se la pausa NON è stata completata
+                if (pauseDuration > 0 && !hasCompletedPause) {
+                    
+                    const reasonOptions = PAUSE_REASONS.map((r, i) => `${i + 1} - ${r.reason}`).join('\n');
+                    
+                    const confirmExit = window.confirm(
+                        `ATTENZIONE: La tua area prevede una pausa di ${pauseDuration} minuti, ma non risulta sia stata completata.\n\nVuoi uscire senza pausa? Clicca OK per selezionare il motivo.`
+                    );
+
+                    if (confirmExit) {
+                        const selectedCode = window.prompt(
+                            `Seleziona il numero del motivo (da 1 a ${PAUSE_REASONS.length}):\n\n${reasonOptions}`
+                        );
+                        
+                        const selectedIndex = parseInt(selectedCode) - 1; // Conversione da 1-based a 0-based
+                        const selectedReason = PAUSE_REASONS[selectedIndex];
+                        
+                        if (!selectedReason) {
+                            throw new Error("Selezione motivo non valida o mancante. Uscita annullata.");
+                        }
+
+                        finalReasonCode = selectedReason.code;
+
+                        if (selectedReason.code === '04') { // Codice '04' = Altro...
+                            finalNoteText = window.prompt("Hai selezionato 'Altro'. Specifica il motivo (OBBLIGATORIO):");
+                            if (!finalNoteText || finalNoteText.trim() === '') {
+                                throw new Error("La specifica è obbligatoria per il motivo 'Altro'. Uscita annullata.");
+                            }
+                        } else {
+                            // Per gli altri motivi, usiamo il testo predefinito come nota
+                            finalNoteText = selectedReason.reason; 
+                        }
+                    } else {
+                        throw new Error("Uscita annullata.");
+                    }
+                }
+                // =============================================================
+
                 // *** CONTROLLO GPS USCITA ***
-                if (isGpsRequired) {
+                if (isGpsRequiredCheck) {
                      if (!inRangeArea) throw new Error("Devi essere all'interno di un'area rilevata per timbrare l'uscita.");
                 }
 
-                // Chiama la Cloud Function
-                result = await clockOut();
+                // Chiama la Cloud Function, passando la nota
+                result = await clockOut({ 
+                    note: finalNoteText, // Passaggio della nota (giustificazione)
+                    pauseSkipReason: finalReasonCode, // Passaggio del codice motivo
+                    isGpsRequired: isGpsRequiredCheck, 
+                    currentLat: currentLat, 
+                    currentLon: currentLon 
+                }); 
                 
                 // Logica di successo dopo la chiamata al backend
                 if (result.data.success) {
@@ -300,7 +375,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
 
                 if (pauseDuration && pauseDuration > 0) {
                     setIsPauseAttempted(true); 
-                    result = await applyAutoPauseEmployee({ durationMinutes: pauseDuration }); 
+                    result = await applyAutoPauseEmployee({ timeEntryId: currentActiveEntry.id, durationMinutes: pauseDuration }); 
                     
                     // SUONO DI SUCCESSO
                     playSound('pause_start'); 
@@ -318,7 +393,9 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
 
         } catch (error) {
             console.error(`Errore durante ${action}:`, error);
-            alert(`Errore: ${error.message || 'Si è verificato un problema.'}`);
+            // Cattura il messaggio d'errore dalla Cloud Function
+            const displayMessage = error.message.includes(":") ? error.message.split(":")[1].trim() : error.message;
+            alert(`Errore: ${displayMessage || 'Si è verificato un problema.'}`);
         } finally {
             setIsProcessing(false);
         }
@@ -442,12 +519,35 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     const months = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
     const years = [new Date().getFullYear(), new Date().getFullYear() - 1]; // Anno corrente e precedente
 
-    // Messaggio Dispositivo/Reset
+    
+    // Messaggio Dispositivo/Reset (AGGIORNATO)
     const renderDeviceMessage = () => {
+        // Valore massimo dei dispositivi (come definito nella Cloud Function)
+        const MAX_DEVICES = 2; 
+        const currentDeviceIds = employeeData.deviceIds || [];
+        const currentDeviceCount = currentDeviceIds.length;
+        
+        // L'ID del dispositivo utilizzato per la registrazione è il primo nell'array, altrimenti l'UID (in fase di prima registrazione)
+        const displayDeviceId = currentDeviceIds.length > 0 ? currentDeviceIds[0] : user.uid; 
+
+        // Se non ci sono dispositivi registrati, non mostriamo nulla (l'utente ne registrerà uno al prossimo clock-in)
+        if (currentDeviceCount === 0) return null; 
+
+        const isLimitReached = currentDeviceCount >= MAX_DEVICES;
+
         return (
-            <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-4" role="alert">
-                <p className="font-bold">Attenzione Dispositivo Registrato</p>
-                <p className="text-sm">In caso di guasto o cambio cellulare contattare Preposto o Admin.</p>
+            <div className={`p-4 mb-4 rounded-lg shadow-sm ${isLimitReached ? 'bg-red-100 border-l-4 border-red-500 text-red-700' : 'bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700'}`} role="alert">
+                <p className="font-bold">
+                    Stato Dispositivo: {currentDeviceCount} / {MAX_DEVICES} registrati
+                </p>
+                <p className="text-sm mt-1">
+                    **ID Registrato:** {displayDeviceId.substring(0, 8)}... (mostra solo l'inizio)
+                </p>
+                {isLimitReached && (
+                    <p className="text-xs font-semibold mt-1">
+                        ATTENZIONE: Hai raggiunto il limite massimo di registrazione dispositivi. In caso di guasto o cambio cellulare, contatta Preposto o Admin per il reset.
+                    </p>
+                )}
             </div>
         );
     }; 
@@ -473,7 +573,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                             inRangeArea ? (
                                 <p className="text-base text-green-600 font-semibold mt-2 text-center">✅ Area rilevata: <br/><strong>{inRangeArea.name}</strong></p>
                             ) : (
-                                <p className="text-base text-gray-500 mt-2 text-center">❌ Nessuna area nelle vicinanze o GPS in attesa.</p>
+                                <p className="text-base text-gray-500 font-semibold mt-2 text-center">❌ Nessuna area nelle vicinanze o GPS in attesa.</p>
                             )
                         )}
                     </>
@@ -486,7 +586,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                                 Area predefinita: <strong>{employeeWorkAreas[0].name}</strong>
                             </p>
                         ) : (
-                            <p className="text-sm text-red-500 mt-2 text-center">
+                            <p className="text-sm text-red-500 font-semibold mt-2 text-center">
                                 ❌ Non sei assegnato a nessuna area.
                             </p>
                         )}
@@ -503,7 +603,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
         <div className="p-4 max-w-lg mx-auto font-sans bg-gray-50 min-h-screen flex flex-col">
             <CompanyLogo />
             
-            {/* Box Messaggio Dispositivo (Modificato) */}
+            {/* Box Messaggio Dispositivo (DINAMICO) */}
             {renderDeviceMessage()}
 
             {/* Box Orario e Info Dipendente */}
@@ -519,7 +619,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
 
             {/* Box Stato Timbratura e Azioni */}
             <div className="bg-white p-4 rounded-lg shadow-md mb-6">
-                <h2 className="text-xl font-bold mb-3 text-center">Azioni Rapide</h2>
+                <h2 className="text-xl font-bold mb-3 preposto-center">Azioni Rapide</h2>
                 {activeEntry ? ( // Se l'utente è timbrato
                     <div>
                         <p className="text-center text-green-600 font-semibold text-lg mb-4">Timbratura ATTIVA su: <span className="font-bold">{workAreaName}</span></p>
