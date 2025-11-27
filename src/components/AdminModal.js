@@ -276,16 +276,16 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                 case 'manualClockIn':
                 case 'adminClockIn': 
                 case 'manualClockOut':
-                case 'adminClockOut': // <-- Aggiunta adminClockOut
+                case 'adminClockOut':
                     
-                    const isClockIn = type === 'manualClockIn' || type === 'adminClockIn'; // <-- Corretto
-                    const isClockOut = type === 'manualClockOut' || type === 'adminClockOut'; // <-- Nuovo
+                    const isClockIn = type === 'manualClockIn' || type === 'adminClockIn'; 
+                    const isClockOut = type === 'manualClockOut' || type === 'adminClockOut'; 
 
                     if (!formData.selectedAreaId && isClockIn) throw new Error('Seleziona un\'area.');
                     if (!manualTime) throw new Error('Seleziona un orario.');
                     
                     // Controlli di obbligatorietà nota
-                    const isNoteRequired = type === 'adminClockIn' || type === 'adminClockOut'; // Nota richiesta anche per uscita forzata
+                    const isNoteRequired = type === 'adminClockIn' || type === 'adminClockOut'; 
                     if (isNoteRequired && !formData.note) {
                         throw new Error('Il Motivo della timbratura manuale è obbligatorio per le timbrature forzate.');
                     }
@@ -305,7 +305,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                         note: formData.note, 
                         adminId: user.uid,
                         timezone: clientTimezone,
-                        entryId: isClockOut ? item.activeEntry?.id : undefined // EntryID richiesto solo per l'uscita
+                        entryId: isClockOut ? item.activeEntry?.id : undefined
                     };
                     
                     await clockFunction(payload);
@@ -338,14 +338,13 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
 
     // --- RENDER DEI CONTENUTI SPECIFICI DELLA MODALE ---
     const renderContent = () => {
-        // CORREZIONE LOGICA: Controlla solo se l'azione è esplicitamente Entrata forzata
+        // CORREZIONE LOGICA: isClockIn controlla solo azioni esplicite di entrata
         const isClockIn = type === 'manualClockIn' || type === 'adminClockIn'; 
         const isClockOut = type === 'manualClockOut' || type === 'adminClockOut'; 
         const isManualClock = isClockIn || isClockOut;
         
         // Titolo dinamico
         const employeeName = item?.name ? `${item.name} ${item.surname}` : 'N/A';
-        // Titolo corretto
         const baseTitle = isManualClock ? `${isClockIn ? 'Entrata' : 'Uscita'} Manuale per ${employeeName}` : 'Conferma Azione';
         
         const title = {
@@ -359,7 +358,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
 
 
         const renderField = (label, name, type = 'text', options = [], required = true) => (
-            // ... (codice omesso)
             <div>
                 <label htmlFor={name} className="block text-sm font-medium text-gray-700">{label}</label>
                 {type === 'select' ? (
@@ -384,7 +382,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
         );
 
         const renderCheckboxes = (label, name, items, disabled = false) => (
-             // ... (codice omesso)
              <div>
                  <label className="block text-sm font-medium text-gray-700">{label}</label>
                  {items && items.length > 0 ? (
@@ -410,7 +407,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
           );
 
         const renderSingleCheckbox = (label, name, description = '') => (
-            // ... (codice omesso)
              <div className="flex items-start pt-4">
                 <div className="flex items-center h-5">
                     <input
@@ -525,11 +521,15 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                  body = <p>Sei sicuro di voler eliminare l'utente {item.name} {item.surname} ({item.role})? L'operazione NON è reversibile.</p>;
                  break;
 
-            // --- Timbratura Manuale: Corretta per ora e area ---
+            // --- Timbratura Manuale: Corrette per ora e area ---
             case 'manualClockIn':
-            case 'adminClockIn':
+            case 'adminClockIn': 
             case 'manualClockOut':
             case 'adminClockOut':
+                
+                const isClockIn = type === 'manualClockIn' || type === 'adminClockIn'; 
+                const isClockOut = type === 'manualClockOut' || type === 'adminClockOut'; 
+                
                 const areasList = workAreas.filter(wa => 
                     item?.workAreaIds?.includes(wa.id) || 
                     (userData?.role === 'admin') || 

@@ -179,7 +179,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     }, [activeEntry]);
 
     const isInPause = pauseStatus === 'ACTIVE'; 
-    const hasCompletedPause = pauseStatus === 'COMPLETED'; 
+    const hasCompletedPause = pauseStatus === 'COMPLETED'; // <-- Rimosso dall'utilizzo diretto per risolvere il warning
     
     // Logica di Reset del flag di tentativo pausa
     useEffect(() => {
