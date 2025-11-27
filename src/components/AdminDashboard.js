@@ -271,8 +271,96 @@ const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
     </div>
 );
 
-const AddAdminForm = ({ onCancel, onDataUpdate, user }) => { /* ... Logica omessa ... */ return null; };
-const AdminManagementView = ({ admins, openModal, user, superAdminEmail, currentUserRole, onDataUpdate, showModal }) => { /* ... Logica omessa ... */ return null; };
+// === NUOVO COMPONENTE PER LA GESTIONE ADMIN/PREPOSTI ===
+const AdminManagementView = ({ admins, openModal, user, superAdminEmail, currentUserRole, onDataUpdate }) => {
+    
+    // Mostra solo il contenuto se l'utente è ADMIN
+    if (currentUserRole !== 'admin') {
+         return <div className="p-4 text-sm text-red-600 font-medium">Accesso negato. Solo gli amministratori hanno accesso a questa sezione.</div>;
+    }
+
+    const isSuperAdmin = user?.email === superAdminEmail;
+
+    return (
+        <div>
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
+                <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Gestione Utenti Admin/Preposti</h1>
+                {/* Il Super Admin può creare nuovi admin/preposti */}
+                {isSuperAdmin && (
+                    <button onClick={() => openModal('newAdmin')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">Crea Nuovo Admin/Preposto</button>
+                )}
+            </div>
+            
+            <p className="text-sm text-gray-500 mb-4">
+                In questa lista sono inclusi tutti gli utenti con ruolo "admin" e "preposto". Il Super Admin (tu: {superAdminEmail}) ha pieni poteri.
+            </p>
+
+            <div className="bg-white shadow-md rounded-lg overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                        <tr>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Utente</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ruolo</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aree Gestite</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Azioni</th>
+                        </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                        {admins.map(admin => (
+                            <tr key={admin.id}>
+                                <td className="px-4 py-2 whitespace-nowrap">
+                                    <div className="text-sm font-medium text-gray-900">{admin.name} {admin.surname}</div>
+                                    <div className="text-xs text-gray-500 break-all">{admin.email} {admin.email === superAdminEmail && <span className="font-bold text-indigo-600">(SUPER)</span>}</div>
+                                </td>
+                                <td className="px-4 py-2 whitespace-nowrap text-sm font-semibold text-gray-700 capitalize">{admin.role}</td>
+                                <td className="px-4 py-2 whitespace-normal text-sm text-gray-500">{admin.managedAreaNames?.join(', ') || 'Nessuna Area'}</td>
+                                <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
+                                    <div className="flex items-center gap-2">
+                                        
+                                        {/* Modifica il ruolo o le aree gestite (Admin può modificare Preposti, Super Admin tutti) */}
+                                        {(isSuperAdmin || (currentUserRole === 'admin' && admin.role === 'preposto')) && (
+                                            <button 
+                                                onClick={() => openModal('editAdminRole', admin)} 
+                                                className="text-green-600 hover:text-green-900 text-xs"
+                                                disabled={!isSuperAdmin && admin.role === 'admin'} // Admin non può modificare altri Admin
+                                            >
+                                                Modifica Ruolo/Aree
+                                            </button>
+                                        )}
+
+                                        {/* Elimina utente (Solo Super Admin) */}
+                                        {isSuperAdmin && admin.email !== superAdminEmail && (
+                                            <button 
+                                                onClick={() => openModal('deleteUser', admin)} 
+                                                className="text-red-600 hover:text-red-900 text-xs"
+                                            >
+                                                Elimina
+                                            </button>
+                                        )}
+
+                                        {/* Assegna Aree (Solo se è un Preposto) */}
+                                        {admin.role === 'preposto' && (
+                                            <button 
+                                                onClick={() => openModal('assignPrepostoAreas', admin)} 
+                                                className="text-blue-600 hover:text-blue-900 text-xs"
+                                            >
+                                                Assegna Aree
+                                            </button>
+                                        )}
+                                        
+                                        {/* Messaggio per il Super Admin su se stesso */}
+                                        {admin.email === superAdminEmail && <span className="text-xs text-gray-400">Non modificabile</span>}
+
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+};
 
 // === REPORT VIEW COMPLETO CON PULSANTI DI ESPORTAZIONE ===
 const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, allEmployees, currentUserRole, userData, setDateRange, setReportAreaFilter, reportAreaFilter, reportEmployeeFilter, setReportEmployeeFilter, generateReport, isLoading, isActionLoading, managedEmployees, showNotification }) => {
@@ -897,8 +985,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 };
             }).filter(Boolean)
               .sort((a, b) => {
-                  // === FIX DELL'ERRORE "no-undef" ===
-                  // Usiamo la funzione helper formatTime che ora è definita nello scope
+                  // === Ordinamento per data/ora di timbratura ===
                   
                   const dateA = formatTime(a.clockInDate, a.clockInTimeFormatted); // Timbratura A - Inizio
                   const dateB = formatTime(b.clockInDate, b.clockOutTimeFormatted); // Timbratura B - Fine (o Inizio fittizio se 'In corso')
@@ -1071,9 +1158,9 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                     
                     {view === 'areas' && <AreaManagementView workAreas={workAreasWithHours} openModal={openModal} currentUserRole={currentUserRole} />}
                     
-                    {view === 'admins' && currentUserRole === 'admin' && <AdminManagementView admins={admins} openModal={openModal} user={user} superAdminEmail={superAdminEmail} currentUserRole={currentUserRole} onDataUpdate={fetchData} showModal={showModal} />}
+                    {view === 'admins' && currentUserRole === 'admin' && <AdminManagementView admins={admins} openModal={openModal} user={user} superAdminEmail={superAdminEmail} currentUserRole={currentUserRole} onDataUpdate={fetchData} />}
                     
-                    {/* CORREZIONE: ReportView viene renderizzato solo quando view === 'reports' */}
+                    {/* eslint-disable-next-line react/jsx-no-undef */}
                     {view === 'reports' && <ReportView 
                          reports={reports} 
                          title={reportTitle} 
