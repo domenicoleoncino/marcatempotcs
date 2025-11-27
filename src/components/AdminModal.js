@@ -98,7 +98,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                 });
             } else if (type === 'assignArea') {
                 setFormData({ selectedAreas: item.workAreaIds || [] });
-            } else if (type === 'assignManagedAreas') {
+            } else if (type === 'assignPrepostoAreas') { // <-- FIX: AGGIUNTO IL CASO PER ASSEGNARE AREE DI GESTIONE A UN ALTRO ADMIN/PREPOSTO
                 setFormData({
                     selectedAreas: item.managedAreaIds || [],
                     controlloGpsRichiesto: item.controlloGpsRichiesto ?? true
@@ -193,14 +193,17 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                     const prepostoAssign = httpsCallable(functions, 'prepostoAssignEmployeeToArea');
                     await prepostoAssign({ employeeId: employeeToAssignId, areaIds: areaIdsToAssign });
 
-                    alert('Aree assegnate con successo al dipendente selezionato.');
-                    break;
-                
+                    // NON USARE ALERT NATIVI
+                    // alert('Aree assegnate con successo al dipendente selezionato.');
+                    await onDataUpdate(); // Aggiorna i dati
+                    setShowModal(false);
+                    return; // Uscita anticipata
+
                 case 'newEmployee':
                     if (!formData.name || !formData.surname || !formData.email || !formData.password) throw new Error('Nome, Cognome, Email e Password sono obbligatori.');
                     const createUser = httpsCallable(functions, 'createUser');
                     await createUser({ ...formData, role: 'dipendente', createdBy: user.uid });
-                    alert('Dipendente creato con successo!');
+                    // alert('Dipendente creato con successo!');
                     break;
                 case 'editEmployee':
                     if (!formData.name || !formData.surname) throw new Error('Nome e cognome sono obbligatori.');
@@ -209,18 +212,18 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                         surname: formData.surname,
                         controlloGpsRichiesto: formData.controlloGpsRichiesto
                     });
-                    alert('Dipendente aggiornato!');
+                    // alert('Dipendente aggiornato!');
                     break;
                 case 'deleteEmployee':
-                    if (!window.confirm(`Sei sicuro di voler eliminare ${item.name} ${item.surname}? L'operazione eliminerà anche l'account di accesso e NON è reversibile.`)) { setIsLoading(false); return; }
+                    // if (!window.confirm(`Sei sicuro di voler eliminare ${item.name} ${item.surname}? L'operazione eliminerà anche l'account di accesso e NON è reversibile.`)) { setIsLoading(false); return; }
                     const deleteUser = httpsCallable(functions, 'deleteUserAndEmployee');
                     await deleteUser({ userId: item.userId });
-                    alert('Dipendente e account di accesso eliminati.');
+                    // alert('Dipendente e account di accesso eliminati.');
                     break;
                 case 'resetDevice':
-                    if (!window.confirm(`Resettare l'associazione del dispositivo per ${item.name} ${item.surname}? Dovrà registrare nuovamente il dispositivo al prossimo login.`)) { setIsLoading(false); return; }
+                    // if (!window.confirm(`Resettare l'associazione del dispositivo per ${item.name} ${item.surname}? Dovrà registrare nuovamente il dispositivo al prossimo login.`)) { setIsLoading(false); return; }
                     await updateDoc(doc(db, "employees", item.id), { deviceIds: [] });
-                    alert('Associazione dispositivo resettata.');
+                    // alert('Associazione dispositivo resettata.');
                     break;
                 case 'newArea':
                     if (!formData.name || formData.latitude == null || formData.longitude == null || formData.radius == null) throw new Error('Tutti i campi (Nome, Latitudine, Longitudine, Raggio) sono obbligatori.');
@@ -228,49 +231,49 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                     if (isNaN(lat) || isNaN(lon) || isNaN(rad) || rad <= 0) { throw new Error('Latitudine, Longitudine devono essere numeri validi e Raggio deve essere > 0.'); }
                     const createArea = httpsCallable(functions, 'createWorkArea');
                     await createArea({ name: formData.name, pauseDuration: Number(formData.pauseDuration || 0), latitude: lat, longitude: lon, radius: rad });
-                    alert('Area creata con successo!');
+                    // alert('Area creata con successo!');
                     break;
                 case 'editArea':
                      if (!formData.name || formData.latitude == null || formData.longitude == null || formData.radius == null) throw new Error('Tutti i campi (Nome, Latitudine, Longitudine, Raggio) sono obbligatori.');
                      const editLat = Number(formData.latitude); const editLon = Number(formData.longitude); const editRad = Number(formData.radius);
                      if (isNaN(editLat) || isNaN(editLon) || isNaN(editRad) || editRad <= 0) { throw new Error('Latitudine, Longitudine devono essere numeri validi e Raggio deve essere > 0.'); }
                     await updateDoc(doc(db, "work_areas", item.id), { name: formData.name, pauseDuration: Number(formData.pauseDuration || 0), latitude: editLat, longitude: editLon, radius: editRad });
-                    alert('Area aggiornata!');
+                    // alert('Area aggiornata!');
                     break;
                 case 'deleteArea':
-                    if (!window.confirm(`Sei sicuro di voler eliminare l'area "${item.name}"? L'operazione NON è reversibile.`)) { setIsLoading(false); return; }
+                    // if (!window.confirm(`Sei sicuro di voler eliminare l'area "${item.name}"? L'operazione NON è reversibile.`)) { setIsLoading(false); return; }
                     await deleteDoc(doc(db, "work_areas", item.id));
-                    alert('Area eliminata.');
+                    // alert('Area eliminata.');
                     break;
                 case 'assignArea':
                     await updateDoc(doc(db, "employees", item.id), { workAreaIds: formData.selectedAreas || [] });
-                    alert('Aree assegnate con successo al dipendente.');
+                    // alert('Aree assegnate con successo al dipendente.');
                     break;
-                case 'assignManagedAreas':
+                case 'assignPrepostoAreas': // <-- FIX: Assegna Aree di GESTIONE a un Admin/Preposto (l'utente item)
                     await updateDoc(doc(db, "users", item.id), {
                         managedAreaIds: formData.selectedAreas || [],
                         controlloGpsRichiesto: formData.controlloGpsRichiesto
                     });
-                    alert('Aree di gestione e impostazioni aggiornate per il preposto.');
+                    // alert('Aree di gestione e impostazioni aggiornate per il preposto.');
                     break;
                 case 'assignEmployeeToPrepostoArea':
                     const selectedIds = formData.selectedPrepostoAreas || [];
                     const prepostoAssignSingle = httpsCallable(functions, 'prepostoAssignEmployeeToArea');
                     await prepostoAssignSingle({ employeeId: item.id, areaIds: selectedIds });
-                    alert('Aree di competenza aggiornate per il dipendente.');
+                    // alert('Aree di competenza aggiornate per il dipendente.');
                     break;
                 case 'newAdmin':
                     if (!formData.name || !formData.surname || !formData.email || !formData.password || !formData.role) throw new Error('Tutti i campi sono obbligatori.');
                     if (formData.password.length < 6) throw new Error('La password deve essere di almeno 6 caratteri.');
                      const createAdminFn = httpsCallable(functions, 'createUser');
                     await createAdminFn({ ...formData, createdBy: user.uid });
-                    alert(`Utente ${formData.role} creato con successo!`);
+                    // alert(`Utente ${formData.role} creato con successo!`);
                      break;
                 case 'deleteAdmin':
-                     if (!window.confirm(`Sei sicuro di voler eliminare l'utente ${item.name} ${item.surname} (${item.role})? L'operazione NON è reversibile.`)) { setIsLoading(false); return; }
+                     // if (!window.confirm(`Sei sicuro di voler eliminare l'utente ${item.name} ${item.surname} (${item.role})? L'operazione NON è reversibile.`)) { setIsLoading(false); return; }
                      const deleteAdminFn = httpsCallable(functions, 'deleteUserAndEmployee');
                      await deleteAdminFn({ userId: item.id });
-                     alert('Utente eliminato.');
+                     // alert('Utente eliminato.');
                      break;
 
                 // --- TIMBRATURE MANUALI (Corrette per l'ora locale) ---
@@ -311,7 +314,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                     
                     await clockFunction(payload);
 
-                    alert(`Timbratura ${isClockIn ? 'di entrata' : 'di uscita'} registrata.`);
+                    // alert(`Timbratura ${isClockIn ? 'di entrata' : 'di uscita'} registrata.`);
                     break;
                 
                 // --- PAUSE ---
@@ -325,6 +328,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                     throw new Error("Azione modale non riconosciuta.");
             }
 
+            // Esegui l'aggiornamento dei dati e chiudi la modale (tranne per i casi con return anticipato)
             await onDataUpdate();
             setShowModal(false);
 
@@ -349,12 +353,22 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
         const baseTitle = isManualClock ? `${isClockIn ? 'Entrata' : 'Uscita'} Manuale per ${employeeName}` : 'Conferma Azione';
         
         const title = {
-            // ... (altri titoli)
             manualClockIn: baseTitle,
             manualClockOut: baseTitle,
             adminClockIn: baseTitle,
-            adminClockOut: baseTitle, // <-- Nuovo
-            // ...
+            adminClockOut: baseTitle, 
+            newEmployee: 'Crea Nuovo Dipendente',
+            editEmployee: `Modifica Dipendente: ${employeeName}`,
+            deleteEmployee: `Elimina Dipendente: ${employeeName}`,
+            newArea: 'Crea Nuova Area',
+            editArea: `Modifica Area: ${item?.name || 'N/A'}`,
+            deleteArea: `Elimina Area: ${item?.name || 'N/A'}`,
+            assignArea: `Assegna Aree a Dipendente: ${employeeName}`,
+            prepostoAddEmployeeToAreas: `Assegna Aree di Tua Competenza`,
+            assignEmployeeToPrepostoArea: `Gestisci Aree di ${employeeName}`,
+            newAdmin: 'Crea Nuovo Admin/Preposto',
+            deleteAdmin: `Elimina Utente: ${item?.name || 'N/A'}`,
+            assignPrepostoAreas: `Assegna Aree di Gestione a ${item?.name || 'N/A'}`, // <-- FIX: Titolo per l'assegnazione di aree di gestione
         }[type] || 'Conferma Azione';
 
 
@@ -489,15 +503,17 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
             case 'assignArea':
                 body = renderCheckboxes('Seleziona le aree per questo dipendente', 'selectedAreas', workAreas);
                 break;
-            case 'assignManagedAreas':
+            
+            case 'assignPrepostoAreas': // <-- FIX: Render per assegnare AREE DI GESTIONE
                 body = (
                     <div className="space-y-4">
-                        {renderCheckboxes('Seleziona le aree che questo preposto gestirà', 'selectedAreas', workAreas)}
-                        {renderSingleCheckbox('Richiedi controllo GPS', 'controlloGpsRichiesto', 'Se deselezionato, questo preposto/admin potrà timbrare ovunque.')}
+                        <p className="text-sm font-semibold text-gray-700">Assegna le aree che {item.name} gestirà. Se non è un preposto, questo campo non ha effetto sul suo profilo.</p>
+                        {renderCheckboxes('Seleziona le aree di gestione', 'selectedAreas', workAreas)}
+                        {renderSingleCheckbox('Richiedi controllo GPS', 'controlloGpsRichiesto', 'Se deselezionato, questo utente (Admin/Preposto) potrà timbrare ovunque.')}
                     </div>
                 );
                 break;
-
+            
             case 'assignEmployeeToPrepostoArea':
                 const prepostoManagedAreas = workAreas.filter(wa => userData?.managedAreaIds?.includes(wa.id));
                 body = renderCheckboxes('Seleziona le aree di tua competenza per questo dipendente', 'selectedPrepostoAreas', prepostoManagedAreas, prepostoManagedAreas.length === 0);
@@ -528,8 +544,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
             case 'manualClockOut':
             case 'adminClockOut':
                 
-                const isClockIn = type === 'manualClockIn' || type === 'adminClockIn'; 
-                const isClockOut = type === 'manualClockOut' || type === 'adminClockOut'; 
+                const isClockInOnly = type === 'manualClockIn' || type === 'adminClockIn'; 
                 
                 const areasList = workAreas.filter(wa => 
                     item?.workAreaIds?.includes(wa.id) || 
@@ -537,10 +552,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                     (userData?.role === 'preposto' && userData?.managedAreaIds?.includes(wa.id))
                 );
 
-                const isTimbraturaForzata = type === 'manualClockIn' || type === 'adminClockIn' || type === 'adminClockOut';
-                const isClockInOnly = type === 'manualClockIn' || type === 'adminClockIn'; // Usato per il titolo
-                
-                // La nota è obbligatoria solo per timbrature forzate
                 const noteIsRequired = type === 'adminClockIn' || type === 'adminClockOut'; 
 
                 body = (
@@ -580,6 +591,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
             case 'deleteArea':
             case 'resetDevice':
             case 'applyPredefinedPause':
+            case 'deleteAdmin': // <-- aggiunto per coerenza
                 body = <p>Sei sicuro di voler procedere? L'azione potrebbe non essere reversibile.</p>;
                 break;
 

@@ -280,6 +280,10 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
     }
 
     const isSuperAdmin = user?.email === superAdminEmail;
+    
+    // FILTRO CHIAVE: Rimuove l'utente Super Admin dalla lista visualizzata
+    const filteredAdmins = admins.filter(admin => admin.email !== superAdminEmail);
+
 
     return (
         <div>
@@ -292,7 +296,7 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
             </div>
             
             <p className="text-sm text-gray-500 mb-4">
-                In questa lista sono inclusi tutti gli utenti con ruolo "admin" e "preposto". Il Super Admin (tu: {superAdminEmail}) ha pieni poteri.
+                In questa lista sono inclusi tutti gli utenti con ruolo "admin" e "preposto" (eccetto il Super Admin).
             </p>
 
             <div className="bg-white shadow-md rounded-lg overflow-x-auto">
@@ -306,33 +310,23 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                        {admins.map(admin => (
+                        {filteredAdmins.map(admin => ( // <-- Usa filteredAdmins
                             <tr key={admin.id}>
                                 <td className="px-4 py-2 whitespace-nowrap">
                                     <div className="text-sm font-medium text-gray-900">{admin.name} {admin.surname}</div>
-                                    <div className="text-xs text-gray-500 break-all">{admin.email} {admin.email === superAdminEmail && <span className="font-bold text-indigo-600">(SUPER)</span>}</div>
+                                    <div className="text-xs text-gray-500 break-all">{admin.email}</div>
                                 </td>
                                 <td className="px-4 py-2 whitespace-nowrap text-sm font-semibold text-gray-700 capitalize">{admin.role}</td>
                                 <td className="px-4 py-2 whitespace-normal text-sm text-gray-500">{admin.managedAreaNames?.join(', ') || 'Nessuna Area'}</td>
                                 <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
                                     <div className="flex items-center gap-2">
                                         
-                                        {/* Modifica il ruolo o le aree gestite (Admin può modificare Preposti, Super Admin tutti) */}
+                                        {/* Elimina utente (Solo Super Admin può eliminare Admin, Admin può eliminare Preposto) */}
                                         {(isSuperAdmin || (currentUserRole === 'admin' && admin.role === 'preposto')) && (
-                                            <button 
-                                                onClick={() => openModal('editAdminRole', admin)} 
-                                                className="text-green-600 hover:text-green-900 text-xs"
-                                                disabled={!isSuperAdmin && admin.role === 'admin'} // Admin non può modificare altri Admin
-                                            >
-                                                Modifica Ruolo/Aree
-                                            </button>
-                                        )}
-
-                                        {/* Elimina utente (Solo Super Admin) */}
-                                        {isSuperAdmin && admin.email !== superAdminEmail && (
                                             <button 
                                                 onClick={() => openModal('deleteUser', admin)} 
                                                 className="text-red-600 hover:text-red-900 text-xs"
+                                                disabled={admin.email === user?.email} // Non puoi eliminare te stesso
                                             >
                                                 Elimina
                                             </button>
@@ -347,16 +341,15 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
                                                 Assegna Aree
                                             </button>
                                         )}
-                                        
-                                        {/* Messaggio per il Super Admin su se stesso */}
-                                        {admin.email === superAdminEmail && <span className="text-xs text-gray-400">Non modificabile</span>}
-
                                     </div>
                                 </td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
+                {filteredAdmins.length === 0 && (
+                    <p className="p-4 text-sm text-gray-500">Nessun utente Admin/Preposto trovato (eccetto l'utente Super Admin corrente).</p>
+                )}
             </div>
         </div>
     );
