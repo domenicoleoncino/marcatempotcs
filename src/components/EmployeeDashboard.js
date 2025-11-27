@@ -1,4 +1,4 @@
-// File: src/components/EmployeeDashboard.js (Definitivo con Device ID e Logica Pausa Robusta)
+// File: src/components/EmployeeDashboard.js (Definitivo con Device ID, Logica Pausa Robusta e CENTRATURA PERFETTA)
 /* eslint-disable no-unused-vars */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -91,7 +91,10 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     // Aggiorna ora corrente
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-        playSound('app_open')
+        
+        // RIATTIVATO SUONO
+        playSound('app_open'); // <-- RIATTIVATO SUONO
+
         return () => clearInterval(timer);
     }, []);
 
@@ -590,7 +593,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     const years = [new Date().getFullYear(), new Date().getFullYear() - 1]; // Anno corrente e precedente
 
     
-    // Messaggio Dispositivo/Reset (AGGIORNATO - CONCISEZZA)
+    // Messaggio Dispositivo/Reset (AGGIORNATO - CONCISEZZA E CENTRATURA)
     const renderDeviceMessage = () => {
         const MAX_DEVICES = 2; 
         const currentDeviceIds = employeeData.deviceIds || [];
@@ -602,7 +605,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
         // --- CASO 1: Dispositivo Autorizzato o Slot Libero ---
         if (currentDeviceCount === 0 || isCurrentDeviceAuthorized) {
             return (
-                <div className={`p-4 mb-4 rounded-lg shadow-sm bg-blue-100 border-l-4 border-blue-500 text-blue-700`} role="alert">
+                <div className={`p-4 mb-4 rounded-lg shadow-sm bg-blue-100 border-l-4 border-blue-500 text-blue-700 text-center`} role="alert"> 
                     <p className="font-bold">
                         Stato Dispositivo: {currentDeviceCount} / {MAX_DEVICES} registrati
                     </p>
@@ -622,7 +625,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
         // --- CASO 2: Blocco Raggiunto Limite e Dispositivo NON Autorizzato ---
         if (isLimitReached && !isCurrentDeviceAuthorized) {
              return (
-                 <div className={`p-4 mb-4 rounded-lg shadow-sm bg-red-100 border-l-4 border-red-500 text-red-700`} role="alert">
+                 <div className={`p-4 mb-4 rounded-lg shadow-sm bg-red-100 border-l-4 border-red-500 text-red-700 text-center`} role="alert">
                      <p className="font-bold">
                          ❌ TIMBRATURA BLOCCATA
                      </p>
@@ -684,6 +687,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
 
     // Render del componente
     return (
+        // CONTENITORE ESTERNO: Aggiunto mx-auto per centrare il blocco max-w-lg
         <div className="p-4 max-w-lg mx-auto font-sans bg-gray-50 min-h-screen flex flex-col">
             <CompanyLogo />
             
@@ -703,7 +707,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
 
             {/* Box Stato Timbratura e Azioni */}
             <div className="bg-white p-4 rounded-lg shadow-md mb-6">
-                <h2 className="text-xl font-bold mb-3 preposto-center">Azioni Rapide</h2>
+                <h2 className="text-xl font-bold mb-3 preposto-center text-center">Azioni Rapide</h2>
                 {activeEntry ? ( // Se l'utente è timbrato
                     <div>
                         <p className="text-center text-green-600 font-semibold text-lg mb-4">Timbratura ATTIVA su: <span className="font-bold">{workAreaName}</span></p>
@@ -723,8 +727,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                                 } disabled:opacity-50 disabled:cursor-not-allowed`}
                             >
                                 <div className="text-2xl leading-none">🟡</div>
-                                <span className="text-sm block mt-1">
-                                    {pauseStatus === 'ACTIVE' 
+                                <span className="text-sm block mt-1">{pauseStatus === 'ACTIVE' 
                                         ? 'PAUSA ATTIVA' 
                                         : pauseStatus === 'COMPLETED' 
                                             ? 'PAUSA EFFETTUATA' 
@@ -808,16 +811,16 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             
             {/* Box Cronologia Odierna */}
             <div className="bg-white p-4 rounded-lg shadow-md mb-6">
-                <h2 className="text-xl font-bold mb-3">Timbrature di Oggi</h2>
+                <h2 className="text-xl font-bold mb-3 text-center">Timbrature di Oggi</h2>
                 <div className="space-y-2 max-h-40 overflow-y-auto">
                     {todaysEntries.length > 0 ? todaysEntries.map(entry => (
                         <div key={entry.id} className="text-sm border-b pb-1 last:border-b-0">
-                            <p>
+                            <p className="text-center">
                                 <span className="font-medium">Entrata:</span> {entry.clockInTime.toDate().toLocaleTimeString('it-IT', { hour:'2-digit', minute:'2-digit' })}
                                 <span className="ml-2 font-medium">Uscita:</span> {entry.clockOutTime ? entry.clockOutTime.toDate().toLocaleTimeString('it-IT', { hour:'2-digit', minute:'2-digit' }) : '...'}
                             </p>
                             {entry.pauses && entry.pauses.length > 0 && (
-                                <ul className="text-xs text-gray-500 pl-4 list-disc">
+                                <ul className="text-xs text-gray-500 pl-4 list-disc text-left mx-auto max-w-fit">
                                     {entry.pauses.map((p, index) => (
                                         <li key={index}>
                                             Pausa {index + 1}: {p.start.toDate().toLocaleTimeString('it-IT', { hour:'2-digit', minute:'2-digit' })} - {p.end ? p.end.toDate().toLocaleTimeString('it-IT', { hour:'2-digit', minute:'2-digit' }) : 'in corso'}
@@ -827,13 +830,13 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                                 </ul>
                             )}
                         </div>
-                    )) : <p className="text-sm text-gray-500">Nessuna timbratura trovata per oggi.</p>}
+                    )) : <p className="text-sm text-gray-500 text-center">Nessuna timbratura trovata per oggi.</p>}
                 </div>
             </div>
 
             {/* Box Report Mensile Excel */}
             <div className="bg-white p-4 rounded-lg shadow-md mb-6">
-                <h2 className="text-xl font-bold mb-3">Report Mensile Excel</h2>
+                <h2 className="text-xl font-bold mb-3 text-center">Report Mensile Excel</h2>
                 <div className="grid grid-cols-2 gap-4 mb-4">
                     {/* Select Mese */}
                     <div>
