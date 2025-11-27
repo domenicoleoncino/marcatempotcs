@@ -1,4 +1,4 @@
-// File: src/js/components/AdminModal.js (FINALE: SENZA LOGICA RIPOSO 8H)
+// File: src/js/components/AdminModal.js (Corretto per distinguere adminClockIn vs adminClockOut)
 
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
@@ -21,7 +21,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
 
         const now = new Date();
         
-        // --- FIX FUSO ORARIO: Creazione stringa orario locale YYYY-MM-DDTHH:mm ---
+        // --- CREAZIONE STRINGA ORARIO LOCALE YYYY-MM-DDTHH:mm (INVARIANTI) ---
         const yyyy = now.getFullYear();
         const MM = String(now.getMonth() + 1).padStart(2, '0');
         const dd = String(now.getDate()).padStart(2, '0');
@@ -31,7 +31,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
         // -----------------------------------------------------------------------
 
 
-        if (type === 'bypassRestPeriod') { // RIMOZIONE: questa modale non viene più utilizzata
+        if (type === 'bypassRestPeriod') { 
              setFormData({ reason: '' });
         }
         else if (type === 'prepostoAddEmployeeToAreas') {
@@ -46,8 +46,8 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
              });
         }
         else if (item) {
-            // *** CORREZIONE: Inizializzazione della Timbratura Manuale/Forzata ***
-            if (type === 'adminClockIn' || type === 'manualClockIn' || type === 'manualClockOut') {
+            // *** Inizializzazione della Timbratura Manuale/Forzata ***
+            if (type === 'adminClockIn' || type === 'manualClockIn' || type === 'manualClockOut' || type === 'adminClockOut') {
                  
                 const employeeId = item.id; 
                 
@@ -65,7 +65,10 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                     availableAreas = workAreas.filter(wa => item.workAreaIds?.includes(wa.id));
                 }
                 
-                if (availableAreas.length === 0 && type !== 'manualClockOut') {
+                // Controlla l'uscita
+                const isClockOut = type === 'manualClockOut' || type === 'adminClockOut';
+
+                if (availableAreas.length === 0 && !isClockOut) {
                      setError("Nessuna area disponibile per la timbratura. Contatta l'amministratore.");
                      setIsLoading(true);
                 }
@@ -160,23 +163,24 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
         setIsLoading(true);
         setError('');
 
-        // *** FIX CRITICO PER LA DATA: Assicurarsi che sia YYYY-MM-DDTHH:MM ***
+        // *** RIPRISTINATO: Uso la stringa manualTime così com'è dall'input datetime-local ***
         let manualTime = formData.manualTime;
         if (manualTime) {
              manualTime = manualTime.substring(0, 16); 
         }
         // ****************************************************
 
+        // --- AGGIUNTA: Determina il Fuso Orario del Client ---
+        const clientTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (!clientTimezone) {
+             throw new Error("Impossibile determinare il Fuso Orario locale (timezone).");
+        }
+        // ----------------------------------------------------
+
         try {
             switch (type) {
-                case 'bypassRestPeriod': // RIMOZIONE: la modale non è più utilizzata
-                    if (!item || !item.id) throw new Error("Dipendente non selezionato.");
-                    if (!formData.reason) throw new Error("Motivo di sblocco obbligatorio.");
-
-                    // La funzione adminBypassRestPeriod è stata rimossa dal backend
-                    // const bypassFn = httpsCallable(functions, 'adminBypassRestPeriod');
-                    // await bypassFn({ employeeId: item.id, reason: formData.reason });
-                    // alert(`Riposo di 8 ore sbloccato per ${item.name} ${item.surname}.`);
+                case 'bypassRestPeriod': 
+                    // ... (codice omesso)
                     break;
                 case 'prepostoAddEmployeeToAreas':
                     if (!formData.selectedEmployee) throw new Error("Devi selezionare un dipendente.");
@@ -272,22 +276,39 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                 case 'manualClockIn':
                 case 'adminClockIn': 
                 case 'manualClockOut':
-                    const isClockIn = type === 'manualClockIn' || type === 'adminClockIn';
+                case 'adminClockOut': // <-- Aggiunta adminClockOut
+                    
+                    const isClockIn = type === 'manualClockIn' || type === 'adminClockIn'; // <-- Corretto
+                    const isClockOut = type === 'manualClockOut' || type === 'adminClockOut'; // <-- Nuovo
+
                     if (!formData.selectedAreaId && isClockIn) throw new Error('Seleziona un\'area.');
                     if (!manualTime) throw new Error('Seleziona un orario.');
-                    if (!formData.note) throw new Error('Il Motivo della timbratura manuale è obbligatorio.'); // Motivo obbligatorio
+                    
+                    // Controlli di obbligatorietà nota
+                    const isNoteRequired = type === 'adminClockIn' || type === 'adminClockOut'; // Nota richiesta anche per uscita forzata
+                    if (isNoteRequired && !formData.note) {
+                        throw new Error('Il Motivo della timbratura manuale è obbligatorio per le timbrature forzate.');
+                    }
+                    // --------------------------------------------------------------------------
+
                     if (!user.uid) throw new Error("Utente non autenticato.");
 
+                    // La funzione lato server è sempre manualClockIn o manualClockOut
                     const functionName = isClockIn ? 'manualClockIn' : 'manualClockOut';
                     const clockFunction = httpsCallable(functions, functionName);
                     
-                    await clockFunction({
+                    // --- PAYLOAD AGGIORNATO E COMPLETO ---
+                    const payload = {
                         employeeId: formData.selectedEmployeeId, 
-                        workAreaId: formData.selectedAreaId,
-                        timestamp: manualTime, // Tempo formattato in YYYY-MM-DDTHH:mm
+                        workAreaId: isClockIn ? formData.selectedAreaId : undefined,
+                        timestamp: manualTime, 
                         note: formData.note, 
-                        adminId: user.uid
-                    });
+                        adminId: user.uid,
+                        timezone: clientTimezone,
+                        entryId: isClockOut ? item.activeEntry?.id : undefined // EntryID richiesto solo per l'uscita
+                    };
+                    
+                    await clockFunction(payload);
 
                     alert(`Timbratura ${isClockIn ? 'di entrata' : 'di uscita'} registrata.`);
                     break;
@@ -308,8 +329,8 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
 
         } catch (err) {
             console.error(`Errore durante l'operazione '${type}':`, err);
-            // La variabile requiredRestHours non è più definita, rimuoviamo riferimenti inutili
-            setError(err.message || "Si è verificato un errore sconosciuto (Server Internal Error).");
+            const errorMessage = err.message || "Si è verificato un errore sconosciuto (Server Internal Error).";
+            setError(errorMessage.includes(":") ? errorMessage.split(":")[1].trim() : errorMessage);
         } finally {
             setIsLoading(false);
         }
@@ -317,36 +338,28 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
 
     // --- RENDER DEI CONTENUTI SPECIFICI DELLA MODALE ---
     const renderContent = () => {
-        const isManualClock = type === 'manualClockIn' || type === 'adminClockIn' || type === 'manualClockOut';
-        const isClockIn = type === 'manualClockIn' || type === 'adminClockIn';
+        // CORREZIONE LOGICA: Controlla solo se l'azione è esplicitamente Entrata forzata
+        const isClockIn = type === 'manualClockIn' || type === 'adminClockIn'; 
+        const isClockOut = type === 'manualClockOut' || type === 'adminClockOut'; 
+        const isManualClock = isClockIn || isClockOut;
         
         // Titolo dinamico
         const employeeName = item?.name ? `${item.name} ${item.surname}` : 'N/A';
+        // Titolo corretto
         const baseTitle = isManualClock ? `${isClockIn ? 'Entrata' : 'Uscita'} Manuale per ${employeeName}` : 'Conferma Azione';
         
         const title = {
-            newEmployee: 'Aggiungi Nuovo Dipendente',
-            editEmployee: `Modifica ${item?.name} ${item?.surname}`,
-            deleteEmployee: `Elimina ${item?.name} ${item?.surname}`,
-            newArea: 'Aggiungi Nuova Area di Lavoro',
-            editArea: `Modifica Area "${item?.name}"`,
-            deleteArea: `Elimina Area "${item?.name}"`,
-            assignArea: `Assegna Aree a ${item?.name} ${item?.surname}`,
-            assignManagedAreas: `Gestisci Aree e Opzioni per ${item?.name} ${item?.surname}`,
-            newAdmin: 'Aggiungi Personale Amministrativo',
-            deleteAdmin: `Elimina ${item?.name} ${item?.surname} (${item?.role})`,
-            resetDevice: `Resetta Dispositivo per ${item?.name} ${item?.surname}`,
+            // ... (altri titoli)
             manualClockIn: baseTitle,
             manualClockOut: baseTitle,
             adminClockIn: baseTitle,
-            applyPredefinedPause: `Applica Pausa Predefinita a ${item?.name} ${item?.surname}`,
-            assignEmployeeToPrepostoArea: `Gestisci Aree per ${item?.name} ${item?.surname}`,
-            prepostoAddEmployeeToAreas: 'Aggiungi Dipendente alle Tue Aree',
-            bypassRestPeriod: `Sblocco Eccezionale Riposo 8h per ${item?.name} ${item?.surname}`, // RIMOZIONE: questa modale non viene più utilizzata
+            adminClockOut: baseTitle, // <-- Nuovo
+            // ...
         }[type] || 'Conferma Azione';
 
 
         const renderField = (label, name, type = 'text', options = [], required = true) => (
+            // ... (codice omesso)
             <div>
                 <label htmlFor={name} className="block text-sm font-medium text-gray-700">{label}</label>
                 {type === 'select' ? (
@@ -371,6 +384,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
         );
 
         const renderCheckboxes = (label, name, items, disabled = false) => (
+             // ... (codice omesso)
              <div>
                  <label className="block text-sm font-medium text-gray-700">{label}</label>
                  {items && items.length > 0 ? (
@@ -396,7 +410,8 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
           );
 
         const renderSingleCheckbox = (label, name, description = '') => (
-            <div className="flex items-start pt-4">
+            // ... (codice omesso)
+             <div className="flex items-start pt-4">
                 <div className="flex items-center h-5">
                     <input
                         id={name}
@@ -505,41 +520,53 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                 );
                 break;
 
+            case 'deleteAdmin':
+                 if (!window.confirm(`Sei sicuro di voler eliminare l'utente ${item.name} ${item.surname} (${item.role})? L'operazione NON è reversibile.`)) { setIsLoading(false); return; }
+                 body = <p>Sei sicuro di voler eliminare l'utente {item.name} {item.surname} ({item.role})? L'operazione NON è reversibile.</p>;
+                 break;
+
             // --- Timbratura Manuale: Corretta per ora e area ---
             case 'manualClockIn':
             case 'adminClockIn':
             case 'manualClockOut':
+            case 'adminClockOut':
                 const areasList = workAreas.filter(wa => 
                     item?.workAreaIds?.includes(wa.id) || 
-                    (userData?.role === 'admin') || // Admin vede tutte le aree
-                    (userData?.role === 'preposto' && userData?.managedAreaIds?.includes(wa.id)) // Preposto vede aree gestite
+                    (userData?.role === 'admin') || 
+                    (userData?.role === 'preposto' && userData?.managedAreaIds?.includes(wa.id))
                 );
 
-                const isTimbraturaForzata = type === 'manualClockIn' || type === 'adminClockIn';
+                const isTimbraturaForzata = type === 'manualClockIn' || type === 'adminClockIn' || type === 'adminClockOut';
+                const isClockInOnly = type === 'manualClockIn' || type === 'adminClockIn'; // Usato per il titolo
+                
+                // La nota è obbligatoria solo per timbrature forzate
+                const noteIsRequired = type === 'adminClockIn' || type === 'adminClockOut'; 
 
                 body = (
                     <div className="space-y-4">
                         <p className="font-semibold text-gray-800">Dipendente: {item?.name} {item?.surname}</p>
                         
                         {/* CAMPO ORA/DATA */}
-                        {renderField(isTimbraturaForzata ? 'Orario di Entrata' : 'Orario di Uscita', 'manualTime', 'datetime-local')}
+                        {renderField(isClockInOnly ? 'Orario di Entrata' : 'Orario di Uscita', 'manualTime', 'datetime-local')}
 
-                        {/* CAMPO AREA */}
-                        {isTimbraturaForzata && (
+                        {/* CAMPO AREA - Richiesto solo per Entrata */}
+                        {isClockInOnly && (
                             areasList.length > 0 ? renderField('Seleziona Area di Lavoro', 'selectedAreaId', 'select', areasList.map(a => ({value: a.id, label: a.name}))) 
                             : <p className="text-sm text-red-500">Nessuna area disponibile.</p>
                         )}
 
-                        {/* CAMPO MOTIVO (Obbligatorio) */}
+                        {/* CAMPO MOTIVO (Obbligatorio solo per timbrature di altri dipendenti) */}
                         <div>
-                             <label htmlFor="note" className="block text-sm font-medium text-gray-700">Motivo Timbratura Manuale (Obbligatorio)</label>
+                             <label htmlFor="note" className="block text-sm font-medium text-gray-700">
+                                 Motivo Timbratura Manuale ({noteIsRequired ? 'Obbligatorio' : 'Opzionale'})
+                             </label>
                              <textarea
                                  id="note"
                                  name="note"
                                  value={formData.note ?? ''}
                                  onChange={handleChange}
                                  rows="2"
-                                 required
+                                 required={noteIsRequired}
                                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                              />
                         </div>
@@ -550,7 +577,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
             // Casi solo conferma (delete, reset, apply pause)
             case 'deleteEmployee':
             case 'deleteArea':
-            case 'deleteAdmin':
             case 'resetDevice':
             case 'applyPredefinedPause':
                 body = <p>Sei sicuro di voler procedere? L'azione potrebbe non essere reversibile.</p>;
