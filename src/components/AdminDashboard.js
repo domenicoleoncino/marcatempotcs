@@ -17,6 +17,9 @@ import { saveAs } from 'file-saver';
 // --- SUB-COMPONENTI E FUNZIONI INIZIALI ---
 // ===========================================
 
+// VARIABILE PER IL CONTROLLO SUPER ADMIN (NON MODIFICARE QUI!)
+const SUPER_ADMIN_EMAIL = "domenico.leoncino@tcsitalia.com"; 
+
 // === NUOVO COMPONENTE PER MESSAGGI NON BLOCCANTI ===
 const NotificationPopup = ({ message, type, onClose }) => {
     const baseClasses = "fixed top-4 left-1/2 transform -translate-x-1/2 z-50 p-4 rounded-lg shadow-xl text-white transition-opacity duration-300";
@@ -35,6 +38,282 @@ const NotificationPopup = ({ message, type, onClose }) => {
     );
 };
 // ===============================================
+
+// === FUNZIONE HELPER PER IL RENDER DEI CAMPI (copiata da AdminModal per riuso) ===
+const renderField = (formData, handleChange, label, name, type = 'text', options = [], required = true) => (
+    <div>
+        <label htmlFor={name} className="block text-sm font-medium text-gray-700">{label}</label>
+        {type === 'select' ? (
+             <select
+                 id={name} name={name} value={formData[name] ?? ''} onChange={handleChange}
+                 required={required}
+                 className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+             >
+                 {(!required || options.length > 0) && <option value="">{options.length > 0 ? '-- Seleziona --' : '-- Nessuna Opzione --'}</option>}
+                 {options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+             </select>
+        ) : (
+            <input
+                id={name} name={name} type={type} value={formData[name] ?? ''} onChange={handleChange}
+                step={type === 'number' ? 'any' : undefined}
+                required={required}
+                placeholder={name === 'latitude' ? 'Es. 40.8518' : name === 'longitude' ? 'Es. 14.2681' : undefined}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+            />
+        )}
+    </div>
+);
+
+const renderSingleCheckbox = (formData, handleChange, label, name, description = '') => (
+    <div className="flex items-start pt-4">
+        <div className="flex items-center h-5">
+            <input
+                id={name}
+                name={name}
+                type="checkbox"
+                checked={!!formData[name]}
+                onChange={handleChange}
+                className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+            />
+        </div>
+        <div className="ml-3 text-sm">
+            <label htmlFor={name} className="font-medium text-gray-700">{label}</label>
+            {description && <p className="text-gray-500">{description}</p>}
+        </div>
+    </div>
+);
+
+
+// === FUNZIONI PER I FORM IN-LINE (Sostituiscono le Modali di creazione) ===
+
+const NewEmployeeForm = ({ onDataUpdate, user, setView, showNotification }) => {
+    const [formData, setFormData] = useState({ name: '', surname: '', email: '', password: '', controlloGpsRichiesto: true });
+    const [error, setError] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const functions = getFunctions(undefined, 'europe-west1');
+
+    const handleChange = (e) => {
+        const { name, value, type, checked } = e.target;
+        setFormData(prev => ({ 
+            ...prev, 
+            [name]: type === 'checkbox' ? checked : value 
+        }));
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setIsLoading(true);
+        setError('');
+
+        if (!formData.name || !formData.surname || !formData.email || !formData.password) {
+            setError('Nome, Cognome, Email e Password sono obbligatori.');
+            setIsLoading(false);
+            return;
+        }
+
+        try {
+            const createUser = httpsCallable(functions, 'createUser');
+            await createUser({ ...formData, role: 'dipendente', createdBy: user.uid });
+            showNotification('Dipendente creato con successo!', 'success');
+            await onDataUpdate();
+            setView('employees'); // Torna alla gestione dipendenti
+        } catch (err) {
+            const errorMessage = err.message || "Si è verificato un errore sconosciuto (Server Internal Error).";
+            setError(errorMessage.includes(":") ? errorMessage.split(":")[1].trim() : errorMessage);
+            console.error("Errore creazione dipendente:", err);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    return (
+        <div className="bg-white shadow-md rounded-lg p-4 mb-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Crea Nuovo Dipendente</h3>
+            <form onSubmit={handleSubmit} className="space-y-4">
+                {error && <p className="text-sm text-red-600 mb-4 bg-red-100 p-3 rounded border border-red-200">{error}</p>}
+                
+                {renderField(formData, handleChange, 'Nome', 'name')}
+                {renderField(formData, handleChange, 'Cognome', 'surname')}
+                {renderField(formData, handleChange, 'Email', 'email', 'email')}
+                {renderField(formData, handleChange, 'Password (min. 6 caratteri)', 'password', 'password')}
+                {renderSingleCheckbox(formData, handleChange, 'Richiedi controllo GPS', 'controlloGpsRichiesto', 'Se deselezionato, l\'utente potrà timbrare ovunque.')}
+                
+                <div className="flex justify-end space-x-3 pt-4">
+                    <button type="button" onClick={() => setView('employees')} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 text-sm font-medium">Annulla</button>
+                    <button
+                        type="submit"
+                        disabled={isLoading}
+                        className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed text-sm font-medium"
+                    >
+                        {isLoading ? 'Creazione...' : 'Crea Dipendente'}
+                    </button>
+                </div>
+            </form>
+        </div>
+    );
+};
+
+const NewAreaForm = ({ onDataUpdate, setView, showNotification }) => {
+    const [formData, setFormData] = useState({ name: '', pauseDuration: 0, latitude: '', longitude: '', radius: 100 });
+    const [error, setError] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const functions = getFunctions(undefined, 'europe-west1');
+
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setIsLoading(true);
+        setError('');
+
+        if (!formData.name || formData.latitude == null || formData.longitude == null || formData.radius == null) {
+            setError('Tutti i campi (Nome, Latitudine, Longitudine, Raggio) sono obbligatori.');
+            setIsLoading(false);
+            return;
+        }
+
+        try {
+            const lat = Number(formData.latitude); 
+            const lon = Number(formData.longitude); 
+            const rad = Number(formData.radius);
+            
+            if (isNaN(lat) || isNaN(lon) || isNaN(rad) || rad <= 0) { 
+                throw new Error('Latitudine, Longitudine devono essere numeri validi e Raggio deve essere > 0.'); 
+            }
+
+            const createArea = httpsCallable(functions, 'createWorkArea');
+            await createArea({ 
+                name: formData.name, 
+                pauseDuration: Number(formData.pauseDuration || 0), 
+                latitude: lat, 
+                longitude: lon, 
+                radius: rad 
+            });
+
+            showNotification('Area creata con successo!', 'success');
+            await onDataUpdate();
+            setView('areas'); // Torna alla gestione aree
+        } catch (err) {
+            const errorMessage = err.message || "Si è verificato un errore sconosciuto.";
+            setError(errorMessage.includes(":") ? errorMessage.split(":")[1].trim() : errorMessage);
+            console.error("Errore creazione area:", err);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    return (
+        <div className="bg-white shadow-md rounded-lg p-4 mb-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Aggiungi Nuova Area di Lavoro</h3>
+            <form onSubmit={handleSubmit} className="space-y-4">
+                 {error && <p className="text-sm text-red-600 mb-4 bg-red-100 p-3 rounded border border-red-200">{error}</p>}
+                
+                 {renderField(formData, handleChange, 'Nome Area', 'name')}
+                 {renderField(formData, handleChange, 'Durata Pausa Predefinita (minuti)', 'pauseDuration', 'number', [], false)}
+                 {renderField(formData, handleChange, 'Latitudine', 'latitude', 'number')}
+                 {renderField(formData, handleChange, 'Longitudine', 'longitude', 'number')}
+                 {renderField(formData, handleChange, 'Raggio di Tolleranza (metri)', 'radius', 'number')}
+                
+                <div className="flex justify-end space-x-3 pt-4">
+                    <button type="button" onClick={() => setView('areas')} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 text-sm font-medium">Annulla</button>
+                    <button
+                        type="submit"
+                        disabled={isLoading}
+                        className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed text-sm font-medium"
+                    >
+                        {isLoading ? 'Creazione...' : 'Crea Area'}
+                    </button>
+                </div>
+            </form>
+        </div>
+    );
+};
+
+const NewAdminForm = ({ onDataUpdate, user, setView, showNotification }) => {
+    const [formData, setFormData] = useState({ name: '', surname: '', email: '', password: '', phone: '', role: 'preposto', controlloGpsRichiesto: true });
+    const [error, setError] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const functions = getFunctions(undefined, 'europe-west1');
+
+    const handleChange = (e) => {
+        const { name, value, type, checked } = e.target;
+        setFormData(prev => ({ 
+            ...prev, 
+            [name]: type === 'checkbox' ? checked : value 
+        }));
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setIsLoading(true);
+        setError('');
+
+        if (!formData.name || !formData.surname || !formData.email || !formData.password || !formData.role) {
+            setError('Tutti i campi (eccetto Telefono) sono obbligatori.');
+            setIsLoading(false);
+            return;
+        }
+        if (formData.password.length < 6) {
+            setError('La password deve essere di almeno 6 caratteri.');
+            setIsLoading(false);
+            return;
+        }
+
+        try {
+            const createAdminFn = httpsCallable(functions, 'createUser');
+            await createAdminFn({ ...formData, createdBy: user.uid });
+            showNotification(`Utente ${formData.role} creato con successo!`, 'success');
+            await onDataUpdate();
+            setView('admins'); // Torna alla gestione admin
+        } catch (err) {
+            const errorMessage = err.message || "Si è verificato un errore sconosciuto.";
+            setError(errorMessage.includes(":") ? errorMessage.split(":")[1].trim() : errorMessage);
+            console.error("Errore creazione Admin/Preposto:", err);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const roleOptions = [
+        {value: 'preposto', label: 'Preposto (Caposquadra)'}, 
+        {value: 'admin', label: 'Admin (Amministratore)'}
+    ];
+
+    return (
+        <div className="bg-white shadow-md rounded-lg p-4 mb-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Crea Nuovo Admin/Preposto</h3>
+            <form onSubmit={handleSubmit} className="space-y-4">
+                 {error && <p className="text-sm text-red-600 mb-4 bg-red-100 p-3 rounded border border-red-200">{error}</p>}
+                
+                {renderField(formData, handleChange, 'Nome', 'name')}
+                {renderField(formData, handleChange, 'Cognome', 'surname')}
+                {renderField(formData, handleChange, 'Email', 'email', 'email')}
+                {renderField(formData, handleChange, 'Password (min. 6 caratteri)', 'password', 'password')}
+                {renderField(formData, handleChange, 'Telefono (Opzionale)', 'phone', 'tel', [], false)}
+                {renderField(formData, handleChange, 'Ruolo', 'role', 'select', roleOptions)}
+                {renderSingleCheckbox(formData, handleChange, 'Richiedi controllo GPS', 'controlloGpsRichiesto', 'Se deselezionato, questo preposto/admin potrà timbrare ovunque.')}
+                
+                <div className="flex justify-end space-x-3 pt-4">
+                    <button type="button" onClick={() => setView('admins')} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 text-sm font-medium">Annulla</button>
+                    <button
+                        type="submit"
+                        disabled={isLoading}
+                        className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed text-sm font-medium"
+                    >
+                        {isLoading ? 'Creazione...' : 'Crea Utente'}
+                    </button>
+                </div>
+            </form>
+        </div>
+    );
+};
+
+
+// =======================================================
+
 
 const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours }) => (
     <div>
@@ -88,19 +367,6 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
         <div>
             <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Gestione Dipendenti</h1>
-                {/* Pulsante per Admin */}
-                {currentUserRole === 'admin' && <button onClick={() => openModal('newEmployee')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">Crea Nuovo Dipendente</button>}
-
-                {/* --- PULSANTE PER PREPOSTO (per aggiungere dipendenti esistenti alle sue aree) --- */}
-                {currentUserRole === 'preposto' && (
-                    <button
-                        onClick={() => openModal('prepostoAddEmployeeToAreas', null)} 
-                        className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 w-full sm:w-auto text-sm"
-                    >
-                        Aggiungi Dipendente alle Mie Aree
-                    </button>
-                )}
-                {/* --- FINE PULSANTE --- */}
             </div>
             <div className="mb-4">
                 <input
@@ -225,7 +491,6 @@ const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
     <div>
         <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Gestione Aree di Lavoro</h1>
-            {currentUserRole === 'admin' && <button onClick={() => openModal('newArea')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">Aggiungi Area</button>}
         </div>
         <div className="bg-white shadow-md rounded-lg overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
@@ -289,10 +554,7 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
         <div>
             <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Gestione Utenti Admin/Preposti</h1>
-                {/* Il Super Admin può creare nuovi admin/preposti */}
-                {isSuperAdmin && (
-                    <button onClick={() => openModal('newAdmin')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">Crea Nuovo Admin/Preposto</button>
-                )}
+                {/* Rimosso: Pulsante Crea Nuovo Admin/Preposto (Spostato in ActionHeader) */}
             </div>
             
             <p className="text-sm text-gray-500 mb-4">
@@ -324,8 +586,8 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
                                         {/* Elimina utente (Solo Super Admin può eliminare Admin, Admin può eliminare Preposto) */}
                                         {(isSuperAdmin || (currentUserRole === 'admin' && admin.role === 'preposto')) && (
                                             <button 
-                                                onClick={() => openModal('deleteUser', admin)} 
-                                                className="text-red-600 hover:text-red-900 text-xs"
+                                                onClick={() => openModal('deleteAdmin', admin)} 
+                                                className="px-2 py-1 text-xs text-white bg-red-500 rounded-md hover:bg-red-600"
                                                 disabled={admin.email === user?.email} // Non puoi eliminare te stesso
                                             >
                                                 Elimina
@@ -336,7 +598,7 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
                                         {admin.role === 'preposto' && (
                                             <button 
                                                 onClick={() => openModal('assignPrepostoAreas', admin)} 
-                                                className="text-blue-600 hover:text-blue-900 text-xs"
+                                                className="px-2 py-1 text-xs text-white bg-blue-500 rounded-md hover:bg-blue-600"
                                             >
                                                 Assegna Aree
                                             </button>
@@ -397,7 +659,7 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
 
     return (
         <div>
-            {/* Form Genera Report (Dato che è già renderizzato sopra, qui non lo ripetiamo) */}
+            {/* Rimosso il form di generazione del report da qui, è nel main component per condizionale */}
 
             {/* SEZIONE PULSANTI DI ESPORTAZIONE */}
             <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 flex-wrap gap-4">
@@ -448,6 +710,71 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
 // =======================================================
 
 
+// === HEADER AZIONI GENERALI (SPOSTATO IN ALTO) ===
+const ActionHeader = ({ view, currentUserRole, setView, openModal, isSuperAdmin }) => { 
+    if (currentUserRole !== 'admin' && currentUserRole !== 'preposto') return null;
+
+    let button = null;
+    let text = null;
+
+    if (view === 'employees') {
+        // --- RESTRIZIONE CHIAVE: SOLO ADMIN PUÒ CREARE DIPENDENTI ---
+        if (currentUserRole === 'admin') {
+            text = 'Crea Nuovo Dipendente';
+            button = (
+                <button onClick={() => setView('newEmployeeForm')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">
+                    {text}
+                </button>
+            );
+        }
+        // --- FINE RESTRIZIONE ---
+        
+    } else if (view === 'areas') {
+        if (currentUserRole === 'admin') {
+            text = 'Aggiungi Area';
+            button = (
+                <button onClick={() => setView('newAreaForm')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">
+                    {text}
+                </button>
+            );
+        }
+    } else if (view === 'admins') { 
+        if (currentUserRole === 'admin' && isSuperAdmin) {
+            text = 'Crea Nuovo Admin/Preposto';
+            button = (
+                <button onClick={() => setView('newAdminForm')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">
+                    {text}
+                </button>
+            );
+        }
+    }
+
+    // PULSANTE PER PREPOSTO: Aggiunge dipendenti (esistenti) alle sue aree
+    if (!button && view === 'employees' && currentUserRole === 'preposto') {
+         text = 'Aggiungi Dipendente alle Mie Aree';
+         button = (
+            <button
+                onClick={() => openModal('prepostoAddEmployeeToAreas', null)} 
+                className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 w-full sm:w-auto text-sm"
+            >
+                {text}
+            </button>
+        );
+    }
+
+    if (!button) return null;
+
+    return (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-4 bg-gray-100">
+            <div className="flex justify-end">
+                {button}
+            </div>
+        </div>
+    );
+};
+// ==================================================
+
+
 // --- COMPONENTE PRINCIPALE ---
 const AdminDashboard = ({ user, handleLogout, userData }) => {
 
@@ -487,7 +814,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
     const currentUserRole = userData?.role;
     // VARIABILE ESSENZIALE PER I CONTROLLI DI ADMIN/SUPERADMIN
-    const superAdminEmail = "domenico.leoncino@tcsitalia.com"; 
+    const superAdminEmail = SUPER_ADMIN_EMAIL; 
 
     // --- CORREZIONE AMBITO (1): managedEmployees è definito PRIMA di sortedAndFilteredEmployees ---
     const managedEmployees = useMemo(() => {
@@ -852,6 +1179,9 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
 
     const openModal = useCallback((type, item = null) => {
+        // RESETA LA VISTA PRINCIPALE PRIMA DI APRIRE LA MODALE (per nascondere form in-line)
+        setView(type.includes('Employee') ? 'employees' : (type.includes('Area') ? 'areas' : 'admins'));
+        
         setModalType(type);
         setSelectedItem(item);
         setShowModal(true);
@@ -958,7 +1288,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                     pauseDurationMinutes = pauseDurationMs / 60000;
                     pauseHours = pauseDurationMinutes / 60; 
 
-                    let calculatedDurationMs = totalMs - pauseDurationMs;
+                    let calculatedDurationMs = totalMs > 0 ? (totalMs - pauseDurationMs) : 0;
                     durationHours = calculatedDurationMs > 0 ? (calculatedDurationMs / 3600000) : 0; 
                     areaHoursMap.set(area.id, (areaHoursMap.get(area.id) || 0) + durationHours);
                 }
@@ -1110,29 +1440,42 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                      <div className="flex justify-center">
                          <div className="flex flex-wrap justify-center py-2 sm:space-x-4">
                              <button onClick={() => setView('dashboard')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'dashboard' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Dashboard</button>
-                             <button onClick={() => setView('employees')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'employees' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Dipendenti</button>
-                             <button onClick={() => setView('areas')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'areas' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Aree</button>
-                             {currentUserRole === 'admin' && <button onClick={() => setView('admins')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'admins' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Admin</button>}
+                             <button onClick={() => setView('employees')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'employees' || view === 'newEmployeeForm' || view === 'prepostoAddEmployeeForm' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Dipendenti</button>
+                             <button onClick={() => setView('areas')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'areas' || view === 'newAreaForm' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Aree</button>
+                             {currentUserRole === 'admin' && <button onClick={() => setView('admins')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'admins' || view === 'newAdminForm' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Admin</button>}
                          </div>
                      </div>
                  </div>
             </nav>
 
-            {/* Contenuto principale */}
-            <div className="max-w-7xl mx-auto w-full p-4 sm:p-6 lg:p-8">
-                {/* Form Genera Report (DEVE SEMPRE APRIRE LA VISTA REPORT QUANDO GENERATO)*/}
-                <div className="bg-white shadow-md rounded-lg p-4 mb-6">
-                    <h3 className="text-lg font-medium text-gray-900 mb-4 text-center sm:text-left">Genera Report Personalizzato</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
-                        <div className="lg:col-span-1"><label htmlFor="startDate" className="block text-sm font-medium text-gray-700 mb-1">Da:</label><input type="date" id="startDate" value={dateRange.start} onChange={e => setDateRange({ ...dateRange, start: e.target.value })} className="p-2 border border-gray-300 rounded-md w-full text-sm" /></div>
-                        <div className="lg:col-span-1"><label htmlFor="endDate" className="block text-sm font-medium text-gray-700 mb-1">A:</label><input type="date" id="endDate" value={dateRange.end} onChange={e => setDateRange({ ...dateRange, end: e.target.value })} className="p-2 border border-gray-300 rounded-md w-full text-sm" /></div>
-                        <div className="lg:col-span-1"><label htmlFor="areaFilter" className="block text-sm font-medium text-gray-700 mb-1">Area:</label><select id="areaFilter" value={reportAreaFilter} onChange={e => setReportAreaFilter(e.target.value)} className="p-2 border border-gray-300 rounded-md w-full text-sm bg-white"><option value="all">Tutte le Aree</option>{(currentUserRole === 'admin' ? allWorkAreas : allWorkAreas.filter(a => userData?.managedAreaIds?.includes(a.id))).sort((a,b) => a.name.localeCompare(b.name)).map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}</select></div>
-                        <div className="lg:col-span-1"><label htmlFor="employeeFilter" className="block text-sm font-medium text-gray-700 mb-1">Dipendente:</label><select id="employeeFilter" value={reportEmployeeFilter} onChange={e => setReportEmployeeFilter(e.target.value)} className="p-2 border border-gray-300 rounded-md w-full text-sm bg-white"><option value="all">Tutti i Dipendenti</option>{(currentUserRole === 'admin' ? allEmployees : managedEmployees).sort((a,b) => `${a.name} ${a.surname}`.localeCompare(`${b.name} ${b.surname}`)).map(emp => (<option key={emp.id} value={emp.id}>{emp.name} {emp.surname}</option>))}</select></div>
-                        <div className="lg:col-span-1"><button onClick={generateReport} disabled={isLoading || isActionLoading} className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm w-full disabled:opacity-50">Genera Report</button></div>
+            {/* HEADER AZIONI GENERALI (CREA DIPENDENTE / AGGIUNGI AREA / CREA ADMIN) */}
+            {/* eslint-disable-next-line react/jsx-no-undef */}
+            <ActionHeader view={view} currentUserRole={currentUserRole} setView={setView} openModal={openModal} isSuperAdmin={user?.email === superAdminEmail} />
+
+            {/* Form Genera Report (SOLO SE view è impostata a 'reports') */}
+            {view === 'reports' && (
+                <div className="max-w-7xl mx-auto w-full p-4 sm:p-6 lg:p-8">
+                    <div className="bg-white shadow-md rounded-lg p-4 mb-6">
+                        <h3 className="text-lg font-medium text-gray-900 mb-4 text-center sm:text-left">Genera Report Personalizzato</h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+                            <div className="lg:col-span-1"><label htmlFor="startDate" className="block text-sm font-medium text-gray-700 mb-1">Da:</label><input type="date" id="startDate" value={dateRange.start} onChange={e => setDateRange({ ...dateRange, start: e.target.value })} className="p-2 border border-gray-300 rounded-md w-full text-sm" /></div>
+                            <div className="lg:col-span-1"><label htmlFor="endDate" className="block text-sm font-medium text-gray-700 mb-1">A:</label><input type="date" id="endDate" value={dateRange.end} onChange={e => setDateRange({ ...dateRange, end: e.target.value })} className="p-2 border border-gray-300 rounded-md w-full text-sm" /></div>
+                            <div className="lg:col-span-1"><label htmlFor="areaFilter" className="block text-sm font-medium text-gray-700 mb-1">Area:</label><select id="areaFilter" value={reportAreaFilter} onChange={e => setReportAreaFilter(e.target.value)} className="p-2 border border-gray-300 rounded-md w-full text-sm bg-white"><option value="all">Tutte le Aree</option>{(currentUserRole === 'admin' ? allWorkAreas : allWorkAreas.filter(a => userData?.managedAreaIds?.includes(a.id))).sort((a,b) => a.name.localeCompare(b.name)).map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}</select></div>
+                            <div className="lg:col-span-1"><label htmlFor="employeeFilter" className="block text-sm font-medium text-gray-700 mb-1">Dipendente:</label><select id="employeeFilter" value={reportEmployeeFilter} onChange={e => setReportEmployeeFilter(e.target.value)} className="p-2 border border-gray-300 rounded-md w-full text-sm bg-white"><option value="all">Tutti i Dipendenti</option>{(currentUserRole === 'admin' ? allEmployees : managedEmployees).sort((a,b) => `${a.name} ${a.surname}`.localeCompare(`${b.name} ${b.surname}`)).map(emp => (<option key={emp.id} value={emp.id}>{emp.name} {emp.surname}</option>))}</select></div>
+                            <div className="lg:col-span-1"><button onClick={generateReport} disabled={isLoading || isActionLoading} className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm w-full disabled:opacity-50">Genera Report</button></div>
+                        </div>
                     </div>
                 </div>
-
-                {/* Render della vista corrente */}
+            )}
+            
+            {/* Contenuto principale (DASHBOARD/GESTIONI E REPORT VIEW SENZA FORM SOPRA) */}
+            <div className="max-w-7xl mx-auto w-full p-4 sm:p-6 lg:p-8">
+                {/* RENDERIZZAZIONE FORM DI CREAZIONE IN LINEA */}
+                {view === 'newEmployeeForm' && <NewEmployeeForm onDataUpdate={fetchData} user={user} setView={setView} showNotification={showNotification} />}
+                {view === 'newAreaForm' && <NewAreaForm onDataUpdate={fetchData} setView={setView} showNotification={showNotification} />}
+                {view === 'newAdminForm' && <NewAdminForm onDataUpdate={fetchData} user={user} setView={setView} showNotification={showNotification} />}
+                
+                {/* RENDERIZZAZIONE VISTE PRINCIPALI (se non stiamo visualizzando un form di creazione) */}
                 <main>
                     {view === 'dashboard' && <DashboardView totalEmployees={managedEmployees.length} activeEmployeesDetails={activeEmployeesDetails} totalDayHours={totalDayHours} />}
                     

@@ -1,9 +1,8 @@
-// File: functions/src/index.js (SENZA FUNZIONE BYPASS RIPOSO)
+// File: functions/src/index.js (CON CONTROLLO DEVICE ID - MAX 2)
 
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 const { Timestamp, GeoPoint, FieldValue } = require("firebase-admin/firestore");
-// === Rimosso l'import di date-fns-tz per evitare errori di modulo. La gestione del fuso orario avviene tramite Date.toLocaleString() ===
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -63,7 +62,7 @@ exports.createUser = functions.region('europe-west1').https.onCall(async (data, 
         if (role === 'dipendente' || role === 'preposto') {
             const employeeData = {
                 userId: userRecord.uid, name, surname, email,
-                workAreaIds: [], deviceIds: [],
+                workAreaIds: [], deviceIds: [], // deviceIds inizializzato
                 createdAt: FieldValue.serverTimestamp()
             };
             const employeeDocRef = await db.collection('employees').add(employeeData);
@@ -190,8 +189,6 @@ exports.manualClockIn = functions.region('europe-west1').https.onCall(async (dat
     // === CORREZIONE ORA: Interpreta il timestamp (formato ISO dal client) in data corretta ===
     let clockInDate;
     try {
-        // Aggiungiamo 'Z' se il formato YYYY-MM-DDTHH:mm non lo include,
-        // forzando Node a interpretarlo come UTC/Zulu Time per risolvere l'errore di 1 ora
         const timestampWithZ = timestamp.endsWith('Z') ? timestamp : timestamp + 'Z';
         clockInDate = new Date(timestampWithZ); 
         if (isNaN(clockInDate.getTime())) { 
@@ -318,6 +315,11 @@ exports.prepostoTogglePause = functions.region('europe-west1').https.onCall(asyn
     if (!uid || callerRole !== 'preposto') {
         throw new functions.https.HttpsError('permission-denied', 'Azione riservata ai preposti.');
     }
+    // AGGIUNTO: Validazione deviceId
+    const { deviceId } = data;
+    if (!deviceId) {
+        throw new functions.https.HttpsError('invalid-argument', 'ID Dispositivo mancante.');
+    }
 
     try {
         // Trova profilo employee del preposto
@@ -325,7 +327,14 @@ exports.prepostoTogglePause = functions.region('europe-west1').https.onCall(asyn
         if (employeeQuery.empty) {
             throw new functions.https.HttpsError('not-found', 'Profilo dipendente del preposto non trovato.');
         }
-        const employeeId = employeeQuery.docs[0].id;
+        const employeeDoc = employeeQuery.docs[0];
+        const employeeId = employeeDoc.id;
+        
+        // CONTROLLO DEVICE ID
+        const currentDeviceIds = employeeDoc.data().deviceIds || [];
+        if (!currentDeviceIds.includes(deviceId)) {
+            throw new functions.https.HttpsError('permission-denied', 'Dispositivo non autorizzato per questa azione.');
+        }
 
         // Trova timbratura attiva del preposto
         const q = db.collection('time_entries')
@@ -458,9 +467,9 @@ exports.applyAutoPauseEmployee = functions.region('europe-west1').https.onCall(a
         throw new functions.https.HttpsError('permission-denied', 'Azione non permessa.');
     }
 
-    const { durationMinutes } = data; // Riceve la durata dal frontend
-    if (typeof durationMinutes !== 'number' || durationMinutes <= 0) {
-        throw new functions.https.HttpsError('invalid-argument', 'Durata della pausa non valida.');
+    const { durationMinutes, deviceId } = data; // Riceve la durata E deviceId dal frontend
+    if (typeof durationMinutes !== 'number' || durationMinutes <= 0 || !deviceId) {
+        throw new functions.https.HttpsError('invalid-argument', 'Durata della pausa non valida o ID Dispositivo mancante.');
     }
 
     try {
@@ -469,7 +478,14 @@ exports.applyAutoPauseEmployee = functions.region('europe-west1').https.onCall(a
         if (employeeQuery.empty) {
             throw new functions.https.HttpsError('not-found', 'Profilo dipendente non trovato.');
         }
-        const employeeId = employeeQuery.docs[0].id;
+        const employeeDoc = employeeQuery.docs[0];
+        const employeeId = employeeDoc.id;
+        
+        // CONTROLLO DEVICE ID
+        const currentDeviceIds = employeeDoc.data().deviceIds || [];
+        if (!currentDeviceIds.includes(deviceId)) {
+            throw new functions.https.HttpsError('permission-denied', 'Dispositivo non autorizzato per questa azione.');
+        }
 
         // Trova la timbratura attiva per questo dipendente
         const q = db.collection('time_entries')
@@ -490,6 +506,12 @@ exports.applyAutoPauseEmployee = functions.region('europe-west1').https.onCall(a
         if (isAlreadyInPause) {
              throw new functions.https.HttpsError('failed-precondition', 'Sei già in pausa.');
         }
+        
+        // Controlla se la pausa è stata già completata (logica del frontend, ma utile come ulteriore controllo)
+        const hasCompletedPause = currentPauses.some(p => p.start && p.end && p.isAutomatic);
+        if (hasCompletedPause) {
+             throw new functions.https.HttpsError('failed-precondition', 'La pausa automatica è stata già completata per questo turno.');
+        }
 
         // Calcola inizio e fine della pausa automatica
         const startTime = new Date(); // Ora attuale
@@ -530,6 +552,12 @@ exports.endEmployeePause = functions.region('europe-west1').https.onCall(async (
     if (!uid || (callerRole !== 'dipendente' && callerRole !== 'preposto')) {
         throw new functions.https.HttpsError('permission-denied', 'Azione non permessa.');
     }
+    
+    // AGGIUNTO: Validazione deviceId
+    const { deviceId } = data;
+    if (!deviceId) {
+        throw new functions.https.HttpsError('invalid-argument', 'ID Dispositivo mancante.');
+    }
 
     try {
         // Trova il profilo employee dell'utente che chiama
@@ -537,7 +565,14 @@ exports.endEmployeePause = functions.region('europe-west1').https.onCall(async (
         if (employeeQuery.empty) {
             throw new functions.https.HttpsError('not-found', 'Profilo dipendente non trovato.');
         }
-        const employeeId = employeeQuery.docs[0].id;
+        const employeeDoc = employeeQuery.docs[0];
+        const employeeId = employeeDoc.id;
+        
+        // CONTROLLO DEVICE ID
+        const currentDeviceIds = employeeDoc.data().deviceIds || [];
+        if (!currentDeviceIds.includes(deviceId)) {
+            throw new functions.https.HttpsError('permission-denied', 'Dispositivo non autorizzato per questa azione.');
+        }
 
         // Trova la timbratura attiva
         const q = db.collection('time_entries')
@@ -584,12 +619,13 @@ exports.clockEmployeeIn = functions.region('europe-west1').https.onCall(async (d
     if (!uid || (callerRole !== 'dipendente' && callerRole !== 'preposto')) { 
         throw new functions.https.HttpsError('permission-denied', 'Azione non permessa.');
     }
-    const { areaId, deviceId } = data; 
-    if (!areaId) {
-        throw new functions.https.HttpsError('invalid-argument', 'ID Area mancante.');
+    const { areaId, deviceId, isGpsRequired, currentLat, currentLon, note } = data; // Destrutturazione completa
+    if (!areaId || !deviceId) { // deviceId ora obbligatorio per la timbratura
+        throw new functions.https.HttpsError('invalid-argument', 'ID Area e ID Dispositivo sono mancanti.');
     }
-    const finalDeviceId = deviceId || uid; 
-
+    const finalDeviceId = deviceId; // Usiamo deviceId inviato dal client (localStorage)
+    const MAX_DEVICES = 2; // Limite massimo di dispositivi
+    
 
     try {
         // Trova profilo employee
@@ -599,18 +635,27 @@ exports.clockEmployeeIn = functions.region('europe-west1').https.onCall(async (d
         }
         const employeeDoc = employeeQuery.docs[0];
         const employeeId = employeeDoc.id;
-
-        // Logica Registrazione/Validazione Dispositivo (Server-Side)
-        const currentDeviceIds = employeeDoc.data().deviceIds || [];
         const employeeRef = employeeDoc.ref;
+
+        // ====================================================
+        // --- LOGICA REGISTRAZIONE / VALIDAZIONE DISPOSITIVO ---
+        // ====================================================
+        const currentDeviceIds = employeeDoc.data().deviceIds || [];
+        const isDeviceRegistered = currentDeviceIds.includes(finalDeviceId);
         
-        if (currentDeviceIds.length === 0 && finalDeviceId !== uid) {
-            await employeeRef.update({
-                deviceIds: FieldValue.arrayUnion(finalDeviceId)
-            });
-            console.log(`[Device Registration] Primo device ID (${finalDeviceId}) registrato per ${employeeId}.`);
+        if (!isDeviceRegistered) {
+            if (currentDeviceIds.length >= MAX_DEVICES) {
+                // BLOCCO 1: Limite raggiunto e dispositivo NON autorizzato
+                throw new functions.https.HttpsError('permission-denied', `Timbratura bloccata. Raggiunto il limite massimo di ${MAX_DEVICES} dispositivi registrati. Contatta l'amministratore per il reset.`);
+            } else {
+                // BLOCCO 2: Registrazione del nuovo dispositivo (slot disponibile)
+                await employeeRef.update({
+                    deviceIds: FieldValue.arrayUnion(finalDeviceId)
+                });
+                console.log(`[Device Registration] Nuovo device ID (${finalDeviceId}) registrato per ${employeeId}. Slot usato: ${currentDeviceIds.length + 1}/${MAX_DEVICES}.`);
+            }
         }
-        // Fine Registrazione Dispositivo
+        // ====================================================
 
          // Controlla timbratura attiva
          const activeEntryQuery = await db.collection('time_entries').where('employeeId', '==', employeeId).where('status', '==', 'clocked-in').limit(1).get();
@@ -630,6 +675,11 @@ exports.clockEmployeeIn = functions.region('europe-west1').https.onCall(async (d
              status: 'clocked-in',
              createdBy: uid, 
              pauses: [],
+             // Aggiunti campi per tracciamento GPS (se forniti) e nota:
+             gpsTracked: isGpsRequired === true, // Traccia se era obbligatorio
+             clockInLat: currentLat || null,
+             clockInLon: currentLon || null,
+             note: note || '',
              createdAt: FieldValue.serverTimestamp() // Timestamp creazione documento
          });
          return { success: true, message: "Timbratura di entrata registrata." };
@@ -646,6 +696,11 @@ exports.clockEmployeeOut = functions.region('europe-west1').https.onCall(async (
      if (!uid || (callerRole !== 'dipendente' && callerRole !== 'preposto')) {
          throw new functions.https.HttpsError('permission-denied', 'Azione non permessa.');
      }
+       // AGGIUNTO: Validazione deviceId
+       const { deviceId } = data;
+       if (!deviceId) {
+           throw new functions.https.HttpsError('invalid-argument', 'ID Dispositivo è mancante.');
+       }
 
      try {
          // Trova profilo employee
@@ -653,7 +708,14 @@ exports.clockEmployeeOut = functions.region('europe-west1').https.onCall(async (
          if (employeeQuery.empty) {
              throw new functions.https.HttpsError('not-found', 'Profilo dipendente non trovato.');
          }
-         const employeeId = employeeQuery.docs[0].id;
+           const employeeDoc = employeeQuery.docs[0];
+         const employeeId = employeeDoc.id;
+           
+           // CONTROLLO DEVICE ID
+           const currentDeviceIds = employeeDoc.data().deviceIds || [];
+           if (!currentDeviceIds.includes(deviceId)) {
+               throw new functions.https.HttpsError('permission-denied', 'Dispositivo non autorizzato per questa azione.');
+           }
 
          // Trova timbratura attiva
          const q = db.collection('time_entries').where('employeeId', '==', employeeId).where('status', '==', 'clocked-in').limit(1);
@@ -691,4 +753,95 @@ exports.clockEmployeeOut = functions.region('europe-west1').https.onCall(async (
          if (error.code && error.code.startsWith('functions')) throw error;
          throw new functions.https.HttpsError('internal', `Errore server: ${error.message}`);
      }
+});
+
+// ===============================================
+// --- NUOVA FUNZIONE: Genera Report (Admin/Preposto) ---
+// ===============================================
+exports.generateTimeReport = functions.region('europe-west1').https.onCall(async (data, context) => {
+    const callerUid = context.auth?.uid;
+    const callerRole = context.auth?.token.role;
+
+    // 1. Controllo Autorizzazione di base (Admin o Preposto)
+    if (!callerUid || (callerRole !== 'admin' && callerRole !== 'preposto')) {
+        throw new functions.https.HttpsError('permission-denied', 'Solo Amministratori o Preposti possono generare report.');
+    }
+
+    // 2. Validazione Input
+    const { startDate: startISO, endDate: endISO, employeeIdFilter, areaIdFilter } = data;
+    if (!startISO || !endISO) {
+        throw new functions.https.HttpsError('invalid-argument', 'Date di inizio e fine sono obbligatorie.');
+    }
+
+    const startDate = new Date(startISO); startDate.setHours(0, 0, 0, 0);
+    const endDate = new Date(endISO); endDate.setHours(23, 59, 59, 999);
+    
+    // Controlla che le date siano valide
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+        throw new functions.https.HttpsError('invalid-argument', 'Formato data non valido.');
+    }
+
+    try {
+        // 3. Query Iniziale
+        let q = db.collection('time_entries')
+            .where('clockInTime', '>=', Timestamp.fromDate(startDate))
+            .where('clockInTime', '<=', Timestamp.fromDate(endDate));
+
+        // 4. Applicazione Filtri Globali (se forniti dal frontend)
+        if (employeeIdFilter && employeeIdFilter !== 'all') {
+            q = q.where('employeeId', '==', employeeIdFilter);
+        }
+        if (areaIdFilter && areaIdFilter !== 'all') {
+            q = q.where('workAreaId', '==', areaIdFilter);
+        }
+
+        const querySnapshot = await q.get();
+        let finalEntries = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        // 5. Applicazione Filtro Preposto (lato server)
+        if (callerRole === 'preposto') {
+            // Recupera le aree gestite dal preposto
+            const prepostoUserDoc = await db.collection('users').doc(callerUid).get();
+            const managedAreaIds = prepostoUserDoc.data()?.managedAreaIds || [];
+
+            if (managedAreaIds.length === 0) {
+                return { reports: [], message: 'Nessuna area di competenza gestita. Report vuoto.' };
+            }
+            
+            // Trova gli employeeId collegati a queste aree
+            const employeesInManagedAreasSnap = await db.collection('employees')
+                .where('workAreaIds', 'array-contains-any', managedAreaIds)
+                .get();
+            const trulyManagedEmployeeIds = employeesInManagedAreasSnap.docs.map(doc => doc.id);
+
+
+            // Filtra le timbrature solo per i dipendenti di competenza
+            finalEntries = finalEntries.filter(entry => trulyManagedEmployeeIds.includes(entry.employeeId));
+        }
+
+        // 6. Serializza i risultati (incluso il campo Timestamp) per la risposta
+        const serializedReports = finalEntries.map(entry => ({
+            ...entry,
+            // Converte tutti i Timestamp in stringhe ISO per il trasferimento
+            clockInTime: entry.clockInTime?.toDate()?.toISOString() || null,
+            clockOutTime: entry.clockOutTime?.toDate()?.toISOString() || null,
+            createdAt: entry.createdAt?.toDate()?.toISOString() || null,
+            // Converte Timestamp delle pause
+            pauses: (entry.pauses || []).map(p => ({
+                ...p,
+                start: p.start?.toDate()?.toISOString() || null,
+                end: p.end?.toDate()?.toISOString() || null,
+            })),
+            // L'ID del documento è già incluso: entry.id
+        }));
+
+        return { 
+            reports: serializedReports, 
+            message: `Report generato con ${serializedReports.length} timbrature.` 
+        };
+
+    } catch (error) {
+        console.error("Errore generateTimeReport:", error);
+        throw new functions.https.HttpsError('internal', `Errore server: ${error.message}`);
+    }
 });
