@@ -91,7 +91,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     // Aggiorna ora corrente
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-        // RIMOZIONE AUDIO: playSound('app_open') - Bloccato in produzione
+        playSound('app_open')
         return () => clearInterval(timer);
     }, []);
 
