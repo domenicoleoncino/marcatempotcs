@@ -81,7 +81,10 @@ const LoginScreen = () => {
                         </div>
                     </form>
                 </div>
-                 <p className="text-center text-xs text-gray-500 mt-6">Created by D.Leoncino</p>
+                 {/* AVVISO DI COPYRIGHT AGGIORNATO */}
+                 <p className="text-center text-xs text-gray-500 mt-6">
+                     &copy; {new Date().getFullYear()} TCS Italia S.r.l. Tutti i diritti riservati.
+                 </p>
             </div>
         </div>
     );
