@@ -1,4 +1,5 @@
 // File: src/js/components/AdminModal.js (Corretto per distinguere adminClockIn vs adminClockOut)
+/* eslint-disable no-unused-vars */
 
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';

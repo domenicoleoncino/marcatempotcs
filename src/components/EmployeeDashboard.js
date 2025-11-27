@@ -1,4 +1,5 @@
 // File: src/components/EmployeeDashboard.js (Definitivo con Robustezza Pausa e Selezione Area Manuale)
+/* eslint-disable no-unused-vars */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db } from '../firebase';
