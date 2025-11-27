@@ -1,4 +1,4 @@
-// File: src/components/EmployeeDashboard.js (Definitivo con Robustezza Pausa e Selezione Area Manuale)
+// File: src/components/EmployeeDashboard.js (Definitivo con Device ID e Logica Pausa Robusta)
 /* eslint-disable no-unused-vars */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -8,6 +8,22 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import CompanyLogo from './CompanyLogo';
 // === NUOVE IMPORTAZIONI PER EXCEL ===
 import { utils, writeFile } from 'xlsx';
+
+// ===========================================
+// --- 1. FUNZIONE UTILITY DEVICE ID ---
+// ===========================================
+function getOrGenerateDeviceId() {
+    let deviceId = localStorage.getItem('marcatempoDeviceId'); 
+    
+    if (!deviceId) {
+        // Genera un ID pseudo-univoco (Usare una libreria UUID per maggiore robustezza in prod)
+        deviceId = (Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)).toUpperCase();
+        localStorage.setItem('marcatempoDeviceId', deviceId);
+    }
+    return deviceId;
+}
+// ===========================================
+
 
 // Funzione distanza GPS (invariata)
 function getDistanceInMeters(lat1, lon1, lat2, lon2) {
@@ -42,6 +58,9 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     const [locationError, setLocationError] = useState(null);
     const [inRangeArea, setInRangeArea] = useState(null); 
     const [manualAreaId, setManualAreaId] = useState(''); // <-- STATO PER SELEZIONE MANUALE
+    
+    // STATO NUOVO per Device ID
+    const [deviceId, setDeviceId] = useState(null); // <-- STATO PER DEVICE ID
 
     // Stati per report Excel
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
@@ -76,6 +95,15 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
         return () => clearInterval(timer);
     }, []);
 
+    // ----------------------------------------------------
+    // INIZIALIZZAZIONE DEVICE ID (NUOVO)
+    // ----------------------------------------------------
+    useEffect(() => {
+        const currentDeviceId = getOrGenerateDeviceId();
+        setDeviceId(currentDeviceId); 
+    }, []); 
+
+
     // Filtra aree assegnate al dipendente
     const employeeWorkAreas = useMemo(() => {
         if (!employeeData || !employeeData.workAreaIds || !allWorkAreas) return [];
@@ -88,10 +116,11 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
 
     // Logica GPS (watchPosition per aggiornamenti continui) - INVARIATA
     useEffect(() => {
-        if (employeeWorkAreas.length === 0 || !isGpsRequired) {
+        // AGGIUNTO deviceId come dipendenza
+        if (employeeWorkAreas.length === 0 || !isGpsRequired || !deviceId) {
             setLocationError(null);
             setInRangeArea(null);
-            return; // Non serve GPS
+            return; 
         }
 
         let isMounted = true;
@@ -151,7 +180,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             isMounted = false;
             if (watchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(watchId);
         };
-    }, [employeeWorkAreas, isGpsRequired]); 
+    }, [employeeWorkAreas, isGpsRequired, deviceId]); // AGGIUNTA DIPENDENZA deviceId
 
     
     // CALCOLO STATO PAUSA CON USEMEMO (massima robustezza)
@@ -249,11 +278,18 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     }, [user?.uid, employeeData?.id, allWorkAreas]);
 
 
-    // --- GESTIONE AZIONI TIMBRATURA/PAUSA ---
+    // --- GESTIONE AZIONI TIMBRATURA/PAUSA (AGGIUNTO deviceId) ---
     const handleAction = async (action) => {
         if (isProcessing) return;
         setIsProcessing(true);
         setLocationError(null);
+
+        // Controllo Device ID (aggiunto qui)
+        if (!deviceId) {
+            alert("ID dispositivo non disponibile. Ricarica la pagina.");
+            setIsProcessing(false);
+            return;
+        }
 
         try {
             let result;
@@ -263,7 +299,6 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             const isGpsRequiredCheck = isGpsRequired; 
             const currentLat = inRangeArea?.latitude;
             const currentLon = inRangeArea?.longitude;
-            const deviceId = employeeData.deviceIds?.[0] || user.uid; 
             // -----------------------------------
 
             if (action === 'clockIn') {
@@ -298,7 +333,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 result = await clockIn({ 
                     areaId: areaIdToClockIn, 
                     note: note, 
-                    deviceId: deviceId, 
+                    deviceId: deviceId, // <-- PAYLOAD AGGIORNATO CON DEVICE ID
                     isGpsRequired: isGpsRequiredCheck,
                     currentLat: inRangeArea?.latitude,
                     currentLon: inRangeArea?.longitude
@@ -378,6 +413,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 result = await clockOut({ 
                     note: finalNoteText, 
                     pauseSkipReason: finalReasonCode, 
+                    deviceId: deviceId, // <-- PAYLOAD AGGIORNATO CON DEVICE ID
                     isGpsRequired: isGpsRequiredCheck, 
                     currentLat: currentLat, 
                     currentLon: currentLon 
@@ -409,7 +445,11 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                     setIsPauseAttempted(true); 
                     playSound('pause_start'); 
 
-                    result = await applyAutoPauseEmployee({ timeEntryId: currentActiveEntry.id, durationMinutes: pauseDuration }); 
+                    result = await applyAutoPauseEmployee({ 
+                        timeEntryId: currentActiveEntry.id, 
+                        durationMinutes: pauseDuration,
+                        deviceId: deviceId, // <-- PAYLOAD AGGIORNATO CON DEVICE ID
+                    }); 
                     
                 } else {
                     throw new Error(`Nessuna pausa predefinita (>0 min) per l'area "${currentArea?.name || 'sconosciuta'}".`);
@@ -550,36 +590,50 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     const years = [new Date().getFullYear(), new Date().getFullYear() - 1]; // Anno corrente e precedente
 
     
-    // Messaggio Dispositivo/Reset (AGGIORNATO)
+    // Messaggio Dispositivo/Reset (AGGIORNATO - CONCISEZZA)
     const renderDeviceMessage = () => {
-        // Valore massimo dei dispositivi (come definito nella Cloud Function)
         const MAX_DEVICES = 2; 
         const currentDeviceIds = employeeData.deviceIds || [];
         const currentDeviceCount = currentDeviceIds.length;
         
-        // L'ID del dispositivo utilizzato per la registrazione è il primo nell'array, altrimenti l'UID (in fase di prima registrazione)
-        const displayDeviceId = currentDeviceIds.length > 0 ? currentDeviceIds[0] : user.uid; 
-
-        // Se non ci sono dispositivi registrati, non mostriamo nulla (l'utente ne registrerà uno al prossimo clock-in)
-        if (currentDeviceCount === 0) return null; 
-
+        const isCurrentDeviceAuthorized = currentDeviceIds.includes(deviceId);
         const isLimitReached = currentDeviceCount >= MAX_DEVICES;
 
-        return (
-            <div className={`p-4 mb-4 rounded-lg shadow-sm ${isLimitReached ? 'bg-red-100 border-l-4 border-red-500 text-red-700' : 'bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700'}`} role="alert">
-                <p className="font-bold">
-                    Stato Dispositivo: {currentDeviceCount} / {MAX_DEVICES} registrati
-                </p>
-                <p className="text-sm mt-1">
-                    **ID Registrato:** {displayDeviceId.substring(0, 8)}... (mostra solo l'inizio)
-                </p>
-                {isLimitReached && (
-                    <p className="text-xs font-semibold mt-1">
-                        ATTENZIONE: Hai raggiunto il limite massimo di registrazione dispositivi. In caso di guasto o cambio cellulare, contatta Preposto o Admin per il reset.
+        // --- CASO 1: Dispositivo Autorizzato o Slot Libero ---
+        if (currentDeviceCount === 0 || isCurrentDeviceAuthorized) {
+            return (
+                <div className={`p-4 mb-4 rounded-lg shadow-sm bg-blue-100 border-l-4 border-blue-500 text-blue-700`} role="alert">
+                    <p className="font-bold">
+                        Stato Dispositivo: {currentDeviceCount} / {MAX_DEVICES} registrati
                     </p>
-                )}
-            </div>
-        );
+                    {isLimitReached ? (
+                         <p className="text-xs font-semibold mt-1">
+                             Raggiunto il limite. In caso di guasto o cambio dispositivo, contatta il Preposto o l'Admin per il **reset**.
+                         </p>
+                    ) : (
+                         <p className="text-xs font-semibold mt-1">
+                             Dispositivo autorizzato. Slot libero.
+                         </p>
+                    )}
+                </div>
+            );
+        }
+        
+        // --- CASO 2: Blocco Raggiunto Limite e Dispositivo NON Autorizzato ---
+        if (isLimitReached && !isCurrentDeviceAuthorized) {
+             return (
+                 <div className={`p-4 mb-4 rounded-lg shadow-sm bg-red-100 border-l-4 border-red-500 text-red-700`} role="alert">
+                     <p className="font-bold">
+                         ❌ TIMBRATURA BLOCCATA
+                     </p>
+                     <p className="text-sm font-semibold mt-1">
+                         Raggiunto il limite ({MAX_DEVICES}). Contatta il Preposto/Admin per il **reset**.
+                     </p>
+                 </div>
+             );
+        }
+        
+        return null;
     }; 
     
     // --- Componente di stato GPS/Area ---
@@ -661,7 +715,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                             <button
                                 onClick={() => handleAction('clockPause')} 
                                 // Disabilitato se: Active, in attesa di risposta server (isProcessing/isPauseAttempted), o GIA' COMPLETATA
-                                disabled={isProcessing || pauseStatus !== 'NONE'} // <-- USA pauseStatus
+                                disabled={isProcessing || pauseStatus !== 'NONE' || !deviceId || (employeeData.deviceIds?.length >= 2 && !employeeData.deviceIds?.includes(deviceId))} // Aggiunto controllo Device ID
                                 className={`w-full font-bold rounded-lg shadow-lg transition-colors py-4 text-white ${
                                     pauseStatus !== 'NONE' // <-- USA pauseStatus
                                         ? 'bg-gray-400' // GRIGIO se Pausa Attiva/Effettuata (bloccato)
@@ -693,7 +747,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                             <button
                                 onClick={() => handleAction('clockOut')}
                                 // L'uscita è permessa anche se in pausa
-                                disabled={isProcessing || (isGpsRequired && !inRangeArea)}
+                                disabled={isProcessing || (isGpsRequired && !inRangeArea) || !deviceId || (employeeData.deviceIds?.length >= 2 && !employeeData.deviceIds?.includes(deviceId))} // Aggiunto controllo Device ID
                                 className={`w-full font-bold rounded-lg shadow-lg text-white transition-colors py-4 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed`}
                             >
                                 <div className="text-2xl leading-none">🔴</div>
@@ -740,7 +794,9 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                                 isProcessing || 
                                 (isGpsRequired && !inRangeArea) || 
                                 (!isGpsRequired && !manualAreaId) || // <-- BLOCCO AGGIUNTO QUI
-                                (!isGpsRequired && employeeWorkAreas.length === 0 && manualAreaId === "") 
+                                (!isGpsRequired && employeeWorkAreas.length === 0 && manualAreaId === "") ||
+                                (!deviceId) || // <-- CONTROLLO DEVICE ID PRESENTE
+                                (employeeData.deviceIds?.length >= 2 && !employeeData.deviceIds?.includes(deviceId)) // <-- CONTROLLO LIMITE DEVICE
                             }
                             className={`w-full mt-4 text-2xl font-bold py-6 px-4 rounded-lg shadow-lg text-white transition-colors bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed`}
                         >
