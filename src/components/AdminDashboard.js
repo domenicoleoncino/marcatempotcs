@@ -394,7 +394,7 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
         <div>
             {/* Form Genera Report (duplicato dal main) */}
              <div className="bg-white shadow-md rounded-lg p-4 mb-6">
-                <h3 className="text-lg font-medium text-gray-900 mb-4 text-center sm:text-left">Genera Nuovo Report</h3>
+                <h3 className="text-lg font-medium text-gray-900 mb-4 text-center sm:text-left">Genera Report Personalizzato</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
                     <div className="lg:col-span-1"><label htmlFor="startDate" className="block text-sm font-medium text-gray-700 mb-1">Da:</label><input type="date" id="startDate" value={dateRange.start} onChange={e => setDateRange({ ...dateRange, start: e.target.value })} className="p-2 border border-gray-300 rounded-md w-full text-sm" /></div>
                     <div className="lg:col-span-1"><label htmlFor="endDate" className="block text-sm font-medium text-gray-700 mb-1">A:</label><input type="date" id="endDate" value={dateRange.end} onChange={e => setDateRange({ ...dateRange, end: e.target.value })} className="p-2 border border-gray-300 rounded-md w-full text-sm" /></div>
@@ -576,13 +576,14 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const sortedAndFilteredEmployees = useMemo(() => {
         const employeesWithDetails = managedEmployees.map(emp => ({
             ...emp,
-            // --- LOGICA DI DEBUG AREE MANCANTI ---
+            // --- LOGICA DI DEBUG AREE MANCANTI (PER INDIVIDUARE L'ID MANCANTE) ---
             workAreaNames: (emp.workAreaIds || []).map(id => {
                 const area = allWorkAreas.find(a => a.id === id);
                 // Se non trova l'area nella lista allWorkAreas, mostra l'ID per il DEBUG
+                // Rimuovi questa logica una volta che hai identificato l'ID mancante
                 return area ? area.name : `ID Mancante: ${id.substring(0, 5)}...`; 
             }).filter(Boolean),
-            // ------------------------------------
+            // --------------------------------------------------------------------
             activeEntry: activeEmployeesDetails.find(detail => detail.employeeId === emp.id) || null,
         }));
         
@@ -915,15 +916,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 let durationHours = null;
                 let pauseDurationMinutes = 0; // Inizializza minuti pausa
                 let pauseHours = 0; // Inizializza ore pausa
-
-                let clockInFormatted = 'N/D';
-                let clockOutFormatted = 'In corso';
-                try {
-                    clockInFormatted = new Intl.DateTimeFormat('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' }).format(clockIn);
-                    if (clockOut) {
-                        clockOutFormatted = new Intl.DateTimeFormat('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' }).format(clockOut);
-                    }
-                } catch (e) { console.error("Errore formattazione ora report:", e); }
 
                 if (clockOut) {
                     const totalMs = clockOut.getTime() - clockIn.getTime();
