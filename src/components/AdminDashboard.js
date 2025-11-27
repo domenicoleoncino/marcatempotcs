@@ -13,7 +13,10 @@ import { utils, writeFile } from 'xlsx';
 import { saveAs } from 'file-saver';
 //import 'jspdf-autotable';
 
-// --- SUB-COMPONENTI INTERNI ---
+// ===========================================
+// --- SUB-COMPONENTI (DEFINITI PRIMA DELL'USO) ---
+// ===========================================
+
 const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours }) => (
     <div>
         <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-4">Dashboard</h1>
@@ -198,165 +201,6 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
     );
 };
 
-const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
-    <div>
-        <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Gestione Aree di Lavoro</h1>
-            {currentUserRole === 'admin' && <button onClick={() => openModal('newArea')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">Aggiungi Area</button>}
-        </div>
-        <div className="bg-white shadow-md rounded-lg overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                    <tr>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome Area</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ore Totali (nel report)</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pausa (min)</th>
-                        {currentUserRole === 'admin' && (
-                            <>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lat</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lon</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Raggio (m)</th>
-                            </>
-                        )}
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Azioni</th>
-                    </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                    {workAreas.map(area => (
-                        <tr key={area.id}>
-                            <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{area.name}</td>
-                            <td className="px-4 py-2 whitespace-nowrap text-sm font-bold">{area.totalHours ? `${area.totalHours}h` : 'N/D'}</td>
-                            <td className="px-4 py-2 whitespace-nowrap text-sm font-bold text-gray-700">{area.pauseDuration || 0}</td>
-                            {currentUserRole === 'admin' && (
-                                <>
-                                    <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-500">{area.latitude?.toFixed(4) || 'N/D'}</td>
-                                    <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-500">{area.longitude?.toFixed(4) || 'N/D'}</td>
-                                    <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-500">{area.radius || 'N/D'}</td>
-                                </>
-                            )}
-                            <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
-                                <div className="flex items-center gap-4">
-                                    {(currentUserRole === 'admin' || currentUserRole === 'preposto') && <button onClick={() => openModal('editArea', area)} className="text-green-600 hover:text-green-900">Modifica</button>}
-                                    {currentUserRole === 'admin' && <button onClick={() => openModal('deleteArea', area)} className="text-red-600 hover:text-red-900">Elimina</button>}
-                                </div>
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-        </div>
-    </div>
-);
-
-const AddAdminForm = ({ onCancel, onDataUpdate, user }) => {
-    const [formData, setFormData] = useState({ name: '', surname: '', email: '', password: '', phone: '', role: 'preposto' });
-    const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState('');
-
-    const handleInputChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        if (!formData.password || formData.password.length < 6) {
-            setError("La password deve essere di almeno 6 caratteri.");
-            return;
-        }
-        setIsLoading(true);
-        setError('');
-        try {
-            const functions = getFunctions(undefined, 'europe-west1');
-            const createNewUser = httpsCallable(functions, 'createUser');
-            await createNewUser({
-                ...formData,
-                email: formData.email.toLowerCase().trim(),
-                role: formData.role
-            });
-            await onDataUpdate();
-            onCancel();
-        } catch (err) {
-            console.error("Errore creazione utente admin/preposto:", err);
-            setError(err.message || "Si è verificato un errore.");
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    return (
-        <div className="mt-6 bg-gray-50 p-4 rounded-lg shadow-inner">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Aggiungi Personale Amministrativo</h3>
-            <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                <input name="name" value={formData.name} onChange={handleInputChange} placeholder="Nome" required className="w-full p-2 border rounded" />
-                <input name="surname" value={formData.surname} onChange={handleInputChange} placeholder="Cognome" required className="w-full p-2 border rounded" />
-                <input type="email" name="email" value={formData.email} onChange={handleInputChange} placeholder="Email" required className="w-full p-2 border rounded" />
-                <input type="password" name="password" value={formData.password} onChange={handleInputChange} placeholder="Password (min. 6)" required className="w-full p-2 border rounded" />
-                <input type="tel" name="phone" value={formData.phone} onChange={handleInputChange} placeholder="Telefono (opzionale)" className="w-full p-2 border rounded" />
-                <select name="role" value={formData.role} onChange={handleInputChange} required className="w-full p-2 border rounded">
-                    <option value="preposto">Preposto</option>
-                    <option value="admin">Admin</option>
-                </select>
-                {error && <p className="text-sm text-red-600 col-span-full">{error}</p>}
-                <div className="col-span-full flex justify-end gap-4">
-                    <button type="button" onClick={onCancel} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Annulla</button>
-                    <button type="submit" disabled={isLoading} className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:bg-gray-400">
-                        {isLoading ? 'Salvataggio...' : 'Salva'}
-                    </button>
-                </div>
-            </form>
-        </div>
-    );
-};
-
-const AdminManagementView = ({ admins, openModal, user, superAdminEmail, currentUserRole, onDataUpdate, showModal }) => { 
-    const [showForm, setShowForm] = useState(false);
-    return (
-        <div>
-            <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
-                <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Gestione Personale Amministrativo</h1>
-                {currentUserRole === 'admin' &&
-                    <button onClick={() => setShowForm(!showForm)} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">
-                        {showForm ? 'Annulla' : 'Aggiungi Personale'}
-                    </button>
-                }
-            </div>
-            <div className="bg-white shadow-md rounded-lg overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                        <tr>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ruolo</th>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aree Gestite</th>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Azioni</th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                        {admins.map(admin => {
-                            if (admin.email === superAdminEmail && user.email !== superAdminEmail) return null;
-                            return (
-                                <tr key={admin.id}>
-                                    <td className="px-4 py-2 whitespace-nowrap">
-                                        <div className="text-sm font-medium text-gray-900">{admin.name} {admin.surname}</div>
-                                        <div className="text-xs text-gray-500 break-all">{admin.email}</div>
-                                    </td>
-                                    <td className="px-4 py-2 whitespace-nowrap"><span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${admin.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-orange-100 text-orange-800'}`}>{admin.role}</span></td>
-                                    <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-500">{admin.managedAreaNames?.join(', ') || (admin.role === 'admin' ? 'Tutte' : 'Nessuna')}</td>
-                                    <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
-                                        <div className="flex items-center gap-3">
-                                            {currentUserRole === 'admin' && admin.role === 'preposto' && <button onClick={() => openModal('assignManagedAreas', admin)} className="text-xs text-indigo-600 hover:text-indigo-900">Assegna Aree Gestite</button>}
-                                            {currentUserRole === 'admin' && admin.email !== superAdminEmail && <button onClick={() => openModal('deleteAdmin', admin)} className="text-xs text-red-600 hover:text-red-900">Elimina</button>}
-                                        </div>
-                                    </td>
-                                </tr>
-                            );
-                        })}
-                    </tbody>
-                </table>
-            </div>
-            {/* CORREZIONE: Aggiunto !showModal come condizione per nascondere il form quando la modale è aperta */}
-            {showForm && !showModal && <AddAdminForm onCancel={() => setShowForm(false)} onDataUpdate={onDataUpdate} user={user} />}
-        </div>
-    );
-};
-
 const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, allEmployees, currentUserRole, userData, setDateRange, setReportAreaFilter, reportAreaFilter, reportEmployeeFilter, setReportEmployeeFilter, generateReport, isLoading, isActionLoading }) => {
     // --- MODIFICA #2: AGGIUNTA COLONNA PAUSA E RINOMINA NOTA NELL'ESPORTAZIONE EXCEL ---
     const handleExportExcel = () => {
@@ -394,7 +238,7 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
         <div>
             {/* Form Genera Report (duplicato dal main) */}
              <div className="bg-white shadow-md rounded-lg p-4 mb-6">
-                <h3 className="text-lg font-medium text-gray-900 mb-4 text-center sm:text-left">Genera Report Personalizzato</h3>
+                <h3 className="text-lg font-medium text-gray-900 mb-4 text-center sm:text-left">Genera Nuovo Report</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
                     <div className="lg:col-span-1"><label htmlFor="startDate" className="block text-sm font-medium text-gray-700 mb-1">Da:</label><input type="date" id="startDate" value={dateRange.start} onChange={e => setDateRange({ ...dateRange, start: e.target.value })} className="p-2 border border-gray-300 rounded-md w-full text-sm" /></div>
                     <div className="lg:col-span-1"><label htmlFor="endDate" className="block text-sm font-medium text-gray-700 mb-1">A:</label><input type="date" id="endDate" value={dateRange.end} onChange={e => setDateRange({ ...dateRange, end: e.target.value })} className="p-2 border border-gray-300 rounded-md w-full text-sm" /></div>
@@ -483,6 +327,29 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     // VARIABILE ESSENZIALE PER I CONTROLLI DI ADMIN/SUPERADMIN
     const superAdminEmail = "domenico.leoncino@tcsitalia.com"; 
 
+    // --- CORREZIONE: managedEmployees è definito prima di sortedAndFilteredEmployees ---
+    const managedEmployees = useMemo(() => {
+        if (currentUserRole === 'admin') {
+            return allEmployees;
+        }
+
+        if (currentUserRole === 'preposto') {
+            const managedAreaIds = userData?.managedAreaIds || []; 
+            if (managedAreaIds.length === 0) {
+                 return [];
+            }
+            
+            const filtered = allEmployees.filter(emp =>
+                emp.workAreaIds &&
+                emp.workAreaIds.some(areaId => managedAreaIds.includes(areaId))
+            );
+            return filtered;
+        }
+
+        return []; 
+    }, [allEmployees, currentUserRole, userData]);
+    // ----------------------------------------------------------------------------------
+
     // --- CARICAMENTO DATI (fetchData - CORREZIONE isMounted) ---
     const fetchData = useCallback(async () => {
         if (!user || !userData) { setIsLoading(false); return; }
@@ -550,29 +417,8 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     }, [user, userData, fetchData]); 
 
 
-    // --- CALCOLI MEMOIZED (AGGIORNATO PER DEBUG AREE MANCANTI) ---
-    const managedEmployees = useMemo(() => {
-        if (currentUserRole === 'admin') {
-            return allEmployees;
-        }
-
-        if (currentUserRole === 'preposto') {
-            const managedAreaIds = userData?.managedAreaIds || []; 
-            if (managedAreaIds.length === 0) {
-                 return [];
-            }
-            
-            const filtered = allEmployees.filter(emp =>
-                emp.workAreaIds &&
-                emp.workAreaIds.some(areaId => managedAreaIds.includes(areaId))
-            );
-            return filtered;
-        }
-
-        return []; 
-    }, [allEmployees, currentUserRole, userData]);
-
-
+    // --- CALCOLI MEMOIZED (sortedAndFilteredEmployees) ---
+    // NOTA: managedEmployees è definito sopra per risolvere l'ambito (scope)
     const sortedAndFilteredEmployees = useMemo(() => {
         const employeesWithDetails = managedEmployees.map(emp => ({
             ...emp,
@@ -580,7 +426,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             workAreaNames: (emp.workAreaIds || []).map(id => {
                 const area = allWorkAreas.find(a => a.id === id);
                 // Se non trova l'area nella lista allWorkAreas, mostra l'ID per il DEBUG
-                // Rimuovi questa logica una volta che hai identificato l'ID mancante
                 return area ? area.name : `ID Mancante: ${id.substring(0, 5)}...`; 
             }).filter(Boolean),
             // --------------------------------------------------------------------
@@ -1088,12 +933,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                         <div className="lg:col-span-1"><label htmlFor="endDate" className="block text-sm font-medium text-gray-700 mb-1">A:</label><input type="date" id="endDate" value={dateRange.end} onChange={e => setDateRange({ ...dateRange, end: e.target.value })} className="p-2 border border-gray-300 rounded-md w-full text-sm" /></div>
                         <div className="lg:col-span-1"><label htmlFor="areaFilter" className="block text-sm font-medium text-gray-700 mb-1">Area:</label><select id="areaFilter" value={reportAreaFilter} onChange={e => setReportAreaFilter(e.target.value)} className="p-2 border border-gray-300 rounded-md w-full text-sm bg-white"><option value="all">Tutte le Aree</option>{(currentUserRole === 'admin' ? allWorkAreas : allWorkAreas.filter(a => userData?.managedAreaIds?.includes(a.id))).sort((a,b) => a.name.localeCompare(b.name)).map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}</select></div>
                         <div className="lg:col-span-1"><label htmlFor="employeeFilter" className="block text-sm font-medium text-gray-700 mb-1">Dipendente:</label><select id="employeeFilter" value={reportEmployeeFilter} onChange={e => setReportEmployeeFilter(e.target.value)} className="p-2 border border-gray-300 rounded-md w-full text-sm bg-white"><option value="all">Tutti i Dipendenti</option>{(currentUserRole === 'admin' ? allEmployees : managedEmployees).sort((a,b) => `${a.name} ${a.surname}`.localeCompare(`${b.name} ${b.surname}`)).map(emp => (<option key={emp.id} value={emp.id}>{emp.name} {emp.surname}</option>))}</select></div>
-                        <div className="lg:col-span-1">
-                             <button onClick={() => {
-                                 generateReport();
-                                 setView('reports'); // Forza la visualizzazione del report dopo la generazione
-                             }} disabled={isLoading || isActionLoading} className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm w-full disabled:opacity-50">Genera Report</button>
-                        </div>
+                        <div className="lg:col-span-1"><button onClick={generateReport} disabled={isLoading || isActionLoading} className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm w-full disabled:opacity-50">Genera Report</button></div>
                     </div>
                 </div>
 
