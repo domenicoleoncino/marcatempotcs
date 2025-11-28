@@ -40,7 +40,7 @@ const NotificationPopup = ({ message, type, onClose }) => {
 // ===============================================
 
 // === FUNZIONE HELPER PER IL RENDER DEI CAMPI (copiata da AdminModal per riuso) ===
-const renderField = (formData, handleChange, label, name, type = 'text', options = [], required = true) => (
+export const renderField = (formData, handleChange, label, name, type = 'text', options = [], required = true) => (
     <div>
         <label htmlFor={name} className="block text-sm font-medium text-gray-700">{label}</label>
         {type === 'select' ? (
@@ -64,7 +64,7 @@ const renderField = (formData, handleChange, label, name, type = 'text', options
     </div>
 );
 
-const renderSingleCheckbox = (formData, handleChange, label, name, description = '') => (
+export const renderSingleCheckbox = (formData, handleChange, label, name, description = '') => (
     <div className="flex items-start pt-4">
         <div className="flex items-center h-5">
             <input
@@ -770,7 +770,7 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
             'Entrata': entry.clockInTimeFormatted, 
             'Uscita': entry.clockOutTimeFormatted,
             'Ore Lavorate (Netto)': (entry.duration !== null) ? parseFloat(entry.duration.toFixed(2)) : "In corso",
-            'Pausa Totale (Ore)': (entry.pauseHours !== null) ? parseFloat(entry.pauseHours.toFixed(2)) : 0, // ADDED PAUSE HOURS
+            'Pausa Totale (Ore)': (entry.pauseHours !== null) ? parseFloat(entry.pauseHours.toFixed(2)) : 0, 
             'Motivo/Nota': entry.note
         }));
         
@@ -827,6 +827,7 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
                                     <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.employeeName}{entry.createdBy && entry.employeeId && entry.createdBy !== entry.employeeId ? <span className="text-red-500 ml-1 font-bold">*</span> : ''}</td>
                                     <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.areaName}</td>
                                     <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.clockInDate}</td>
+                                    {/* FIX: USO VARIABILI CORRETTE PER VISUALIZZARE L'ORA */}
                                     <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.clockInTimeFormatted}</td> 
                                     <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.clockOutTimeFormatted}</td> 
                                     <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.duration !== null ? entry.duration.toFixed(2) : '...'}</td>
@@ -1451,8 +1452,8 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                     areaName: area.name,
                     // Assicurati che clockInDate sia un oggetto Date valido per la formattazione
                     clockInDate: clockIn.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-                    clockInFormatted, 
-                    clockOutFormatted, 
+                    clockInTimeFormatted: clockInFormatted, // FIX: Assign formatted time string to property
+                    clockOutTimeFormatted: clockOutFormatted, // FIX: Assign formatted time string to property
                     duration: durationHours,
                     pauseHours: pauseHours, 
                     note: entry.note || '',
@@ -1593,7 +1594,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                          <div className="flex flex-wrap justify-center py-2 sm:space-x-4">
                              <button onClick={() => setView('dashboard')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'dashboard' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Dashboard</button>
                              <button onClick={() => setView('employees')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'employees' || view === 'newEmployeeForm' || view === 'prepostoAddEmployeeForm' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Dipendenti</button>
-                             <button onClick={() => setView('areas')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'areas' || view === 'newAreaForm' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Aree</button>
+                             <button onClick={() => setView('areas')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'areas' || view === 'newAreaForm' || view === 'editAreaPauseOnly' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Aree</button>
                              {currentUserRole === 'admin' && <button onClick={() => setView('admins')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'admins' || view === 'newAdminForm' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Admin</button>}
                              {/* NUOVA TAB REPORT PER ADMIN E PREPOSTO */}
                              {(currentUserRole === 'admin' || currentUserRole === 'preposto') && <button onClick={() => setView('reports')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'reports' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Report Presenze</button>}
