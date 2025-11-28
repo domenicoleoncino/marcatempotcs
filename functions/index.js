@@ -330,9 +330,11 @@ exports.prepostoTogglePause = functions.region('europe-west1').https.onCall(asyn
         const employeeDoc = employeeQuery.docs[0];
         const employeeId = employeeDoc.id;
         
-        // CONTROLLO DEVICE ID
+        // CONTROLLO DEVICE ID - BYPASS PER AZIONI WEB (Admin/Preposto)
         const currentDeviceIds = employeeDoc.data().deviceIds || [];
-        if (!currentDeviceIds.includes(deviceId)) {
+        const isWebBypass = (deviceId === 'ADMIN_MANUAL_ACTION' || deviceId === 'PREPOSTO_MANUAL_ACTION');
+
+        if (!isWebBypass && !currentDeviceIds.includes(deviceId)) {
             throw new functions.https.HttpsError('permission-denied', 'Dispositivo non autorizzato per questa azione.');
         }
 
@@ -481,9 +483,11 @@ exports.applyAutoPauseEmployee = functions.region('europe-west1').https.onCall(a
         const employeeDoc = employeeQuery.docs[0];
         const employeeId = employeeDoc.id;
         
-        // CONTROLLO DEVICE ID
+        // CONTROLLO DEVICE ID - BYPASS PER AZIONI WEB (Admin/Preposto)
         const currentDeviceIds = employeeDoc.data().deviceIds || [];
-        if (!currentDeviceIds.includes(deviceId)) {
+        const isWebBypass = (deviceId === 'ADMIN_MANUAL_ACTION' || deviceId === 'PREPOSTO_MANUAL_ACTION') && (callerRole === 'admin' || callerRole === 'preposto');
+
+        if (!isWebBypass && !currentDeviceIds.includes(deviceId)) {
             throw new functions.https.HttpsError('permission-denied', 'Dispositivo non autorizzato per questa azione.');
         }
 
@@ -568,9 +572,11 @@ exports.endEmployeePause = functions.region('europe-west1').https.onCall(async (
         const employeeDoc = employeeQuery.docs[0];
         const employeeId = employeeDoc.id;
         
-        // CONTROLLO DEVICE ID
+        // CONTROLLO DEVICE ID - BYPASS PER AZIONI WEB (Admin/Preposto)
         const currentDeviceIds = employeeDoc.data().deviceIds || [];
-        if (!currentDeviceIds.includes(deviceId)) {
+        const isWebBypass = (deviceId === 'ADMIN_MANUAL_ACTION' || deviceId === 'PREPOSTO_MANUAL_ACTION') && (callerRole === 'admin' || callerRole === 'preposto');
+
+        if (!isWebBypass && !currentDeviceIds.includes(deviceId)) {
             throw new functions.https.HttpsError('permission-denied', 'Dispositivo non autorizzato per questa azione.');
         }
 

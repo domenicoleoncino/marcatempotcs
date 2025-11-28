@@ -456,6 +456,7 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours }
                             <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Area</th>
                             <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entrata</th>
                             <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stato</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pausa</th> {/* NUOVA COLONNA PAUSA */}
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
@@ -466,6 +467,16 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours }
                                 <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.clockInTimeFormatted}</td>
                                 <td className="px-4 py-2 whitespace-nowrap">
                                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${entry.status === 'In Pausa' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>{entry.status}</span>
+                                </td>
+                                {/* LOGICA VISUALIZZAZIONE STATO PAUSA */}
+                                <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
+                                     {entry.status === 'In Pausa' ? (
+                                         <span className="text-yellow-600 font-bold">In Corso</span>
+                                     ) : entry.hasCompletedPause ? (
+                                         <span className="text-green-600 font-bold">Eseguita</span>
+                                     ) : (
+                                         <span className="text-gray-400">-</span>
+                                     )}
                                 </td>
                             </tr>
                         ))}
@@ -759,7 +770,7 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
             'Entrata': entry.clockInTimeFormatted, 
             'Uscita': entry.clockOutTimeFormatted,
             'Ore Lavorate (Netto)': (entry.duration !== null) ? parseFloat(entry.duration.toFixed(2)) : "In corso",
-            'Pausa Totale (Ore)': (entry.pauseHours !== null) ? parseFloat(entry.pauseHours.toFixed(2)) : 0, 
+            'Pausa Totale (Ore)': (entry.pauseHours !== null) ? parseFloat(entry.pauseHours.toFixed(2)) : 0, // ADDED PAUSE HOURS
             'Motivo/Nota': entry.note
         }));
         
@@ -1270,9 +1281,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             showNotification(`Errore pausa: ${displayMessage || 'Errore Server.'}`, 'error'); 
             console.error(error); 
         }
-        finally {
-            setIsActionLoading(false);
-        }
+        finally { setIsActionLoading(false); }
     }, [adminActiveEntry, adminEmployeeProfile, allWorkAreas, showNotification]);
 
 
@@ -1584,7 +1593,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                          <div className="flex flex-wrap justify-center py-2 sm:space-x-4">
                              <button onClick={() => setView('dashboard')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'dashboard' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Dashboard</button>
                              <button onClick={() => setView('employees')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'employees' || view === 'newEmployeeForm' || view === 'prepostoAddEmployeeForm' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Dipendenti</button>
-                             <button onClick={() => setView('areas')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'areas' || view === 'newAreaForm' || view === 'editAreaPauseOnly' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Aree</button>
+                             <button onClick={() => setView('areas')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'areas' || view === 'newAreaForm' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Aree</button>
                              {currentUserRole === 'admin' && <button onClick={() => setView('admins')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'admins' || view === 'newAdminForm' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Admin</button>}
                              {/* NUOVA TAB REPORT PER ADMIN E PREPOSTO */}
                              {(currentUserRole === 'admin' || currentUserRole === 'preposto') && <button onClick={() => setView('reports')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'reports' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Report Presenze</button>}
