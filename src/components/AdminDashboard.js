@@ -477,7 +477,7 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours }
 );
 
 const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortConfig, requestSort, searchTerm, setSearchTerm, handleResetEmployeeDevice, adminEmployeeId, handleEmployeePauseClick }) => { 
-    getSortIndicator = (key) => {
+    const getSortIndicator = (key) => {
         if (!sortConfig || sortConfig.key !== key) return '';
         return sortConfig.direction === 'ascending' ? ' ▲' : ' ▼';
     };
@@ -660,7 +660,6 @@ const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
     </div>
 );
 
-// === NUOVO COMPONENTE PER LA GESTIONE ADMIN/PREPOSTI ===
 const AdminManagementView = ({ admins, openModal, user, superAdminEmail, currentUserRole, onDataUpdate }) => {
     
     // Mostra solo il contenuto se l'utente è ADMIN
@@ -1271,7 +1270,9 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             showNotification(`Errore pausa: ${displayMessage || 'Errore Server.'}`, 'error'); 
             console.error(error); 
         }
-        finally { setIsActionLoading(false); }
+        finally {
+            setIsActionLoading(false);
+        }
     }, [adminActiveEntry, adminEmployeeProfile, allWorkAreas, showNotification]);
 
 
