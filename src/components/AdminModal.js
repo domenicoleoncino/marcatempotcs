@@ -6,7 +6,12 @@ import { db } from '../firebase';
 import { doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
-const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, allEmployees, userData, onAdminClockIn, onAdminApplyPause }) => {
+// ==================================================================================================
+// NOTA BENE: Le funzioni helper renderField e renderSingleCheckbox sono definite in AdminDashboard.js
+// e sono replicate qui solo per evitare errori di linting in ambienti che compilano i file isolati.
+// ==================================================================================================
+
+const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, allEmployees, userData, onAdminClockIn, onAdminApplyPause, showNotification }) => { // FIX: showNotification aggiunto qui
 
     // Stati generici per i form
     const [formData, setFormData] = useState({});
@@ -35,16 +40,8 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
         if (type === 'bypassRestPeriod') { 
              setFormData({ reason: '' });
         }
-        else if (type === 'prepostoAddEmployeeToAreas') {
-             const managedAreas = workAreas.filter(wa => userData?.managedAreaIds?.includes(wa.id));
-             if (managedAreas.length === 0) {
-                 setError("Non gestisci nessuna area specifica. Contatta l'amministratore.");
-                 setIsLoading(true);
-             }
-             setFormData({
-                 selectedEmployee: '',
-                 selectedPrepostoAreas: []
-             });
+        else if (type === 'editAreaPauseOnly') { // CASO SPECIFICO PREPOSTO: SOLO PAUSA
+             setFormData({ pauseDuration: item.pauseDuration || 0 });
         }
         else if (item) {
             // *** Inizializzazione della Timbratura Manuale/Forzata ***
@@ -98,7 +95,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                 });
             } else if (type === 'assignArea') {
                 setFormData({ selectedAreas: item.workAreaIds || [] });
-            } else if (type === 'assignPrepostoAreas') { // <-- FIX: AGGIUNTO IL CASO PER ASSEGNARE AREE DI GESTIONE A UN ALTRO ADMIN/PREPOSTO
+            } else if (type === 'assignPrepostoAreas') { 
                 setFormData({
                     selectedAreas: item.managedAreaIds || [],
                     controlloGpsRichiesto: item.controlloGpsRichiesto ?? true
@@ -116,20 +113,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
 
 
         } else {
-            // Logica per modali di creazione (item non fornito)
-            if (type === 'newArea') {
-                setFormData({ name: '', pauseDuration: 0, latitude: '', longitude: '', radius: 100 });
-            } else if (type === 'newEmployee') {
-                setFormData({
-                    name: '', surname: '', email: '', password: '',
-                    controlloGpsRichiesto: true
-                });
-            } else if (type === 'newAdmin') {
-                setFormData({
-                    name: '', surname: '', email: '', password: '', phone: '', role: 'preposto',
-                    controlloGpsRichiesto: true
-                });
-            }
+            // I form di creazione newArea, newEmployee, newAdmin non sono più gestiti qui.
         }
     }, [item, type, workAreas, userData, user?.uid]);
 
@@ -138,7 +122,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
 
     const handleChange = (e) => {
         const { name, value, type, checked } = e.target;
-        // Gestione standard degli input (omessa per brevità)
+        // Gestione standard degli input
         if (type === 'checkbox') {
             if (name === 'selectedAreas' || name === 'selectedPrepostoAreas') {
                 const currentSelection = formData[name] || [];
@@ -157,54 +141,97 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
             setFormData(prev => ({ ...prev, [name]: value }));
         }
     };
+    
+    // =======================================================
+    // FUNZIONI HELPER LOCALI DI RENDER (solo per evitare no-undef)
+    // Queste funzioni sono stubs per consentire al linter di compilare AdminModal.js isolatamente.
+    // Il rendering effettivo nel Modale utilizza queste definizioni locali, ma passano i dati di formData.
+    // =======================================================
 
+    const renderFieldLocal = (label, name, inputType = 'text', options = [], required = true) => (
+        <div>
+            <label htmlFor={name} className="block text-sm font-medium text-gray-700">{label}</label>
+            {inputType === 'select' ? (
+                 <select
+                     id={name} name={name} value={formData[name] ?? ''} onChange={handleChange}
+                     required={required}
+                     className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                 >
+                     {(!required || options.length > 0) && <option value="">{options.length > 0 ? '-- Seleziona --' : '-- Nessuna Opzione --'}</option>}
+                     {options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                 </select>
+            ) : (
+                <input
+                    id={name} name={name} type={inputType} value={formData[name] ?? ''} onChange={handleChange}
+                    step={inputType === 'number' ? 'any' : undefined}
+                    required={required}
+                    placeholder={name === 'latitude' ? 'Es. 40.8518' : name === 'longitude' ? 'Es. 14.2681' : undefined}
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                />
+            )}
+        </div>
+    );
+
+    const renderSingleCheckboxLocal = (label, name, description = '') => (
+        <div className="flex items-start pt-4">
+            <div className="flex items-center h-5">
+                <input
+                    id={name}
+                    name={name}
+                    type="checkbox"
+                    checked={!!formData[name]}
+                    onChange={handleChange}
+                    className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                />
+            </div>
+            <div className="ml-3 text-sm">
+                <label htmlFor={name} className="font-medium text-gray-700">{label}</label>
+                {description && <p className="text-gray-500">{description}</p>}
+            </div>
+        </div>
+    );
+
+    // =======================================================
+    
+    
     // --- FUNZIONI DI GESTIONE SUBMIT ---
     const handleSubmit = async (e) => {
         e.preventDefault();
         setIsLoading(true);
         setError('');
 
-        // *** RIPRISTINATO: Uso la stringa manualTime così com'è dall'input datetime-local ***
         let manualTime = formData.manualTime;
         if (manualTime) {
              manualTime = manualTime.substring(0, 16); 
         }
-        // ****************************************************
 
-        // --- AGGIUNTA: Determina il Fuso Orario del Client ---
         const clientTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
         if (!clientTimezone) {
-             throw new Error("Impossibile determinare il Fuso Orario locale (timezone).");
+             setError("Impossibile determinare il Fuso Orario locale.");
+             setIsLoading(false);
+             return;
         }
-        // ----------------------------------------------------
+        
+        const successMessage = (type) => {
+            if (type.includes('delete')) return 'Elemento eliminato con successo.';
+            if (type.includes('assign')) return 'Assegnazione aggiornata con successo.';
+            if (type.includes('editAreaPauseOnly')) return 'Durata pausa aggiornata con successo.';
+            if (type.includes('edit')) return 'Dati aggiornati con successo.';
+            if (type.includes('Clock')) return `Timbratura ${type.includes('In') ? 'di entrata' : 'di uscita'} registrata.`;
+            return 'Operazione completata con successo.';
+        };
+
 
         try {
             switch (type) {
                 case 'bypassRestPeriod': 
-                    // ... (codice omesso)
+                    // Logica omessa
                     break;
                 case 'prepostoAddEmployeeToAreas':
-                    if (!formData.selectedEmployee) throw new Error("Devi selezionare un dipendente.");
-                    if (!formData.selectedPrepostoAreas || formData.selectedPrepostoAreas.length === 0) throw new Error("Devi selezionare almeno un'area da assegnare.");
-
-                    const employeeToAssignId = formData.selectedEmployee;
-                    const areaIdsToAssign = formData.selectedPrepostoAreas;
-
-                    const prepostoAssign = httpsCallable(functions, 'prepostoAssignEmployeeToArea');
-                    await prepostoAssign({ employeeId: employeeToAssignId, areaIds: areaIdsToAssign });
-
-                    // NON USARE ALERT NATIVI
-                    // alert('Aree assegnate con successo al dipendente selezionato.');
-                    await onDataUpdate(); // Aggiorna i dati
-                    setShowModal(false);
-                    return; // Uscita anticipata
-
-                case 'newEmployee':
-                    if (!formData.name || !formData.surname || !formData.email || !formData.password) throw new Error('Nome, Cognome, Email e Password sono obbligatori.');
-                    const createUser = httpsCallable(functions, 'createUser');
-                    await createUser({ ...formData, role: 'dipendente', createdBy: user.uid });
-                    // alert('Dipendente creato con successo!');
-                    break;
+                    // Questo caso non dovrebbe essere raggiunto
+                    console.warn("Tentativo di eseguire prepostoAddEmployeeToAreas dalla modale (obsoleto).");
+                    throw new Error("Si prega di usare il form in-line per questa azione.");
+                
                 case 'editEmployee':
                     if (!formData.name || !formData.surname) throw new Error('Nome e cognome sono obbligatori.');
                     await updateDoc(doc(db, "employees", item.id), {
@@ -212,71 +239,48 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                         surname: formData.surname,
                         controlloGpsRichiesto: formData.controlloGpsRichiesto
                     });
-                    // alert('Dipendente aggiornato!');
                     break;
                 case 'deleteEmployee':
-                    // if (!window.confirm(`Sei sicuro di voler eliminare ${item.name} ${item.surname}? L'operazione eliminerà anche l'account di accesso e NON è reversibile.`)) { setIsLoading(false); return; }
                     const deleteUser = httpsCallable(functions, 'deleteUserAndEmployee');
                     await deleteUser({ userId: item.userId });
-                    // alert('Dipendente e account di accesso eliminati.');
                     break;
                 case 'resetDevice':
-                    // if (!window.confirm(`Resettare l'associazione del dispositivo per ${item.name} ${item.surname}? Dovrà registrare nuovamente il dispositivo al prossimo login.`)) { setIsLoading(false); return; }
                     await updateDoc(doc(db, "employees", item.id), { deviceIds: [] });
-                    // alert('Associazione dispositivo resettata.');
-                    break;
-                case 'newArea':
-                    if (!formData.name || formData.latitude == null || formData.longitude == null || formData.radius == null) throw new Error('Tutti i campi (Nome, Latitudine, Longitudine, Raggio) sono obbligatori.');
-                    const lat = Number(formData.latitude); const lon = Number(formData.longitude); const rad = Number(formData.radius);
-                    if (isNaN(lat) || isNaN(lon) || isNaN(rad) || rad <= 0) { throw new Error('Latitudine, Longitudine devono essere numeri validi e Raggio deve essere > 0.'); }
-                    const createArea = httpsCallable(functions, 'createWorkArea');
-                    await createArea({ name: formData.name, pauseDuration: Number(formData.pauseDuration || 0), latitude: lat, longitude: lon, radius: rad });
-                    // alert('Area creata con successo!');
                     break;
                 case 'editArea':
                      if (!formData.name || formData.latitude == null || formData.longitude == null || formData.radius == null) throw new Error('Tutti i campi (Nome, Latitudine, Longitudine, Raggio) sono obbligatori.');
                      const editLat = Number(formData.latitude); const editLon = Number(formData.longitude); const editRad = Number(formData.radius);
                      if (isNaN(editLat) || isNaN(editLon) || isNaN(editRad) || editRad <= 0) { throw new Error('Latitudine, Longitudine devono essere numeri validi e Raggio deve essere > 0.'); }
                     await updateDoc(doc(db, "work_areas", item.id), { name: formData.name, pauseDuration: Number(formData.pauseDuration || 0), latitude: editLat, longitude: editLon, radius: editRad });
-                    // alert('Area aggiornata!');
                     break;
+                case 'editAreaPauseOnly': // CASO AGGIUNTO: SOLO PAUSE DURATION
+                     const pauseDuration = Number(formData.pauseDuration || 0);
+                     if (isNaN(pauseDuration) || pauseDuration < 0) { throw new Error('Durata pausa deve essere un numero positivo o zero.'); }
+                     await updateDoc(doc(db, "work_areas", item.id), { pauseDuration: pauseDuration });
+                     break; // Success message handled at the end
                 case 'deleteArea':
-                    // if (!window.confirm(`Sei sicuro di voler eliminare l'area "${item.name}"? L'operazione NON è reversibile.`)) { setIsLoading(false); return; }
                     await deleteDoc(doc(db, "work_areas", item.id));
-                    // alert('Area eliminata.');
                     break;
                 case 'assignArea':
                     await updateDoc(doc(db, "employees", item.id), { workAreaIds: formData.selectedAreas || [] });
-                    // alert('Aree assegnate con successo al dipendente.');
                     break;
-                case 'assignPrepostoAreas': // <-- FIX: Assegna Aree di GESTIONE a un Admin/Preposto (l'utente item)
+                case 'assignPrepostoAreas': // Assegna Aree di GESTIONE a Admin/Preposto
                     await updateDoc(doc(db, "users", item.id), {
                         managedAreaIds: formData.selectedAreas || [],
                         controlloGpsRichiesto: formData.controlloGpsRichiesto
                     });
-                    // alert('Aree di gestione e impostazioni aggiornate per il preposto.');
                     break;
                 case 'assignEmployeeToPrepostoArea':
                     const selectedIds = formData.selectedPrepostoAreas || [];
                     const prepostoAssignSingle = httpsCallable(functions, 'prepostoAssignEmployeeToArea');
                     await prepostoAssignSingle({ employeeId: item.id, areaIds: selectedIds });
-                    // alert('Aree di competenza aggiornate per il dipendente.');
                     break;
-                case 'newAdmin':
-                    if (!formData.name || !formData.surname || !formData.email || !formData.password || !formData.role) throw new Error('Tutti i campi sono obbligatori.');
-                    if (formData.password.length < 6) throw new Error('La password deve essere di almeno 6 caratteri.');
-                     const createAdminFn = httpsCallable(functions, 'createUser');
-                    await createAdminFn({ ...formData, createdBy: user.uid });
-                    // alert(`Utente ${formData.role} creato con successo!`);
-                     break;
                 case 'deleteAdmin':
-                     // if (!window.confirm(`Sei sicuro di voler eliminare l'utente ${item.name} ${item.surname} (${item.role})? L'operazione NON è reversibile.`)) { setIsLoading(false); return; }
                      const deleteAdminFn = httpsCallable(functions, 'deleteUserAndEmployee');
                      await deleteAdminFn({ userId: item.id });
-                     // alert('Utente eliminato.');
                      break;
 
-                // --- TIMBRATURE MANUALI (Corrette per l'ora locale) ---
+                // --- TIMBRATURE MANUALI ---
                 case 'manualClockIn':
                 case 'adminClockIn': 
                 case 'manualClockOut':
@@ -288,20 +292,16 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                     if (!formData.selectedAreaId && isClockIn) throw new Error('Seleziona un\'area.');
                     if (!manualTime) throw new Error('Seleziona un orario.');
                     
-                    // Controlli di obbligatorietà nota
                     const isNoteRequired = type === 'adminClockIn' || type === 'adminClockOut'; 
                     if (isNoteRequired && !formData.note) {
                         throw new Error('Il Motivo della timbratura manuale è obbligatorio per le timbrature forzate.');
                     }
-                    // --------------------------------------------------------------------------
 
                     if (!user.uid) throw new Error("Utente non autenticato.");
 
-                    // La funzione lato server è sempre manualClockIn o manualClockOut
                     const functionName = isClockIn ? 'manualClockIn' : 'manualClockOut';
                     const clockFunction = httpsCallable(functions, functionName);
                     
-                    // --- PAYLOAD AGGIORNATO E COMPLETO ---
                     const payload = {
                         employeeId: formData.selectedEmployeeId, 
                         workAreaId: isClockIn ? formData.selectedAreaId : undefined,
@@ -313,8 +313,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                     };
                     
                     await clockFunction(payload);
-
-                    // alert(`Timbratura ${isClockIn ? 'di entrata' : 'di uscita'} registrata.`);
                     break;
                 
                 // --- PAUSE ---
@@ -328,14 +326,14 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                     throw new Error("Azione modale non riconosciuta.");
             }
 
-            // Esegui l'aggiornamento dei dati e chiudi la modale (tranne per i casi con return anticipato)
+            showNotification(successMessage(type), 'success');
             await onDataUpdate();
             setShowModal(false);
 
         } catch (err) {
             console.error(`Errore durante l'operazione '${type}':`, err);
             const errorMessage = err.message || "Si è verificato un errore sconosciuto (Server Internal Error).";
-            setError(errorMessage.includes(":") ? errorMessage.split(":")[1].trim() : errorMessage);
+            setError(errorMessage.includes(":") ? errorMessage.message.split(":")[1].trim() : errorMessage);
         } finally {
             setIsLoading(false);
         }
@@ -343,59 +341,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
 
     // --- RENDER DEI CONTENUTI SPECIFICI DELLA MODALE ---
     const renderContent = () => {
-        // CORREZIONE LOGICA: isClockIn controlla solo azioni esplicite di entrata
-        const isClockIn = type === 'manualClockIn' || type === 'adminClockIn'; 
-        const isClockOut = type === 'manualClockOut' || type === 'adminClockOut'; 
-        const isManualClock = isClockIn || isClockOut;
-        
-        // Titolo dinamico
-        const employeeName = item?.name ? `${item.name} ${item.surname}` : 'N/A';
-        const baseTitle = isManualClock ? `${isClockIn ? 'Entrata' : 'Uscita'} Manuale per ${employeeName}` : 'Conferma Azione';
-        
-        const title = {
-            manualClockIn: baseTitle,
-            manualClockOut: baseTitle,
-            adminClockIn: baseTitle,
-            adminClockOut: baseTitle, 
-            newEmployee: 'Crea Nuovo Dipendente',
-            editEmployee: `Modifica Dipendente: ${employeeName}`,
-            deleteEmployee: `Elimina Dipendente: ${employeeName}`,
-            newArea: 'Crea Nuova Area',
-            editArea: `Modifica Area: ${item?.name || 'N/A'}`,
-            deleteArea: `Elimina Area: ${item?.name || 'N/A'}`,
-            assignArea: `Assegna Aree a Dipendente: ${employeeName}`,
-            prepostoAddEmployeeToAreas: `Assegna Aree di Tua Competenza`,
-            assignEmployeeToPrepostoArea: `Gestisci Aree di ${employeeName}`,
-            newAdmin: 'Crea Nuovo Admin/Preposto',
-            deleteAdmin: `Elimina Utente: ${item?.name || 'N/A'}`,
-            assignPrepostoAreas: `Assegna Aree di Gestione a ${item?.name || 'N/A'}`, // <-- FIX: Titolo per l'assegnazione di aree di gestione
-        }[type] || 'Conferma Azione';
-
-
-        const renderField = (label, name, type = 'text', options = [], required = true) => (
-            <div>
-                <label htmlFor={name} className="block text-sm font-medium text-gray-700">{label}</label>
-                {type === 'select' ? (
-                     <select
-                         id={name} name={name} value={formData[name] ?? ''} onChange={handleChange}
-                         required={required}
-                         className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                     >
-                         {(!required || options.length > 0) && <option value="">{options.length > 0 ? '-- Seleziona --' : '-- Nessuna Opzione --'}</option>}
-                         {options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                     </select>
-                ) : (
-                    <input
-                        id={name} name={name} type={type} value={formData[name] ?? ''} onChange={handleChange}
-                        step={type === 'number' ? 'any' : undefined}
-                        required={required}
-                        placeholder={name === 'latitude' ? 'Es. 40.8518' : name === 'longitude' ? 'Es. 14.2681' : undefined}
-                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                    />
-                )}
-            </div>
-        );
-
+        // Funzione locale per renderizzare le checkbox (copiata per evitare duplicazioni inutili)
         const renderCheckboxes = (label, name, items, disabled = false) => (
              <div>
                  <label className="block text-sm font-medium text-gray-700">{label}</label>
@@ -420,49 +366,74 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                  )}
              </div>
           );
+          
+        
+        // CORREZIONE LOGICA: isClockIn controlla solo azioni esplicite di entrata
+        const isClockIn = type === 'manualClockIn' || type === 'adminClockIn'; 
+        
+        // Titolo dinamico
+        const employeeName = item?.name ? `${item.name} ${item.surname}` : 'N/A';
+        const baseTitle = isClockIn ? 'Entrata Manuale' : 'Uscita Manuale';
+        
+        const title = {
+            manualClockIn: baseTitle,
+            manualClockOut: baseTitle,
+            adminClockIn: baseTitle,
+            adminClockOut: baseTitle, 
+            editEmployee: `Modifica Dipendente: ${employeeName}`,
+            deleteEmployee: `Elimina Dipendente: ${employeeName}`,
+            newArea: 'Crea Nuova Area',
+            editArea: `Modifica Area: ${item?.name || 'N/A'}`,
+            deleteArea: `Elimina Area: ${item?.name || 'N/A'}`,
+            assignArea: `Assegna Aree a Dipendente: ${employeeName}`,
+            prepostoAddEmployeeToAreas: `Assegna Aree di Tua Competenza`,
+            assignEmployeeToPrepostoArea: `Gestisci Aree di ${employeeName}`,
+            newAdmin: 'Crea Nuovo Admin/Preposto',
+            deleteAdmin: `Elimina Utente: ${item?.name || 'N/A'}`,
+            assignPrepostoAreas: `Assegna Aree di Gestione a ${item?.name || 'N/A'}`, 
+            editAreaPauseOnly: `Modifica Pausa Area: ${item?.name || 'N/A'}`, // NUOVO TITOLO
+        }[type] || 'Conferma Azione';
 
-        const renderSingleCheckbox = (label, name, description = '') => (
-             <div className="flex items-start pt-4">
-                <div className="flex items-center h-5">
-                    <input
-                        id={name}
-                        name={name}
-                        type="checkbox"
-                        checked={!!formData[name]}
-                        onChange={handleChange}
-                        className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                    />
-                </div>
-                <div className="ml-3 text-sm">
-                    <label htmlFor={name} className="font-medium text-gray-700">{label}</label>
-                    {description && <p className="text-gray-500">{description}</p>}
-                </div>
-            </div>
-        );
 
         let body;
         switch (type) {
-            case 'bypassRestPeriod': // RIMOZIONE: questa modale non viene più utilizzata
-                 body = (
-                     <div className="space-y-4">
-                         <p className="text-sm text-yellow-700 bg-yellow-100 p-2 rounded">
-                             Attenzione: Lo sblocco bypassa la regola delle 8 ore di riposo per l'Entrata e rimarrà attivo per **4 ore**.
-                         </p>
-                         <textarea
-                             id="reason"
-                             name="reason"
-                             value={formData.reason ?? ''}
-                             onChange={handleChange}
-                             placeholder="Motivo dello sblocco eccezionale (Obbligatorio)"
-                             required
-                             rows="3"
-                             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                         />
-                     </div>
-                 );
-                 break;
+            case 'editEmployee':
+                body = (
+                    <div className="space-y-4">
+                        {renderFieldLocal('Nome', 'name')}
+                        {renderFieldLocal('Cognome', 'surname')}
+                        {renderSingleCheckboxLocal('Richiedi controllo GPS', 'controlloGpsRichiesto', 'Se deselezionato, l\'utente potrà timbrare ovunque.')}
+                    </div>
+                );
+                break;
+            case 'editArea':
+                body = <div className="space-y-4">{renderFieldLocal('Nome Area', 'name')}{renderFieldLocal('Durata Pausa Predefinita (minuti)', 'pauseDuration', 'number', [], false)}{renderFieldLocal('Latitudine', 'latitude', 'number')}{renderFieldLocal('Longitudine', 'longitude', 'number')}{renderFieldLocal('Raggio di Tolleranza (metri)', 'radius', 'number')}</div>;
+                break;
+            case 'editAreaPauseOnly': // NUOVO CASO: SOLO PAUSA
+                body = (
+                    <div className="space-y-4">
+                         <p className="text-sm text-gray-500">Stai modificando solo la durata della pausa per l'area: <b>{item.name}</b></p>
+                         {renderFieldLocal('Durata Pausa Predefinita (minuti)', 'pauseDuration', 'number', [], true)}
+                    </div>
+                );
+                break;
 
+            case 'assignArea':
+                body = renderCheckboxes('Seleziona le aree per questo dipendente', 'selectedAreas', workAreas);
+                break;
+            
+            case 'assignPrepostoAreas': // Assegna Aree di GESTIONE a Admin/Preposto
+                body = (
+                    <div className="space-y-4">
+                        <p className="text-sm font-semibold text-gray-700">Assegna le aree che {item.name} gestirà. Se non è un preposto, questo campo non ha effetto sul suo profilo.</p>
+                        {renderCheckboxes('Seleziona le aree di gestione', 'selectedAreas', workAreas)}
+                        {renderSingleCheckboxLocal('Richiedi controllo GPS', 'controlloGpsRichiesto', 'Se deselezionato, questo utente (Admin/Preposto) potrà timbrare ovunque.')}
+                    </div>
+                );
+                break;
+            
             case 'prepostoAddEmployeeToAreas':
+                // Questo caso non dovrebbe mai essere raggiunto dall'Action Header, ma è mantenuto per compatibilità
                 const managedAreas = workAreas.filter(wa => userData?.managedAreaIds?.includes(wa.id));
                 const employeeOptions = allEmployees
                     .sort((a,b) => `${a.name} ${a.surname}`.localeCompare(`${b.name} ${b.surname}`))
@@ -470,73 +441,15 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
 
                 body = (
                     <div className="space-y-4">
-                        {renderField('Seleziona Dipendente da Aggiungere', 'selectedEmployee', 'select', employeeOptions, true)}
+                        {renderFieldLocal('Seleziona Dipendente da Aggiungere', 'selectedEmployee', 'select', employeeOptions, true)}
                         {renderCheckboxes('Seleziona le aree di tua competenza a cui assegnarlo', 'selectedPrepostoAreas', managedAreas, managedAreas.length === 0)}
                     </div>
                 );
                 break;
-
-            case 'newEmployee':
-                body = (
-                    <div className="space-y-4">
-                        {renderField('Nome', 'name')}
-                        {renderField('Cognome', 'surname')}
-                        {renderField('Email', 'email', 'email')}
-                        {renderField('Password (min. 6 caratteri)', 'password', 'password')}
-                        {renderSingleCheckbox('Richiedi controllo GPS', 'controlloGpsRichiesto', 'Se deselezionato, l\'utente potrà timbrare ovunque.')}
-                    </div>
-                );
-                break;
-            case 'editEmployee':
-                body = (
-                    <div className="space-y-4">
-                        {renderField('Nome', 'name')}
-                        {renderField('Cognome', 'surname')}
-                        {renderSingleCheckbox('Richiedi controllo GPS', 'controlloGpsRichiesto', 'Se deselezionato, l\'utente potrà timbrare ovunque.')}
-                    </div>
-                );
-                break;
-            case 'newArea':
-            case 'editArea':
-                body = <div className="space-y-4">{renderField('Nome Area', 'name')}{renderField('Durata Pausa Predefinita (minuti)', 'pauseDuration', 'number', [], false)}{renderField('Latitudine', 'latitude', 'number')}{renderField('Longitudine', 'longitude', 'number')}{renderField('Raggio di Tolleranza (metri)', 'radius', 'number')}</div>;
-                break;
-            case 'assignArea':
-                body = renderCheckboxes('Seleziona le aree per questo dipendente', 'selectedAreas', workAreas);
-                break;
-            
-            case 'assignPrepostoAreas': // <-- FIX: Render per assegnare AREE DI GESTIONE
-                body = (
-                    <div className="space-y-4">
-                        <p className="text-sm font-semibold text-gray-700">Assegna le aree che {item.name} gestirà. Se non è un preposto, questo campo non ha effetto sul suo profilo.</p>
-                        {renderCheckboxes('Seleziona le aree di gestione', 'selectedAreas', workAreas)}
-                        {renderSingleCheckbox('Richiedi controllo GPS', 'controlloGpsRichiesto', 'Se deselezionato, questo utente (Admin/Preposto) potrà timbrare ovunque.')}
-                    </div>
-                );
-                break;
-            
             case 'assignEmployeeToPrepostoArea':
                 const prepostoManagedAreas = workAreas.filter(wa => userData?.managedAreaIds?.includes(wa.id));
                 body = renderCheckboxes('Seleziona le aree di tua competenza per questo dipendente', 'selectedPrepostoAreas', prepostoManagedAreas, prepostoManagedAreas.length === 0);
                 break;
-
-            case 'newAdmin':
-                body = (
-                    <div className="space-y-4">
-                        {renderField('Nome', 'name')}
-                        {renderField('Cognome', 'surname')}
-                        {renderField('Email', 'email', 'email')}
-                        {renderField('Password (min. 6 caratteri)', 'password', 'password')}
-                        {renderField('Telefono (Opzionale)', 'phone', 'tel', [], false)}
-                        {renderField('Ruolo', 'role', 'select', [{value: 'preposto', label: 'Preposto (Caposquadra)'}, {value: 'admin', label: 'Admin (Amministratore)'}])}
-                        {renderSingleCheckbox('Richiedi controllo GPS', 'controlloGpsRichiesto', 'Se deselezionato, questo preposto/admin potrà timbrare ovunque.')}
-                    </div>
-                );
-                break;
-
-            case 'deleteAdmin':
-                 if (!window.confirm(`Sei sicuro di voler eliminare l'utente ${item.name} ${item.surname} (${item.role})? L'operazione NON è reversibile.`)) { setIsLoading(false); return; }
-                 body = <p>Sei sicuro di voler eliminare l'utente {item.name} {item.surname} ({item.role})? L'operazione NON è reversibile.</p>;
-                 break;
 
             // --- Timbratura Manuale: Corrette per ora e area ---
             case 'manualClockIn':
@@ -559,11 +472,11 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                         <p className="font-semibold text-gray-800">Dipendente: {item?.name} {item?.surname}</p>
                         
                         {/* CAMPO ORA/DATA */}
-                        {renderField(isClockInOnly ? 'Orario di Entrata' : 'Orario di Uscita', 'manualTime', 'datetime-local')}
+                        {renderFieldLocal(isClockInOnly ? 'Orario di Entrata' : 'Orario di Uscita', 'manualTime', 'datetime-local')}
 
                         {/* CAMPO AREA - Richiesto solo per Entrata */}
                         {isClockInOnly && (
-                            areasList.length > 0 ? renderField('Seleziona Area di Lavoro', 'selectedAreaId', 'select', areasList.map(a => ({value: a.id, label: a.name}))) 
+                            areasList.length > 0 ? renderFieldLocal('Seleziona Area di Lavoro', 'selectedAreaId', 'select', areasList.map(a => ({value: a.id, label: a.name}))) 
                             : <p className="text-sm text-red-500">Nessuna area disponibile.</p>
                         )}
 
@@ -591,18 +504,26 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
             case 'deleteArea':
             case 'resetDevice':
             case 'applyPredefinedPause':
-            case 'deleteAdmin': // <-- aggiunto per coerenza
+            case 'deleteAdmin': 
                 body = <p>Sei sicuro di voler procedere? L'azione potrebbe non essere reversibile.</p>;
+                break;
+            
+            case 'newEmployee': // Questi casi non dovrebbero mai essere raggiunti
+            case 'newArea':
+            case 'newAdmin':
+            case 'bypassRestPeriod':
+                console.error("Tipo di modale di creazione obsoleto raggiunto:", type);
+                body = <p>Tipo di operazione di creazione non più supportato dalla modale. Usa i form in-line.</p>;
                 break;
 
             // Caso di errore/default
             default:
                 console.warn("Configurazione modale non valida ricevuta:", type);
-                body = <p>Configurazione modale non valida.</p>;
+                body = <p>Configurazione modale non valida. Azione: {type}</p>; // Mostra l'azione per debug
                 break;
         }
 
-        const submitText = type === 'bypassRestPeriod' ? 'Sblocca' : (type.startsWith('delete') ? 'Elimina' : 'Conferma');
+        const submitText = type.startsWith('delete') ? 'Elimina' : 'Conferma';
         
         return (
             <form onSubmit={handleSubmit}>

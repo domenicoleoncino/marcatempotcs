@@ -83,7 +83,6 @@ const renderSingleCheckbox = (formData, handleChange, label, name, description =
     </div>
 );
 
-
 // === FUNZIONI PER I FORM IN-LINE (Sostituiscono le Modali di creazione) ===
 
 const NewEmployeeForm = ({ onDataUpdate, user, setView, showNotification }) => {
@@ -270,7 +269,7 @@ const NewAdminForm = ({ onDataUpdate, user, setView, showNotification }) => {
             setView('admins'); // Torna alla gestione admin
         } catch (err) {
             const errorMessage = err.message || "Si è verificato un errore sconosciuto.";
-            setError(errorMessage.includes(":") ? errorMessage.split(":")[1].trim() : errorMessage);
+            setError(errorMessage.includes(":") ? errorMessage.message.split(":")[1].trim() : errorMessage);
             console.error("Errore creazione Admin/Preposto:", err);
         } finally {
             setIsLoading(false);
@@ -311,6 +310,125 @@ const NewAdminForm = ({ onDataUpdate, user, setView, showNotification }) => {
     );
 };
 
+
+// === NUOVO FORM IN-LINE PER PREPOSTO: ASSEGNA AREE DIPENDENTI ===
+const PrepostoAddEmployeeForm = ({ onDataUpdate, user, setView, showNotification, workAreas, allEmployees, userData }) => {
+    const [formData, setFormData] = useState({ selectedEmployee: '', selectedPrepostoAreas: [] });
+    const [error, setError] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const functions = getFunctions(undefined, 'europe-west1');
+
+    const managedAreas = useMemo(() => 
+        workAreas.filter(wa => userData?.managedAreaIds?.includes(wa.id)), 
+    [workAreas, userData]);
+
+    const employeeOptions = useMemo(() => 
+        allEmployees
+            .sort((a,b) => `${a.name} ${a.surname}`.localeCompare(`${b.name} ${b.surname}`))
+            .map(emp => ({ value: emp.id, label: `${emp.name} ${emp.surname} (${emp.email})` })),
+    [allEmployees]);
+
+
+    const handleChange = (e) => {
+        const { name, value, type, checked } = e.target;
+        if (type === 'checkbox') {
+            if (name === 'selectedPrepostoAreas') {
+                const currentSelection = formData[name] || [];
+                if (checked) {
+                    setFormData(prev => ({ ...prev, [name]: [...currentSelection, value] }));
+                } else {
+                    setFormData(prev => ({ ...prev, [name]: currentSelection.filter(id => id !== value) }));
+                }
+            }
+        } else {
+            setFormData(prev => ({ ...prev, [name]: value }));
+        }
+    };
+
+    // Funzione helper per le checkbox
+    const renderCheckboxes = (label, name, items, disabled = false) => (
+         <div>
+             <label className="block text-sm font-medium text-gray-700">{label}</label>
+             {items && items.length > 0 ? (
+                  <div className="mt-2 max-h-60 overflow-y-auto border border-gray-200 rounded-md p-2 space-y-2 bg-gray-50">
+                      {items
+                          .sort((a, b) => a.name.localeCompare(b.name))
+                          .map(it => (
+                              <div key={it.id} className="flex items-center">
+                                  <input
+                                      id={`${name}-${it.id}`} name={name} type="checkbox" value={it.id}
+                                      checked={(formData[name] || []).includes(it.id)}
+                                      onChange={handleChange} disabled={disabled}
+                                      className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 disabled:opacity-50"
+                                  />
+                                  <label htmlFor={`${name}-${it.id}`} className={`ml-3 block text-sm ${disabled ? 'text-gray-400' : 'text-gray-800'}`}>{it.name}</label>
+                              </div>
+                          ))}
+                      </div>
+                 ) : (
+                      <p className="text-sm text-red-500 mt-2">{disabled ? 'Nessuna area disponibile.' : 'Nessuna area definita.'}</p>
+                 )}
+         </div>
+      );
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setIsLoading(true);
+        setError('');
+
+        if (!formData.selectedEmployee) {
+            setError("Devi selezionare un dipendente.");
+            setIsLoading(false);
+            return;
+        }
+        if (!formData.selectedPrepostoAreas || formData.selectedPrepostoAreas.length === 0) {
+            setError("Devi selezionare almeno un'area da assegnare.");
+            setIsLoading(false);
+            return;
+        }
+        
+        try {
+            const employeeToAssignId = formData.selectedEmployee;
+            const areaIdsToAssign = formData.selectedPrepostoAreas;
+
+            const prepostoAssign = httpsCallable(functions, 'prepostoAssignEmployeeToArea');
+            await prepostoAssign({ employeeId: employeeToAssignId, areaIds: areaIdsToAssign });
+
+            showNotification('Aree assegnate con successo al dipendente selezionato.', 'success');
+            await onDataUpdate();
+            setView('employees'); 
+        } catch (err) {
+            const errorMessage = err.message || "Si è verificato un errore sconosciuto.";
+            setError(errorMessage.includes(":") ? errorMessage.message.split(":")[1].trim() : errorMessage);
+            console.error("Errore assegnazione aree:", err);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    return (
+        <div className="bg-white shadow-md rounded-lg p-4 mb-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Assegna Aree di Tua Competenza</h3>
+            <form onSubmit={handleSubmit} className="space-y-4">
+                {error && <p className="text-sm text-red-600 mb-4 bg-red-100 p-3 rounded border border-red-200">{error}</p>}
+                
+                {renderField(formData, handleChange, 'Seleziona Dipendente da Aggiungere', 'selectedEmployee', 'select', employeeOptions, true)}
+                {renderCheckboxes('Seleziona le aree di tua competenza a cui assegnarlo', 'selectedPrepostoAreas', managedAreas, managedAreas.length === 0)}
+                
+                <div className="flex justify-end space-x-3 pt-4">
+                    <button type="button" onClick={() => setView('employees')} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 text-sm font-medium">Annulla</button>
+                    <button
+                        type="submit"
+                        disabled={isLoading}
+                        className="px-4 py-2 bg-teal-600 text-white rounded-md hover:bg-teal-700 disabled:bg-teal-300 disabled:cursor-not-allowed text-sm font-medium"
+                    >
+                        {isLoading ? 'Assegnazione...' : 'Assegna Aree'}
+                    </button>
+                </div>
+            </form>
+        </div>
+    );
+};
 
 // =======================================================
 
@@ -457,7 +575,7 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                                 {/* Pulsanti specifici per Preposto/Admin - RESET DEVICE */}
                                                 <div className="flex gap-2">
                                                     {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (
-                                                        <button onClick={() => handleResetEmployeeDevice(emp)} disabled={emp.deviceIds?.length === 0} className="text-xs px-2 py-1 bg-yellow-500 text-gray-800 rounded-md hover:bg-yellow-600 whitespace-nowrap disabled:bg-gray-400 disabled:cursor-not-allowed">
+                                                        <button onClick={() => openModal('resetDevice', emp)} disabled={emp.deviceIds?.length === 0} className="text-xs px-2 py-1 bg-yellow-500 text-gray-800 rounded-md hover:bg-yellow-600 whitespace-nowrap disabled:bg-gray-400 disabled:cursor-not-allowed">
                                                             Reset Device
                                                         </button>
                                                     )}
@@ -524,7 +642,13 @@ const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
                             )}
                             <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
                                 <div className="flex items-center gap-4">
-                                    {(currentUserRole === 'admin' || currentUserRole === 'preposto') && <button onClick={() => openModal('editArea', area)} className="text-green-600 hover:text-green-900">Modifica</button>}
+                                    {/* MODIFICA LOGICA MODALE: Admin vs Preposto */}
+                                    {currentUserRole === 'admin' ? (
+                                        <button onClick={() => openModal('editArea', area)} className="text-green-600 hover:text-green-900">Modifica</button>
+                                    ) : currentUserRole === 'preposto' ? (
+                                        <button onClick={() => openModal('editAreaPauseOnly', area)} className="text-green-600 hover:text-green-900">Modifica Pausa</button>
+                                    ) : null}
+                                    
                                     {currentUserRole === 'admin' && <button onClick={() => openModal('deleteArea', area)} className="text-red-600 hover:text-red-900">Elimina</button>}
                                 </div>
                             </td>
@@ -716,51 +840,69 @@ const ActionHeader = ({ view, currentUserRole, setView, openModal, isSuperAdmin 
 
     let button = null;
     let text = null;
+    
+    // Controlla se la vista corrente è una vista di form in-line
+    const isCurrentViewForm = ['newEmployeeForm', 'newAreaForm', 'newAdminForm', 'prepostoAddEmployeeForm'].includes(view);
+    
+    // Determina la vista di destinazione corretta
+    let targetView = view;
+    if (view === 'newEmployeeForm' || view === 'prepostoAddEmployeeForm') targetView = 'employees';
+    else if (view === 'newAreaForm') targetView = 'areas';
+    else if (view === 'newAdminForm') targetView = 'admins';
 
-    if (view === 'employees') {
-        // --- RESTRIZIONE CHIAVE: SOLO ADMIN PUÒ CREARE DIPENDENTI ---
-        if (currentUserRole === 'admin') {
-            text = 'Crea Nuovo Dipendente';
-            button = (
-                <button onClick={() => setView('newEmployeeForm')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">
-                    {text}
-                </button>
-            );
-        }
-        // --- FINE RESTRIZIONE ---
-        
-    } else if (view === 'areas') {
-        if (currentUserRole === 'admin') {
-            text = 'Aggiungi Area';
-            button = (
-                <button onClick={() => setView('newAreaForm')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">
-                    {text}
-                </button>
-            );
-        }
-    } else if (view === 'admins') { 
-        if (currentUserRole === 'admin' && isSuperAdmin) {
-            text = 'Crea Nuovo Admin/Preposto';
-            button = (
-                <button onClick={() => setView('newAdminForm')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto text-sm">
-                    {text}
-                </button>
-            );
-        }
-    }
+    // Logica per Admin: Creazione Dipendenti (pulsante visibile solo in vista employees/form)
+    if (targetView === 'employees' && currentUserRole === 'admin') {
+        text = 'Crea Nuovo Dipendente';
+        button = (
+            <button onClick={() => setView('newEmployeeForm')} 
+                className={`px-4 py-2 ${view === 'newEmployeeForm' ? 'bg-indigo-300' : 'bg-indigo-600 hover:bg-indigo-700'} text-white rounded-lg w-full sm:w-auto text-sm`}
+                disabled={isCurrentViewForm && view !== 'newEmployeeForm'}
+            >
+                {text}
+            </button>
+        );
+    } 
 
-    // PULSANTE PER PREPOSTO: Aggiunge dipendenti (esistenti) alle sue aree
-    if (!button && view === 'employees' && currentUserRole === 'preposto') {
-         text = 'Aggiungi Dipendente alle Mie Aree';
-         button = (
-            <button
-                onClick={() => openModal('prepostoAddEmployeeToAreas', null)} 
-                className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 w-full sm:w-auto text-sm"
+    // Logica per Admin: Aggiungi Area (pulsante visibile solo in vista areas/form)
+    else if (targetView === 'areas' && currentUserRole === 'admin') {
+        text = 'Aggiungi Area';
+        button = (
+            <button onClick={() => setView('newAreaForm')} 
+                className={`px-4 py-2 ${view === 'newAreaForm' ? 'bg-indigo-300' : 'bg-indigo-600 hover:bg-indigo-700'} text-white rounded-lg w-full sm:w-auto text-sm`}
+                disabled={isCurrentViewForm && view !== 'newAreaForm'}
             >
                 {text}
             </button>
         );
     }
+    
+    // Logica per Admin: Crea Admin/Preposto (pulsante visibile solo in vista admins/form)
+    else if (targetView === 'admins' && currentUserRole === 'admin' && isSuperAdmin) { 
+        text = 'Crea Nuovo Admin/Preposto';
+        button = (
+            <button onClick={() => setView('newAdminForm')} 
+                className={`px-4 py-2 ${view === 'newAdminForm' ? 'bg-indigo-300' : 'bg-indigo-600 hover:bg-indigo-700'} text-white rounded-lg w-full sm:w-auto text-sm`}
+                disabled={isCurrentViewForm && view !== 'newAdminForm'}
+            >
+                {text}
+            </button>
+        );
+    }
+    
+    // Logica per Preposto: Aggiunge dipendenti (esistenti) alle sue aree
+    else if (targetView === 'employees' && currentUserRole === 'preposto') { // Pulsante Preposto sempre mostrato in vista employees
+         text = 'Aggiungi Dipendente alle Mie Aree';
+         button = (
+            <button
+                onClick={() => setView('prepostoAddEmployeeForm')} // CAMBIATO: Usa setView
+                className={`px-4 py-2 ${view === 'prepostoAddEmployeeForm' ? 'bg-teal-300' : 'bg-teal-600 hover:bg-teal-700'} text-white rounded-lg w-full sm:w-auto text-sm`}
+                disabled={isCurrentViewForm && view !== 'prepostoAddEmployeeForm'}
+            >
+                {text}
+            </button>
+        );
+    }
+
 
     if (!button) return null;
 
@@ -1441,8 +1583,10 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                          <div className="flex flex-wrap justify-center py-2 sm:space-x-4">
                              <button onClick={() => setView('dashboard')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'dashboard' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Dashboard</button>
                              <button onClick={() => setView('employees')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'employees' || view === 'newEmployeeForm' || view === 'prepostoAddEmployeeForm' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Dipendenti</button>
-                             <button onClick={() => setView('areas')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'areas' || view === 'newAreaForm' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Aree</button>
+                             <button onClick={() => setView('areas')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'areas' || view === 'newAreaForm' || view === 'editAreaPauseOnly' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Aree</button>
                              {currentUserRole === 'admin' && <button onClick={() => setView('admins')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'admins' || view === 'newAdminForm' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Admin</button>}
+                             {/* NUOVA TAB REPORT PER ADMIN E PREPOSTO */}
+                             {(currentUserRole === 'admin' || currentUserRole === 'preposto') && <button onClick={() => setView('reports')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'reports' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Report Presenze</button>}
                          </div>
                      </div>
                  </div>
@@ -1474,6 +1618,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 {view === 'newEmployeeForm' && <NewEmployeeForm onDataUpdate={fetchData} user={user} setView={setView} showNotification={showNotification} />}
                 {view === 'newAreaForm' && <NewAreaForm onDataUpdate={fetchData} setView={setView} showNotification={showNotification} />}
                 {view === 'newAdminForm' && <NewAdminForm onDataUpdate={fetchData} user={user} setView={setView} showNotification={showNotification} />}
+                {view === 'prepostoAddEmployeeForm' && <PrepostoAddEmployeeForm onDataUpdate={fetchData} user={user} setView={setView} showNotification={showNotification} workAreas={allWorkAreas} allEmployees={allEmployees} userData={userData} />}
                 
                 {/* RENDERIZZAZIONE VISTE PRINCIPALI (se non stiamo visualizzando un form di creazione) */}
                 <main>
@@ -1542,6 +1687,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                      currentUserRole={currentUserRole}
                      userData={userData} 
                      onAdminClockIn={handleAdminClockIn}
+                     showNotification={showNotification} // PASSATO showNotification
                  />
              )}
         </div>
