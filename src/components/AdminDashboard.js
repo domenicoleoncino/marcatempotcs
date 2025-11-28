@@ -477,7 +477,7 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours }
 );
 
 const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortConfig, requestSort, searchTerm, setSearchTerm, handleResetEmployeeDevice, adminEmployeeId, handleEmployeePauseClick }) => { 
-    const getSortIndicator = (key) => {
+    getSortIndicator = (key) => {
         if (!sortConfig || sortConfig.key !== key) return '';
         return sortConfig.direction === 'ascending' ? ' ▲' : ' ▼';
     };
