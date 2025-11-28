@@ -1,4 +1,4 @@
-// File: functions/src/index.js (CON CONTROLLO DEVICE ID - MAX 2)
+// File: functions/src/index.js (CON CONTROLLO DEVICE ID - MAX 2 - E BLOCCO GEOGRAFICO USCITA)
 
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
@@ -696,14 +696,18 @@ exports.clockEmployeeIn = functions.region('europe-west1').https.onCall(async (d
      }
 });
 
+// -----------------------------------------------------------------------------------
+// 🆕 NUOVA FUNZIONE MODIFICATA PER BLOCCO USCITA GEOGRAFICO 🆕
+// -----------------------------------------------------------------------------------
 exports.clockEmployeeOut = functions.region('europe-west1').https.onCall(async (data, context) => {
      const uid = context.auth?.uid;
      const callerRole = context.auth?.token.role;
      if (!uid || (callerRole !== 'dipendente' && callerRole !== 'preposto')) {
          throw new functions.https.HttpsError('permission-denied', 'Azione non permessa.');
      }
-       // AGGIUNTO: Validazione deviceId
-       const { deviceId } = data;
+       // AGGIUNTO: Validazione deviceId E areaId (Nuovo parametro richiesto)
+       const { deviceId, areaId } = data;
+       
        if (!deviceId) {
            throw new functions.https.HttpsError('invalid-argument', 'ID Dispositivo è mancante.');
        }
@@ -731,6 +735,12 @@ exports.clockEmployeeOut = functions.region('europe-west1').https.onCall(async (
          }
          const entryDoc = snapshot.docs[0];
          const entryData = entryDoc.data();
+
+         // 🛑 NUOVO BLOCCO DI SICUREZZA: Verifica corrispondenza Area Entrata = Area Uscita 🛑
+         if (areaId && entryData.workAreaId && entryData.workAreaId !== areaId) {
+             // Opzionale: recupera il nome dell'area per un messaggio migliore, ma per ora blocca e basta.
+             throw new functions.https.HttpsError('failed-precondition', 'Devi timbrare l\'uscita nella stessa area di lavoro in cui hai timbrato l\'entrata.');
+         }
 
          // Controlla se in pausa
          const isInPause = (entryData.pauses || []).some(p => p.start && !p.end);

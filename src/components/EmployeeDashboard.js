@@ -602,7 +602,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
         const isCurrentDeviceAuthorized = currentDeviceIds.includes(deviceId);
         const isLimitReached = currentDeviceCount >= MAX_DEVICES;
 
-        // --- CASO 1: Dispositivo Autorizzato o Slot Libero ---
+        // --- CASO 1: Dispositivo Autorizzato  ---
         if (currentDeviceCount === 0 || isCurrentDeviceAuthorized) {
             return (
                 <div className={`p-4 mb-4 rounded-lg shadow-sm bg-blue-100 border-l-4 border-blue-500 text-blue-700 text-center`} role="alert"> 
@@ -615,7 +615,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                          </p>
                     ) : (
                          <p className="text-xs font-semibold mt-1">
-                             Dispositivo autorizzato. Slot libero.
+                             Dispositivo autorizzato. Puoi procedere con le timbrature.
                          </p>
                     )}
                 </div>
