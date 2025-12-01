@@ -19,7 +19,6 @@ import { saveAs } from 'file-saver';
 // VARIABILE PER IL CONTROLLO SUPER ADMIN (NON MODIFICARE QUI!)
 const SUPER_ADMIN_EMAIL = "domenico.leoncino@tcsitalia.com"; 
 
-// === NUOVO COMPONENTE PER MESSAGGI NON BLOCCANTI ===
 const NotificationPopup = ({ message, type, onClose }) => {
     const baseClasses = "fixed top-4 left-1/2 transform -translate-x-1/2 z-50 p-4 rounded-lg shadow-xl text-white transition-opacity duration-300";
     const typeClasses = {
@@ -36,9 +35,7 @@ const NotificationPopup = ({ message, type, onClose }) => {
         </div>
     );
 };
-// ===============================================
 
-// === FUNZIONE HELPER PER IL RENDER DEI CAMPI (copiata da AdminModal per riuso) ===
 export const renderField = (formData, handleChange, label, name, type = 'text', options = [], required = true) => (
     <div>
         <label htmlFor={name} className="block text-sm font-medium text-gray-700">{label}</label>
@@ -857,7 +854,7 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
                                     <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
                                         {entry.skippedBreak && entry.skipBreakStatus === 'pending' ? (
                                             <div className="flex flex-col gap-1">
-                                                <span className="text-xs italic text-gray-600">"{entry.skippedBreakReason}"</span>
+                                                <span className="text-xs italic text-gray-600">"{entry.note}"</span>
                                                 <div className="flex gap-2 mt-1">
                                                     <button 
                                                         onClick={() => handleReviewSkipBreak(entry.id, 'approved')}
@@ -1002,6 +999,9 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const [totalDayHours, setTotalDayHours] = useState('0.00');
     const [workAreasWithHours, setWorkAreasWithHours] = useState([]);
     
+    // === STATO NOTIFICHE PENDING ===
+    const [pendingRequestsCount, setPendingRequestsCount] = useState(0); 
+
     // === STATO NUOVO PER NOTIFICHE ===
     const [notification, setNotification] = useState(null); // { message, type }
 
@@ -1140,14 +1140,15 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     }, [managedEmployees, activeEmployeesDetails, searchTerm, allWorkAreas, sortConfig]);
 
 
-    // --- LISTENER TIMBRATURE ATTIVE (ROBUSTO con isMounted) ---
+    // --- LISTENER TIMBRATURE ATTIVE E PENDING REQUESTS (ROBUSTO con isMounted) ---
     useEffect(() => {
         if (!allEmployees.length || !allWorkAreas.length) return;
 
         let isMounted = true; 
 
-        const q = query(collection(db, "time_entries"), where("status", "==", "clocked-in"));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
+        // 1. LISTENER TIMBRATURE ATTIVE
+        const qActive = query(collection(db, "time_entries"), where("status", "==", "clocked-in"));
+        const unsubscribeActive = onSnapshot(qActive, (snapshot) => {
             if (!isMounted) return; 
 
             const activeEntriesList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -1212,9 +1213,30 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                  showNotification("Errore aggiornamento presenze.", 'error');
              }
         });
+
+        // 2. NUOVO LISTENER: PENDING REQUESTS (Richieste Pausa in Attesa)
+        // Per semplicità ascoltiamo tutte le pending e filtriamo in memoria
+        const qPending = query(collection(db, "time_entries"), where("skipBreakStatus", "==", "pending"));
+        const unsubscribePending = onSnapshot(qPending, (snapshot) => {
+            if (!isMounted) return;
+            const pendingDocs = snapshot.docs.map(doc => doc.data());
+            
+            let count = 0;
+            if (currentUserRole === 'admin') {
+                count = pendingDocs.length;
+            } else if (currentUserRole === 'preposto') {
+                const managedAreaIds = userData?.managedAreaIds || [];
+                // Conta solo se l'area della timbratura è tra quelle gestite
+                const myPending = pendingDocs.filter(d => managedAreaIds.includes(d.workAreaId));
+                count = myPending.length;
+            }
+            setPendingRequestsCount(count);
+        });
+
         return () => {
             isMounted = false; 
-            unsubscribe(); 
+            unsubscribeActive(); 
+            unsubscribePending();
         };
     }, [allEmployees, allWorkAreas, adminEmployeeProfile, currentUserRole, userData, showNotification]);
 
@@ -1650,7 +1672,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
     return (
         <div className="min-h-screen bg-gray-100 w-full">
-            {/* INCLUSIONE POPUP NOTIFICA */}
             {notification && <NotificationPopup message={notification.message} type={notification.type} onClose={() => setNotification(null)} />}
             
             {/* Header */}
@@ -1705,7 +1726,20 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                              <button onClick={() => setView('areas')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'areas' || view === 'newAreaForm' || view === 'editAreaPauseOnly' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Aree</button>
                              {currentUserRole === 'admin' && <button onClick={() => setView('admins')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'admins' || view === 'newAdminForm' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Admin</button>}
                              {/* NUOVA TAB REPORT PER ADMIN E PREPOSTO */}
-                             {(currentUserRole === 'admin' || currentUserRole === 'preposto') && <button onClick={() => setView('reports')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'reports' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Report Presenze</button>}
+                             {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (
+                                <button 
+                                    onClick={() => setView('reports')} 
+                                    className={`py-2 px-3 sm:border-b-2 text-sm font-medium flex items-center ${view === 'reports' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}
+                                >
+                                    Report Presenze
+                                    {/* BADGE DI NOTIFICA PENDING */}
+                                    {pendingRequestsCount > 0 && (
+                                        <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                                            ⚠️ {pendingRequestsCount}
+                                        </span>
+                                    )}
+                                </button>
+                             )}
                          </div>
                      </div>
                  </div>

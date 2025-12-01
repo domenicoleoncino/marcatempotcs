@@ -1,5 +1,5 @@
 // File: functions/src/index.js
-// (CON GESTIONE "VERIFICA PAUSA NON GODUTA" + Device ID Check + Blocco Geografico Uscita)
+// (CON GESTIONE "VERIFICA PAUSA NON GODUTA" + Device ID Check + Blocco Geografico Uscita + NUOVI ARROTONDAMENTI)
 
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
@@ -8,19 +8,44 @@ const { Timestamp, GeoPoint, FieldValue } = require("firebase-admin/firestore");
 admin.initializeApp();
 const db = admin.firestore();
 
-// --- Funzione Helper Arrotondamento Server-side ---
+// --- Funzione Helper Arrotondamento Server-side (AGGIORNATA) ---
 function roundTimeWithCustomRulesServer(date, type) {
     const newDate = new Date(date.getTime());
     const minutes = newDate.getMinutes();
+
     if (type === 'entrata') {
-        if (minutes >= 46) { newDate.setHours(newDate.getHours() + 1); newDate.setMinutes(0); }
-        else if (minutes >= 16) { newDate.setMinutes(30); }
-        else { newDate.setMinutes(0); }
+        // --- LOGICA ENTRATA (Invariata) ---
+        // 00-15 -> :00 | 16-45 -> :30 | 46-59 -> Next :00
+        if (minutes >= 46) { 
+            newDate.setHours(newDate.getHours() + 1); 
+            newDate.setMinutes(0); 
+        }
+        else if (minutes >= 16) { 
+            newDate.setMinutes(30); 
+        }
+        else { 
+            newDate.setMinutes(0); 
+        }
     } else if (type === 'uscita') {
-        if (minutes >= 30) { newDate.setMinutes(30); }
-        else { newDate.setMinutes(0); }
+        // --- LOGICA USCITA (MODIFICATA) ---
+        // Se sei a 50 o più (10 minuti alla fine), ti regala l'ora intera successiva
+        if (minutes >= 50) { 
+            newDate.setHours(newDate.getHours() + 1); 
+            newDate.setMinutes(0); 
+        }
+        // Se sei a 20 o più, ti regala la mezz'ora
+        else if (minutes >= 20) { 
+            newDate.setMinutes(30); 
+        }
+        // Altrimenti (0-19) ti riporta all'inizio dell'ora
+        else { 
+            newDate.setMinutes(0); 
+        }
     }
-    newDate.setSeconds(0); newDate.setMilliseconds(0);
+    
+    // Azzera secondi e millisecondi per pulizia
+    newDate.setSeconds(0); 
+    newDate.setMilliseconds(0);
     return newDate;
 };
 
