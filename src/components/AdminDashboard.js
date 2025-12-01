@@ -11,7 +11,6 @@ import CompanyLogo from './CompanyLogo';
 import AdminModal from './AdminModal'; 
 import { utils, writeFile } from 'xlsx';
 import { saveAs } from 'file-saver';
-//import 'jspdf-autotable';
 
 // ===========================================
 // --- SUB-COMPONENTI E FUNZIONI INIZIALI ---
@@ -751,8 +750,8 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
     );
 };
 
-// === REPORT VIEW COMPLETO CON PULSANTI DI ESPORTAZIONE ===
-const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, allEmployees, currentUserRole, userData, setDateRange, setReportAreaFilter, reportAreaFilter, reportEmployeeFilter, setReportEmployeeFilter, generateReport, isLoading, isActionLoading, managedEmployees, showNotification }) => {
+// === REPORT VIEW COMPLETO CON PULSANTI DI ESPORTAZIONE E LOGICA DI APPROVAZIONE PAUSA ===
+const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, allEmployees, currentUserRole, userData, setDateRange, setReportAreaFilter, reportAreaFilter, reportEmployeeFilter, setReportEmployeeFilter, generateReport, isLoading, isActionLoading, managedEmployees, showNotification, handleReviewSkipBreak }) => {
     
     // --- FUNZIONE ESPORTAZIONE EXCEL ---
     const handleExportExcel = () => {
@@ -770,7 +769,8 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
             'Entrata': entry.clockInTimeFormatted, 
             'Uscita': entry.clockOutTimeFormatted,
             'Ore Lavorate (Netto)': (entry.duration !== null) ? parseFloat(entry.duration.toFixed(2)) : "In corso",
-            'Pausa Totale (Ore)': (entry.pauseHours !== null) ? parseFloat(entry.pauseHours.toFixed(2)) : 0, 
+            'Pausa Totale (Ore)': (entry.pauseHours !== null) ? parseFloat(entry.pauseHours.toFixed(2)) : 0,
+            'Stato Pausa': entry.skippedBreak ? (entry.skipBreakStatus === 'approved' ? 'No Pausa (Approvato)' : 'Pausa Scalata (Default)') : 'Standard',
             'Motivo/Nota': entry.note
         }));
         
@@ -817,8 +817,8 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
                                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entrata</th>
                                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Uscita</th>
                                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ore</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pausa (Ore)</th> 
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Motivo/Nota</th> 
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stato Pausa</th> 
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Azioni / Note</th> 
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
@@ -830,9 +830,55 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
                                     {/* FIX: USO VARIABILI CORRETTE PER VISUALIZZARE L'ORA */}
                                     <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.clockInTimeFormatted}</td> 
                                     <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.clockOutTimeFormatted}</td> 
-                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.duration !== null ? entry.duration.toFixed(2) : '...'}</td>
-                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.pauseHours !== null ? entry.pauseHours.toFixed(2) : '0.00'}</td> 
-                                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{entry.note}</td> 
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm font-bold text-gray-800">{entry.duration !== null ? entry.duration.toFixed(2) : '...'}</td>
+                                    
+                                    {/* COLONNA STATO PAUSA */}
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm">
+                                        {entry.skippedBreak ? (
+                                            entry.skipBreakStatus === 'pending' ? (
+                                                <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800 animate-pulse">
+                                                    ⚠️ In Attesa Verifica
+                                                </span>
+                                            ) : entry.skipBreakStatus === 'approved' ? (
+                                                <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                                                    ✅ No Pausa (Approvato)
+                                                </span>
+                                            ) : (
+                                                <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
+                                                    ❌ Pausa Scalata
+                                                </span>
+                                            )
+                                        ) : (
+                                            <span className="text-gray-500 text-xs">Standard ({entry.pauseHours !== null ? entry.pauseHours.toFixed(2) : '0.00'}h)</span>
+                                        )}
+                                    </td>
+
+                                    {/* COLONNA AZIONI / NOTE */}
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
+                                        {entry.skippedBreak && entry.skipBreakStatus === 'pending' ? (
+                                            <div className="flex flex-col gap-1">
+                                                <span className="text-xs italic text-gray-600">"{entry.skippedBreakReason}"</span>
+                                                <div className="flex gap-2 mt-1">
+                                                    <button 
+                                                        onClick={() => handleReviewSkipBreak(entry.id, 'approved')}
+                                                        disabled={isActionLoading}
+                                                        className="bg-green-500 hover:bg-green-600 text-white text-xs px-2 py-1 rounded"
+                                                    >
+                                                        Approva
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => handleReviewSkipBreak(entry.id, 'rejected')}
+                                                        disabled={isActionLoading}
+                                                        className="bg-red-500 hover:bg-red-600 text-white text-xs px-2 py-1 rounded"
+                                                    >
+                                                        Rifiuta
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <span>{entry.note}</span>
+                                        )}
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>
@@ -1360,7 +1406,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         }
     }, [fetchData, showNotification]);
     
-    // --- FUNZIONE GENERATE REPORT (COMPLETA - ORA CHIAMA LA CLOUD FUNCTION) ---
+    // --- FUNZIONE GENERATE REPORT (DEFINITA PRIMA DI handleReviewSkipBreak) ---
     const generateReport = useCallback(async () => {
         if (!dateRange.start || !dateRange.end) return showNotification("Seleziona date valide.", 'info');
         setIsLoading(true);
@@ -1373,9 +1419,9 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
             // Chiama la Cloud Function con i filtri
             const result = await generateReportFunction({
-                startDate: dateRange.start, // Passiamo le date
+                startDate: dateRange.start, 
                 endDate: dateRange.end,
-                employeeIdFilter: reportEmployeeFilter, // Passa i filtri
+                employeeIdFilter: reportEmployeeFilter, 
                 areaIdFilter: reportAreaFilter
             });
 
@@ -1428,20 +1474,47 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 if (clockOut) {
                     const totalMs = clockOut.getTime() - clockIn.getTime();
                     
-                    // Ricalcolo Pause (dopo la conversione in Date)
-                    const pauseDurationMs = (entry.pauses || []).reduce((acc, p) => {
+                    // A. Calcolo pause fisicamente registrate (pulsanti start/stop)
+                    const recordedPausesMs = (entry.pauses || []).reduce((acc, p) => {
                         const pauseStart = p.start ? new Date(p.start) : null;
                         const pauseEnd = p.end ? new Date(p.end) : null;
-
                         if (pauseStart && pauseEnd) {
                             return acc + (pauseEnd.getTime() - pauseStart.getTime());
-                        } return acc;
+                        } 
+                        return acc;
                     }, 0);
+
+                    // B. Durata Pausa Predefinita Area (in ms)
+                    const areaPauseMs = (area.pauseDuration || 0) * 60000;
                     
-                    pauseDurationMinutes = pauseDurationMs / 60000;
+                    let finalPauseDeductionMs = recordedPausesMs;
+
+                    // --- LOGICA NO-PAUSA (PRUDENTE) ---
+                    if (entry.skippedBreak) {
+                        if (entry.skipBreakStatus === 'approved') {
+                            // APPROVATO: Il preposto conferma che non ha fatto pausa.
+                            // Deduciamo 0 (o solo le pause effettivamente cliccate se ce ne sono state per sbaglio)
+                            finalPauseDeductionMs = 0; 
+                        } else {
+                            // PENDING o REJECTED (Approccio Prudente):
+                            // Sottraiamo comunque la pausa dell'area finché non viene approvata.
+                            finalPauseDeductionMs = areaPauseMs;
+                        }
+                    } else {
+                        // CASO STANDARD (Nessuna richiesta di salto pausa)
+                        // Se le pause registrate sono meno della pausa d'area obbligatoria, usiamo quella d'area
+                        if (areaPauseMs > 0 && recordedPausesMs < areaPauseMs) {
+                            finalPauseDeductionMs = areaPauseMs;
+                        }
+                    }
+                    
+                    pauseDurationMinutes = finalPauseDeductionMs / 60000;
                     pauseHours = pauseDurationMinutes / 60; 
 
-                    let calculatedDurationMs = totalMs > 0 ? (totalMs - pauseDurationMs) : 0;
+                    let calculatedDurationMs = totalMs > 0 ? (totalMs - finalPauseDeductionMs) : 0;
+                    // Evitiamo ore negative in casi estremi
+                    if (calculatedDurationMs < 0) calculatedDurationMs = 0;
+
                     durationHours = calculatedDurationMs > 0 ? (calculatedDurationMs / 3600000) : 0; 
                     areaHoursMap.set(area.id, (areaHoursMap.get(area.id) || 0) + durationHours);
                 }
@@ -1450,23 +1523,24 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                     employeeName: `${employee.name} ${employee.surname}`,
                     employeeId: entry.employeeId,
                     areaName: area.name,
-                    // Assicurati che clockInDate sia un oggetto Date valido per la formattazione
                     clockInDate: clockIn.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-                    clockInTimeFormatted: clockInFormatted, // FIX: Assign formatted time string to property
-                    clockOutTimeFormatted: clockOutFormatted, // FIX: Assign formatted time string to property
+                    clockInTimeFormatted: clockInFormatted, 
+                    clockOutTimeFormatted: clockOutFormatted, 
                     duration: durationHours,
                     pauseHours: pauseHours, 
                     note: entry.note || '',
                     createdBy: entry.createdBy || null,
+                    // Nuovi campi per report view
+                    skippedBreak: entry.skippedBreak,
+                    skipBreakStatus: entry.skipBreakStatus,
+                    skippedBreakReason: entry.skippedBreakReason
                 };
             }).filter(Boolean)
               .sort((a, b) => {
                   // === Ordinamento per data/ora di timbratura ===
+                  const dateA = formatTime(a.clockInDate, a.clockInTimeFormatted); 
+                  const dateB = formatTime(b.clockInDate, b.clockOutTimeFormatted); 
                   
-                  const dateA = formatTime(a.clockInDate, a.clockInTimeFormatted); // Timbratura A - Inizio
-                  const dateB = formatTime(b.clockInDate, b.clockOutTimeFormatted); // Timbratura B - Fine (o Inizio fittizio se 'In corso')
-                  
-                  // Se la data non è valida per qualche motivo, usa il fallback per il nome
                   if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
                        if (a.clockInDate !== b.clockInDate) return a.clockInDate.localeCompare(b.clockInDate);
                        return a.employeeName.localeCompare(b.employeeName);
@@ -1482,7 +1556,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             const updatedAreas = allWorkAreas.map(area => ({ ...area, totalHours: (areaHoursMap.get(area.id) || 0).toFixed(2) }));
             setWorkAreasWithHours(updatedAreas);
             
-            // CORREZIONE CHIAVE: Cambia la vista per mostrare i risultati e i pulsanti di esportazione
             if(reportData.length > 0) setView('reports'); 
             
         } catch (error) { 
@@ -1500,6 +1573,40 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
     }, [dateRange, reportAreaFilter, reportEmployeeFilter, allEmployees, allWorkAreas, showNotification]);
 
+    // === NUOVA FUNZIONE: REVISIONE RICHIESTA NO-PAUSA (DEFINITA DOPO generateReport) ===
+    const handleReviewSkipBreak = useCallback(async (entryId, decision) => {
+        if (!entryId || !decision) return;
+        
+        const confirmMsg = decision === 'approved' 
+            ? "Confermi che il dipendente NON ha fatto pausa? Verranno calcolate le ore piene."
+            : "Rifiuti la richiesta? Verrà sottratta la pausa standard dell'area.";
+            
+        if (!window.confirm(confirmMsg)) return;
+
+        setIsActionLoading(true);
+        try {
+            const functions = getFunctions(undefined, 'europe-west1');
+            const reviewFunction = httpsCallable(functions, 'reviewSkipBreakRequest');
+            
+            await reviewFunction({ 
+                timeEntryId: entryId, 
+                decision: decision, // 'approved' | 'rejected'
+                adminId: user.uid 
+            });
+
+            showNotification(`Richiesta ${decision === 'approved' ? 'APPROVATA' : 'RIFIUTATA'} con successo.`, 'success');
+            
+            // Aggiorna i report ricalcolando
+            generateReport(); 
+            
+        } catch (error) {
+            console.error("Errore revisione pausa:", error);
+            showNotification("Errore durante l'aggiornamento della richiesta.", 'error');
+        } finally {
+            setIsActionLoading(false);
+        }
+    }, [user, showNotification, generateReport]);
+
     const handleExportXml = useCallback((dataToExport) => {
         if (!dataToExport || dataToExport.length === 0) return showNotification("Nessun dato da esportare.", 'info'); 
         let xmlString = '<?xml version="1.0" encoding="UTF-8"?>\n<ReportTimbrature>\n';
@@ -1512,6 +1619,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             xmlString += `    <Uscita>${entry.clockOutTimeFormatted}</Uscita>\n`; 
             xmlString += `    <OreNetto>${entry.duration ? entry.duration.toFixed(2) : 'N/A'}</OreNetto>\n`;
             xmlString += `    <PausaTotaleOre>${entry.pauseHours ? entry.pauseHours.toFixed(2) : '0.00'}</PausaTotaleOre>\n`; 
+            xmlString += `    <StatoPausa>${entry.skippedBreak ? (entry.skipBreakStatus === 'approved' ? 'No Pausa (Approvato)' : 'Pausa Scalata (Default)') : 'Standard'}</StatoPausa>\n`;
             xmlString += `    <MotivoNota><![CDATA[${entry.note || ''}]]></MotivoNota>\n`; 
             xmlString += `  </Timbratura>\n`;
         });
@@ -1672,6 +1780,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                          isActionLoading={isActionLoading}
                          managedEmployees={managedEmployees}
                          showNotification={showNotification}
+                         handleReviewSkipBreak={handleReviewSkipBreak} // PASSATA LA NUOVA FUNZIONE
                     />}
                 </main>
             </div>

@@ -329,6 +329,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 const currentArea = allWorkAreas.find(a => a.id === currentActiveEntry.workAreaId);
                 const pauseDuration = currentArea?.pauseDuration || 0;
                 
+                // === NUOVA LOGICA: VERIFICA PAUSA NON GODUTA ===
                 if (pauseDuration > 0 && pauseStatus !== 'COMPLETED') { 
                     const reasonOptions = PAUSE_REASONS.map((r, i) => `${i + 1} - ${r.reason}`).join('\n');
                     const confirmExit = window.confirm(
@@ -366,7 +367,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
 
                 result = await clockOut({ 
                     note: finalNoteText, 
-                    pauseSkipReason: finalReasonCode, 
+                    pauseSkipReason: finalReasonCode, // Invia il codice del motivo
                     deviceId: deviceId,
                     isGpsRequired: isGpsRequiredCheck, 
                     currentLat: currentLat, 
@@ -375,7 +376,12 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 
                 if (result.data.success) {
                     playSound('clock_out'); 
-                    alert(result.data.message || 'Timbratura di uscita registrata.');
+                    // Messaggio di successo condizionale (Logica Prudente)
+                    let successMessage = result.data.message || 'Timbratura di uscita registrata.';
+                    if (finalReasonCode) {
+                        successMessage += '\n\n⚠️ NOTA IMPORTANTE: Hai dichiarato di non aver fatto pausa. La richiesta è IN ATTESA DI APPROVAZIONE dal tuo responsabile.\nFino all\'approvazione, le ore di pausa verranno scalate cautelativamente.';
+                    }
+                    alert(successMessage);
                     return;
                 } else if (result.data.message) {
                     alert(result.data.message);
@@ -410,7 +416,8 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             }
 
             if ((action === 'clockPause' || action === 'clockOut') && result?.data?.message) {
-                alert(result.data.message);
+                // Se c'è un messaggio ma l'operazione non è un successo pieno (gestito sopra)
+                if (!result.data.success) alert(result.data.message);
             }
 
         } catch (error) {
@@ -647,7 +654,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                                 } disabled:opacity-50 disabled:cursor-not-allowed`}
                             >
                                 <div className="text-2xl leading-none">🟡</div>
-                                <span className="text-sm block mt-1">{pauseStatus === 'ACTIVE' ? 'PAUSA ATTIVA' : pauseStatus === 'COMPLETED' ? 'PAUSA EFFETTUATA' : ''}</span>
+                                <span className="text-sm block mt-1">{pauseStatus === 'ACTIVE' ? 'PAUSA ATTIVA' : pauseStatus === 'COMPLETED' ? 'PAUSA EFFETTUATA' : 'TIMBRA PAUSA'}</span>
                             </button>
 
                             {/* 2. IN CORSO */}
