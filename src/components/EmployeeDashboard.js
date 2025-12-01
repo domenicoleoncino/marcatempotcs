@@ -1,4 +1,4 @@
-// File: src/components/EmployeeDashboard.js (Definitivo con Device ID, Logica Pausa Robusta e CENTRATURA PERFETTA)
+// File: src/components/EmployeeDashboard.js
 /* eslint-disable no-unused-vars */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -6,8 +6,10 @@ import { db } from '../firebase';
 import { collection, query, where, onSnapshot, orderBy, getDocs, Timestamp, limit } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import CompanyLogo from './CompanyLogo';
-// === NUOVE IMPORTAZIONI PER EXCEL ===
-import { utils, writeFile } from 'xlsx';
+
+// === MODIFICA: IMPORTAZIONI PER PDF INVECE DI EXCEL ===
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 // ===========================================
 // --- 1. FUNZIONE UTILITY DEVICE ID ---
@@ -16,16 +18,14 @@ function getOrGenerateDeviceId() {
     let deviceId = localStorage.getItem('marcatempoDeviceId'); 
     
     if (!deviceId) {
-        // Genera un ID pseudo-univoco (Usare una libreria UUID per maggiore robustezza in prod)
+        // Genera un ID pseudo-univoco
         deviceId = (Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)).toUpperCase();
         localStorage.setItem('marcatempoDeviceId', deviceId);
     }
     return deviceId;
 }
-// ===========================================
 
-
-// Funzione distanza GPS (invariata)
+// Funzione distanza GPS
 function getDistanceInMeters(lat1, lon1, lat2, lon2) {
     const R = 6371e3; // Raggio Terra in metri
     const p1 = lat1 * Math.PI / 180;
@@ -44,8 +44,6 @@ const PAUSE_REASONS = [
     { code: '03', reason: 'Mancata pausa per richiesta cantiere.' },
     { code: '04', reason: 'Altro... (specificare).' }
 ];
-// =========================================================
-
 
 const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) => {
     // Stati
@@ -57,15 +55,15 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     const [isPauseAttempted, setIsPauseAttempted] = useState(false); 
     const [locationError, setLocationError] = useState(null);
     const [inRangeArea, setInRangeArea] = useState(null); 
-    const [manualAreaId, setManualAreaId] = useState(''); // <-- STATO PER SELEZIONE MANUALE
+    const [manualAreaId, setManualAreaId] = useState(''); 
     
-    // STATO NUOVO per Device ID
-    const [deviceId, setDeviceId] = useState(null); // <-- STATO PER DEVICE ID
+    // STATO Device ID
+    const [deviceId, setDeviceId] = useState(null);
 
-    // Stati per report Excel
+    // Stati per report PDF
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-    const [isGenerating, setIsGenerating] = useState(false);
+    const [isGenerating, setIsGenerating] = useState(false); // Stato caricamento PDF
 
     // Funzioni Cloud Firebase
     const functions = getFunctions(undefined, 'europe-west1');
@@ -73,8 +71,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     const clockOut = httpsCallable(functions, 'clockEmployeeOut');
     const applyAutoPauseEmployee = httpsCallable(functions, 'applyAutoPauseEmployee');
 
-
-    // === FUNZIONE HELPER AUDIO (Corretta per Autoplay) ===
+    // === FUNZIONE HELPER AUDIO ===
     const playSound = (fileName) => {
         const audioPath = `/sounds/${fileName}.mp3`;
         try {
@@ -86,26 +83,19 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             console.warn("Errore creazione oggetto Audio:", e);
         }
     };
-    // =============================
 
     // Aggiorna ora corrente
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-        
-        // RIATTIVATO SUONO
-        playSound('app_open'); // <-- RIATTIVATO SUONO
-
+        playSound('app_open');
         return () => clearInterval(timer);
     }, []);
 
-    // ----------------------------------------------------
-    // INIZIALIZZAZIONE DEVICE ID (NUOVO)
-    // ----------------------------------------------------
+    // INIZIALIZZAZIONE DEVICE ID
     useEffect(() => {
         const currentDeviceId = getOrGenerateDeviceId();
         setDeviceId(currentDeviceId); 
     }, []); 
-
 
     // Filtra aree assegnate al dipendente
     const employeeWorkAreas = useMemo(() => {
@@ -116,10 +106,8 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     // Leggi il flag GPS dai dati del dipendente
     const isGpsRequired = employeeData?.controlloGpsRichiesto ?? true;
 
-
-    // Logica GPS (watchPosition per aggiornamenti continui) - INVARIATA
+    // Logica GPS
     useEffect(() => {
-        // AGGIUNTO deviceId come dipendenza
         if (employeeWorkAreas.length === 0 || !isGpsRequired || !deviceId) {
             setLocationError(null);
             setInRangeArea(null);
@@ -178,41 +166,33 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
              setLocationError("La geolocalizzazione non è supportata.");
         }
 
-
         return () => {
             isMounted = false;
             if (watchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(watchId);
         };
-    }, [employeeWorkAreas, isGpsRequired, deviceId]); // AGGIUNTA DIPENDENZA deviceId
+    }, [employeeWorkAreas, isGpsRequired, deviceId]);
 
-    
-    // CALCOLO STATO PAUSA CON USEMEMO (massima robustezza)
+    // CALCOLO STATO PAUSA
     const pauseStatus = useMemo(() => {
         const pauses = activeEntry?.pauses || [];
-        
         let isActive = false;
         let isCompleted = false;
 
-        // Itera sull'array delle pause per determinare lo stato
         for (const p of pauses) {
-            // Se esiste uno start e un end, la pausa è completata
             if (p.start && p.end) {
                 isCompleted = true;
-            } 
-            // Se esiste uno start ma non un end, la pausa è attiva
-            else if (p.start && !p.end) {
+            } else if (p.start && !p.end) {
                 isActive = true;
-                break; // Se è attiva, non serve controllare altro
+                break;
             }
         }
 
         if (isActive) return 'ACTIVE';
-        if (isCompleted) return 'COMPLETED'; // <-- Stato corretto se è stata completata
+        if (isCompleted) return 'COMPLETED';
         return 'NONE';
     }, [activeEntry]);
 
     const isInPause = pauseStatus === 'ACTIVE'; 
-    const hasCompletedPause = pauseStatus === 'COMPLETED'; // <-- Rimosso dall'utilizzo diretto per risolvere il warning
     
     // Logica di Reset del flag di tentativo pausa
     useEffect(() => {
@@ -221,7 +201,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
         }
     }, [isInPause, isPauseAttempted]);
 
-    // Listener Firestore per timbratura attiva e timbrature odierne (ROBUSTO)
+    // Listener Firestore
     useEffect(() => {
         if (!user?.uid || !employeeData?.id || !Array.isArray(allWorkAreas)) {
              setActiveEntry(null);
@@ -230,15 +210,13 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
              return;
         }
         
-        let isMounted = true; // Flag di montaggio
+        let isMounted = true; 
         
-        // 1. Listener timbratura attiva
         const qActive = query(collection(db, "time_entries"),
                                where("employeeId", "==", employeeData.id),
                                where("status", "==", "clocked-in"),
                                limit(1));
         
-        // 2. Listener timbrature odierne
         const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
         const qTodays = query(collection(db, "time_entries"),
                                where("employeeId", "==", employeeData.id),
@@ -247,9 +225,8 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
 
         let unsubscribeActive, unsubscribeTodays;
 
-        // Esegue l'ascolto per la timbratura attiva
         unsubscribeActive = onSnapshot(qActive, (snapshot) => {
-            if (!isMounted) return; // Controllo di smontaggio
+            if (!isMounted) return;
             if (!snapshot.empty) {
                 const entryData = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
                 setActiveEntry(entryData);
@@ -263,31 +240,27 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             if (isMounted) console.error("Errore listener timbratura attiva:", error);
         });
 
-        // Esegue l'ascolto per le timbrature odierne
         unsubscribeTodays = onSnapshot(qTodays, (snapshot) => {
-            if (!isMounted) return; // Controllo di smontaggio
+            if (!isMounted) return;
             setTodaysEntries(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         }, (error) => {
             if (isMounted) console.error("Errore listener timbratura odierna:", error);
         });
         
-
-        // Funzione di pulizia
         return () => {
-             isMounted = false; // Imposta a false allo smontaggio
+             isMounted = false;
              unsubscribeActive();
              unsubscribeTodays();
         };
     }, [user?.uid, employeeData?.id, allWorkAreas]);
 
 
-    // --- GESTIONE AZIONI TIMBRATURA/PAUSA (AGGIUNTO deviceId) ---
+    // --- GESTIONE AZIONI TIMBRATURA/PAUSA ---
     const handleAction = async (action) => {
         if (isProcessing) return;
         setIsProcessing(true);
         setLocationError(null);
 
-        // Controllo Device ID (aggiunto qui)
         if (!deviceId) {
             alert("ID dispositivo non disponibile. Ricarica la pagina.");
             setIsProcessing(false);
@@ -297,52 +270,41 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
         try {
             let result;
             const currentActiveEntry = activeEntry;
-            
-            // --- VARIABILI DI CONTROLLO GPS/Device ---
             const isGpsRequiredCheck = isGpsRequired; 
             const currentLat = inRangeArea?.latitude;
             const currentLon = inRangeArea?.longitude;
-            // -----------------------------------
 
             if (action === 'clockIn') {
-                
                 let areaIdToClockIn = null;
                 let note = ''; 
 
-                // Logica GPS Entrata
                 if (isGpsRequiredCheck) {
                     if (!inRangeArea) throw new Error("Devi essere all'interno di un'area rilevata per timbrare l'entrata.");
                     areaIdToClockIn = inRangeArea.id;
                 } else {
-                    // --- LOGICA CHIAVE: AREA MANUALE PER UTENTI SENZA GPS ---
-                    areaIdToClockIn = manualAreaId; // Usa l'ID selezionato dallo stato
+                    areaIdToClockIn = manualAreaId;
                     note = 'Entrata senza GPS (Manutentore)';
                     
                     if (!areaIdToClockIn) {
                         throw new Error("Seleziona un'area di lavoro per la timbratura manuale.");
                     }
-                    // Se l'area è fittizia, usiamo l'ID Manutenzione_Fittizia
                     if (areaIdToClockIn === "Manutenzione_Fittizia") {
                          note = 'Entrata Manutenzione (Generico/Sede)';
                     } else {
-                         // Se è un'area reale selezionata manualmente
                          const selectedArea = employeeWorkAreas.find(a => a.id === areaIdToClockIn);
                          note = `Entrata Manuale su Area: ${selectedArea ? selectedArea.name : 'Sconosciuta'}`;
                     }
-                    // ----------------------------------------------------
                 }
                 
-                // Chiama la Cloud Function
                 result = await clockIn({ 
                     areaId: areaIdToClockIn, 
                     note: note, 
-                    deviceId: deviceId, // <-- PAYLOAD AGGIORNATO CON DEVICE ID
+                    deviceId: deviceId,
                     isGpsRequired: isGpsRequiredCheck,
                     currentLat: inRangeArea?.latitude,
                     currentLon: inRangeArea?.longitude
                 }); 
                 
-                // Aggiornamento ottimistico stato
                 if (result.data.success) {
                     setActiveEntry({
                         id: 'pending_' + Date.now(),
@@ -353,11 +315,8 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                     });
                     const area = allWorkAreas.find(a => a.id === areaIdToClockIn);
                     setWorkAreaName(area ? area.name : 'Sconosciuta');
-                    
                     playSound('clock_in'); 
-                    // Resetta la selezione manuale dopo il successo
                     setManualAreaId(''); 
-
                 } else if (result.data.message) {
                      alert(result.data.message);
                 }
@@ -370,11 +329,8 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 const currentArea = allWorkAreas.find(a => a.id === currentActiveEntry.workAreaId);
                 const pauseDuration = currentArea?.pauseDuration || 0;
                 
-                // === LOGICA CHIAVE: AVVISO PAUSA MANCANTE + MOTIVO STRUTTURATO ===
                 if (pauseDuration > 0 && pauseStatus !== 'COMPLETED') { 
-                    
                     const reasonOptions = PAUSE_REASONS.map((r, i) => `${i + 1} - ${r.reason}`).join('\n');
-                    
                     const confirmExit = window.confirm(
                         `ATTENZIONE: La tua area prevede una pausa di ${pauseDuration} minuti, ma non risulta sia stata completata.\n\nVuoi uscire senza pausa? Clicca OK per selezionare il motivo.`
                     );
@@ -383,14 +339,12 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                         const selectedCode = window.prompt(
                             `Seleziona il numero del motivo (da 1 a ${PAUSE_REASONS.length}):\n\n${reasonOptions}`
                         );
-                        
                         const selectedIndex = parseInt(selectedCode) - 1; 
                         const selectedReason = PAUSE_REASONS[selectedIndex];
                         
                         if (!selectedReason) {
                             throw new Error("Selezione motivo non valida o mancante. Uscita annullata.");
                         }
-
                         finalReasonCode = selectedReason.code;
 
                         if (selectedReason.code === '04') { 
@@ -405,18 +359,15 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                         throw new Error("Uscita annullata.");
                     }
                 }
-                // =============================================================
 
-                // *** CONTROLLO GPS USCITA ***
                 if (isGpsRequiredCheck) {
                      if (!inRangeArea) throw new Error("Devi essere all'interno di un'area rilevata per timbrare l'uscita.");
                 }
 
-                // Chiama la Cloud Function, passando la nota
                 result = await clockOut({ 
                     note: finalNoteText, 
                     pauseSkipReason: finalReasonCode, 
-                    deviceId: deviceId, // <-- PAYLOAD AGGIORNATO CON DEVICE ID
+                    deviceId: deviceId,
                     isGpsRequired: isGpsRequiredCheck, 
                     currentLat: currentLat, 
                     currentLon: currentLon 
@@ -426,15 +377,13 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                     playSound('clock_out'); 
                     alert(result.data.message || 'Timbratura di uscita registrata.');
                     return;
-
                 } else if (result.data.message) {
                     alert(result.data.message);
                 }
                 
-            } else if (action === 'clockPause') { // AZIONE INIZIO PAUSA
+            } else if (action === 'clockPause') { 
                 if (!currentActiveEntry) throw new Error("Devi avere una timbratura attiva.");
                 
-                // *** BLOCCO ANTI DOPPIA PAUSA (ANCHE SE TERMINATA) ***
                 if (pauseStatus !== 'NONE') { 
                     throw new Error(pauseStatus === 'COMPLETED' 
                         ? "Hai già effettuato la pausa in questo turno." 
@@ -451,13 +400,12 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                     result = await applyAutoPauseEmployee({ 
                         timeEntryId: currentActiveEntry.id, 
                         durationMinutes: pauseDuration,
-                        deviceId: deviceId, // <-- PAYLOAD AGGIORNATO CON DEVICE ID
+                        deviceId: deviceId,
                     }); 
-                    
                 } else {
                     throw new Error(`Nessuna pausa predefinita (>0 min) per l'area "${currentArea?.name || 'sconosciuta'}".`);
                 }
-            } else { // Nessun altro blocco (Rimosso endPause)
+            } else { 
                 throw new Error("Azione non riconosciuta.");
             }
 
@@ -475,8 +423,10 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     };
 
 
-    // Logica handleExportExcel (Omessa per brevità) - INVARIATA
-    const handleExportExcel = async () => {
+    // ========================================================
+    // --- 2. FUNZIONE GENERAZIONE PDF (NUOVA) ---
+    // ========================================================
+    const handleExportPDF = async () => {
         setIsGenerating(true);
 
         if (!employeeData || !employeeData.id) {
@@ -484,7 +434,6 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
              setIsGenerating(false);
              return;
         }
-        const employeeId = employeeData.id;
         
         try {
             const startDate = new Date(selectedYear, selectedMonth, 1);
@@ -492,11 +441,11 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             const nextYear = selectedMonth === 11 ? selectedYear + 1 : selectedYear;
             const endDate = new Date(nextYear, nextMonth, 1); 
 
+            // Query Firestore
             const q = query(
                 collection(db, "time_entries"),
-                where("employeeId", "==", employeeId), 
+                where("employeeId", "==", employeeData.id), 
                 where("clockInTime", ">=", Timestamp.fromDate(startDate)),
-                // FIX: Includiamo endDate per delimitare l'intervallo 
                 where("clockInTime", "<", Timestamp.fromDate(endDate)),
                 orderBy("clockInTime", "asc")
             );
@@ -508,7 +457,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 return;
             }
 
-            const dataToExport = [];
+            const tableRows = [];
             let totalWorkedMinutes = 0;
 
             querySnapshot.forEach(entryDoc => {
@@ -518,288 +467,228 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 const area = allWorkAreas.find(a => a.id === data.workAreaId);
 
                 let pauseDurationMinutes = 0;
-
                 if (data.pauses && data.pauses.length > 0) {
                     data.pauses.forEach(p => {
                         if (p.start && p.end) {
                             const startMillis = p.start.toMillis ? p.start.toMillis() : new Date(p.start).getTime();
                             const endMillis = p.end.toMillis ? p.end.toMillis() : new Date(p.end).getTime();
-                            pauseDurationMinutes += Math.round((endMillis - startMillis) / 60000); // Minuti
+                            pauseDurationMinutes += Math.round((endMillis - startMillis) / 60000); 
                         }
                     });
                 }
 
+                let totalHoursFormatted = "In corso";
                 if (clockOut) {
                     const totalEntryMinutes = Math.round((clockOut.getTime() - clockIn.getTime()) / 60000);
                     const workedMinutes = totalEntryMinutes - pauseDurationMinutes;
-                    if (workedMinutes > 0) {
-                        totalWorkedMinutes += workedMinutes;
-                    }
+                    if (workedMinutes > 0) totalWorkedMinutes += workedMinutes;
+                    
                     const hours = Math.floor(workedMinutes / 60);
                     const minutes = Math.floor(workedMinutes % 60);
-                    const totalHoursFormatted = clockOut ? `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}` : "In corso";
-
-                    dataToExport.push({
-                        'Dipendente': `${employeeData.name} ${employeeData.surname}`,
-                        'Area': area ? area.name : 'Sconosciuta',
-                        'Data': clockIn.toLocaleDateString('it-IT'),
-                        'Entrata': clockIn.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' }),
-                        'Uscita': clockOut ? clockOut.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' }) : 'In corso',
-                        'Durata Lavorata (h:m)': totalHoursFormatted,
-                        'Pausa Totale (min)': pauseDurationMinutes,
-                        'Manual': data.isManual ? 'SI' : 'NO'
-                    });
+                    totalHoursFormatted = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
                 }
+
+                // Riga Tabella PDF
+                tableRows.push([
+                    clockIn.toLocaleDateString('it-IT'),
+                    clockIn.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
+                    clockOut ? clockOut.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '---',
+                    pauseDurationMinutes > 0 ? `${pauseDurationMinutes} min` : '-',
+                    totalHoursFormatted,
+                    data.isManual ? 'Manuale' : (area ? area.name : 'GPS')
+                ]);
             });
 
-            const totalH = Math.floor(totalWorkedMinutes / 60);
-            const totalM = totalWorkedMinutes % 60;
+            // Calcolo Totale Finale
+            const finalTotalH = Math.floor(totalWorkedMinutes / 60);
+            const finalTotalM = totalWorkedMinutes % 60;
+            const finalTotalString = `${finalTotalH.toString().padStart(2, '0')}:${finalTotalM.toString().padStart(2, '0')}`;
+
+            // --- CREAZIONE PDF ---
+            const doc = new jsPDF();
+            const monthsNames = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
+            const monthName = monthsNames[selectedMonth];
+
+            // 1. Aggiunta Logo
+            try {
+                const img = new Image();
+                img.src = '/icon-192x192.png'; 
+                doc.addImage(img, 'PNG', 14, 10, 30, 30); 
+            } catch (e) {
+                console.warn("Logo non trovato o errore caricamento immagine:", e);
+                doc.setFontSize(10);
+                doc.text("Azienda", 14, 20);
+            }
+
+            // 2. Intestazione Testo
+            doc.setFontSize(16);
+            doc.text(`Report Ore: ${monthName} ${selectedYear}`, 60, 20);
             
-            dataToExport.push({}); 
-            dataToExport.push({
-                'Dipendente': 'TOTALE MESE:',
-                'Area': `${totalH.toString().padStart(2, '0')}:${totalM.toString().padStart(2, '0')}`, 
-                'Data': '',
-                'Entrata': '',
-                'Uscita': '',
-                'Durata Lavorata (h:m)': '',
-                'Pausa Totale (min)': '',
-                'Manual': ''
+            doc.setFontSize(12);
+            doc.text(`Dipendente: ${employeeData.name} ${employeeData.surname}`, 60, 28);
+            doc.text(`Data Stampa: ${new Date().toLocaleDateString('it-IT')}`, 60, 34);
+
+            // 3. Generazione Tabella
+            autoTable(doc, {
+                head: [['Data', 'Entrata', 'Uscita', 'Pausa', 'Totale', 'Note']],
+                body: tableRows,
+                startY: 50,
+                theme: 'striped',
+                headStyles: { fillColor: [41, 128, 185] }, 
+                styles: { fontSize: 10, cellPadding: 3 },
             });
 
-            const ws = utils.json_to_sheet(dataToExport);
-            const wb = utils.book_new();
-            utils.book_append_sheet(wb, ws, "Report Ore");
-            ws['!cols'] = [
-                { wch: 25 }, { wch: 15 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 20 }, { wch: 20 }, { wch: 10 }
-            ];
+            // 4. Piè di pagina: Solo il Totale
+            const finalY = doc.lastAutoTable.finalY + 10;
+            doc.setFontSize(12);
+            doc.setFont(undefined, 'bold');
+            doc.text(`TOTALE ORE LAVORATE: ${finalTotalString}`, 14, finalY);
 
-            writeFile(wb, `Report_${employeeData.surname}_${selectedMonth + 1}_${selectedYear}.xlsx`);
+            // 5. Salvataggio
+            doc.save(`Report_${employeeData.surname}_${monthName}_${selectedYear}.pdf`);
 
         } catch (error) {
-            console.error("Errore durante la generazione del Report Excel:", error);
-            alert("Si è verificato un errore durante la generazione del report.");
+            console.error("Errore generazione PDF:", error);
+            alert("Si è verificato un errore durante la generazione del PDF.");
         } finally {
             setIsGenerating(false);
         }
     };
-    // Fine funzione generazione Excel
 
 
-    // Render iniziale se mancano dati dipendente
+    // Render iniziale
     if (!employeeData) return <div className="min-h-screen flex items-center justify-center">Caricamento dipendente...</div>;
 
     const months = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
-    const years = [new Date().getFullYear(), new Date().getFullYear() - 1]; // Anno corrente e precedente
+    const years = [new Date().getFullYear(), new Date().getFullYear() - 1]; 
 
-    
-    // Messaggio Dispositivo/Reset (AGGIORNATO - CONCISEZZA E CENTRATURA)
+    // Messaggio Dispositivo
     const renderDeviceMessage = () => {
         const MAX_DEVICES = 2; 
         const currentDeviceIds = employeeData.deviceIds || [];
         const currentDeviceCount = currentDeviceIds.length;
-        
         const isCurrentDeviceAuthorized = currentDeviceIds.includes(deviceId);
         const isLimitReached = currentDeviceCount >= MAX_DEVICES;
 
-        // --- CASO 1: Dispositivo Autorizzato  ---
         if (currentDeviceCount === 0 || isCurrentDeviceAuthorized) {
             return (
                 <div className={`p-4 mb-4 rounded-lg shadow-sm bg-blue-100 border-l-4 border-blue-500 text-blue-700 text-center`} role="alert"> 
-                    <p className="font-bold">
-                        Stato Dispositivo: {currentDeviceCount} / {MAX_DEVICES} registrati
-                    </p>
-                    {isLimitReached ? (
-                         <p className="text-xs font-semibold mt-1">
-                             Raggiunto il limite. In caso di guasto o cambio dispositivo, contatta il Preposto o l'Admin per il **reset**.
-                         </p>
-                    ) : (
-                         <p className="text-xs font-semibold mt-1">
-                             Dispositivo autorizzato. Puoi procedere con le timbrature.
-                         </p>
-                    )}
+                    <p className="font-bold">Stato Dispositivo: {currentDeviceCount} / {MAX_DEVICES} registrati</p>
+                    {isLimitReached ? <p className="text-xs font-semibold mt-1">Limite raggiunto. Per reset contattare Admin.</p> : <p className="text-xs font-semibold mt-1">Dispositivo autorizzato.</p>}
                 </div>
             );
         }
-        
-        // --- CASO 2: Blocco Raggiunto Limite e Dispositivo NON Autorizzato ---
         if (isLimitReached && !isCurrentDeviceAuthorized) {
              return (
                  <div className={`p-4 mb-4 rounded-lg shadow-sm bg-red-100 border-l-4 border-red-500 text-red-700 text-center`} role="alert">
-                     <p className="font-bold">
-                         ❌ TIMBRATURA BLOCCATA
-                     </p>
-                     <p className="text-sm font-semibold mt-1">
-                         Raggiunto il limite ({MAX_DEVICES}). Contatta il Preposto/Admin per il **reset**.
-                     </p>
+                     <p className="font-bold">❌ TIMBRATURA BLOCCATA</p>
+                     <p className="text-sm font-semibold mt-1">Limite dispositivi raggiunto.</p>
                  </div>
              );
         }
-        
         return null;
     }; 
     
-    // --- Componente di stato GPS/Area ---
+    // Componente GPS/Area
     const GpsAreaStatusBlock = () => {
         if (employeeWorkAreas.length === 0) {
-            if (isGpsRequired) {
-                 return <div className="bg-white p-4 rounded-lg shadow-md mb-6"><p className="text-sm text-red-500 mt-2 text-center">❌ Controllo GPS richiesto ma nessuna area assegnata.</p></div>
-            } else {
-                 return null; 
-            }
+            if (isGpsRequired) return <div className="bg-white p-4 rounded-lg shadow-md mb-6"><p className="text-sm text-red-500 mt-2 text-center">❌ Controllo GPS richiesto ma nessuna area assegnata.</p></div>
+            else return null; 
         }
-        
         return (
             <div className="bg-white p-4 rounded-lg shadow-md mb-6">
-                <h2 className="text-xl font-bold mb-3 text-center">Stato Posizione Richiesto</h2>
+                <h2 className="text-xl font-bold mb-3 text-center">Stato Posizione</h2>
                 {isGpsRequired ? (
-                    // Blocco per utenti con GPS OBBLIGATORIO
                     <>
                         {locationError && <p className="text-sm text-red-500 mt-2 text-center">{locationError}</p>}
                         {!locationError && (
-                            inRangeArea ? (
-                                <p className="text-base text-green-600 font-semibold mt-2 text-center">✅ Area rilevata: <br/><strong>{inRangeArea.name}</strong></p>
-                            ) : (
-                                <p className="text-base text-gray-500 font-semibold mt-2 text-center">❌ Nessuna area nelle vicinanze o GPS in attesa.</p>
-                            )
+                            inRangeArea ? <p className="text-base text-green-600 font-semibold mt-2 text-center">✅ Area rilevata: <br/><strong>{inRangeArea.name}</strong></p> : <p className="text-base text-gray-500 font-semibold mt-2 text-center">❌ Nessuna area nelle vicinanze o GPS in attesa.</p>
                         )}
                     </>
                 ) : (
-                    // Blocco per utenti ESENTI da GPS
                     <>
                         {employeeWorkAreas.length > 0 ? (
-                            <p className="text-base text-blue-600 font-semibold mt-2 text-center">
-                                Controllo GPS non richiesto.<br/>
-                                Area predefinita: <strong>{employeeWorkAreas[0].name}</strong>
-                            </p>
-                        ) : (
-                            <p className="text-sm text-red-500 font-semibold mt-2 text-center">
-                                ❌ Non sei assegnato a nessuna area.
-                            </p>
-                        )}
+                            <p className="text-base text-blue-600 font-semibold mt-2 text-center">GPS non richiesto.<br/>Area predefinita: <strong>{employeeWorkAreas[0].name}</strong></p>
+                        ) : <p className="text-sm text-red-500 font-semibold mt-2 text-center">❌ Non sei assegnato a nessuna area.</p>}
                     </>
                 )}
             </div>
         );
     };
-    // --- Fine Componente di stato GPS/Area ---
 
-
-    // Render del componente
     return (
-        // CONTENITORE ESTERNO: Aggiunto mx-auto per centrare il blocco max-w-lg
         <div className="p-4 max-w-lg mx-auto font-sans bg-gray-50 min-h-screen flex flex-col">
             <CompanyLogo />
-            
-            {/* Box Messaggio Dispositivo (DINAMICO) */}
             {renderDeviceMessage()}
 
-            {/* Box Orario e Info Dipendente */}
             <div className="text-center my-4 p-4 bg-white rounded-lg shadow-sm">
                 <p>Dipendente: <span className="font-semibold">{employeeData.name} {employeeData.surname}</span></p>
                 <p className="text-4xl font-bold">{currentTime.toLocaleTimeString('it-IT')}</p>
                 <p className="text-lg text-gray-500">{currentTime.toLocaleDateString('it-IT', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
             </div>
 
-            {/* BLOCCO DI STATO AREA/GPS */}
             <GpsAreaStatusBlock />
             
-
-            {/* Box Stato Timbratura e Azioni */}
             <div className="bg-white p-4 rounded-lg shadow-md mb-6">
                 <h2 className="text-xl font-bold mb-3 preposto-center text-center">Azioni Rapide</h2>
-                {activeEntry ? ( // Se l'utente è timbrato
+                {activeEntry ? ( 
                     <div>
                         <p className="text-center text-green-600 font-semibold text-lg mb-4">Timbratura ATTIVA su: <span className="font-bold">{workAreaName}</span></p>
                         
-                        {/* SEMAFORO QUANDO ATTIVO: 3 pulsanti */}
+                        {/* --- LAYOUT SEMAFORO ORIGINALE (GRID-COLS-3) --- */}
                         <div className="grid grid-cols-3 gap-3">
 
-                            {/* 1. PAUSA (Solo Inizio Pausa, Disabilitato se in Pausa o Pausa Effettuata) */}
+                            {/* 1. PAUSA */}
                             <button
                                 onClick={() => handleAction('clockPause')} 
-                                // Disabilitato se: Active, in attesa di risposta server (isProcessing/isPauseAttempted), o GIA' COMPLETATA
-                                disabled={isProcessing || pauseStatus !== 'NONE' || !deviceId || (employeeData.deviceIds?.length >= 2 && !employeeData.deviceIds?.includes(deviceId))} // Aggiunto controllo Device ID
+                                disabled={isProcessing || pauseStatus !== 'NONE' || !deviceId || (employeeData.deviceIds?.length >= 2 && !employeeData.deviceIds?.includes(deviceId))} 
                                 className={`w-full font-bold rounded-lg shadow-lg transition-colors py-4 text-white ${
-                                    pauseStatus !== 'NONE' // <-- USA pauseStatus
-                                        ? 'bg-gray-400' // GRIGIO se Pausa Attiva/Effettuata (bloccato)
-                                        : 'bg-orange-500 hover:bg-orange-600' // ARANCIONE per INIZIARE PAUSA
+                                    pauseStatus !== 'NONE' ? 'bg-gray-400' : 'bg-orange-500 hover:bg-orange-600' 
                                 } disabled:opacity-50 disabled:cursor-not-allowed`}
                             >
                                 <div className="text-2xl leading-none">🟡</div>
-                                <span className="text-sm block mt-1">{pauseStatus === 'ACTIVE' 
-                                        ? 'PAUSA ATTIVA' 
-                                        : pauseStatus === 'COMPLETED' 
-                                            ? 'PAUSA EFFETTUATA' 
-                                            : 'INIZIA PAUSA'} 
-                                </span>
+                                <span className="text-sm block mt-1">{pauseStatus === 'ACTIVE' ? 'PAUSA ATTIVA' : pauseStatus === 'COMPLETED' ? 'PAUSA EFFETTUATA' : ''}</span>
                             </button>
 
-
-                            {/* 2. TIMBRATURA (Visualizzazione Stato) */}
-                            <div
-                                className={`w-full font-bold rounded-lg shadow-lg text-white text-center py-4 ${
-                                    isInPause ? 'bg-orange-600' : 'bg-green-600'
-                                }`}
-                            >
+                            {/* 2. IN CORSO */}
+                            <div className={`w-full font-bold rounded-lg shadow-lg text-white text-center py-4 ${isInPause ? 'bg-orange-600' : 'bg-green-600'}`}>
                                 <div className="text-2xl leading-none">🟢</div>
                                 <span className="text-sm block mt-1">{isInPause ? 'IN PAUSA' : 'IN CORSO'}</span>
                             </div>
 
-                            {/* 3. USCITA (ROSSO) */}
+                            {/* 3. USCITA */}
                             <button
                                 onClick={() => handleAction('clockOut')}
-                                // L'uscita è permessa anche se in pausa
-                                disabled={isProcessing || (isGpsRequired && !inRangeArea) || !deviceId || (employeeData.deviceIds?.length >= 2 && !employeeData.deviceIds?.includes(deviceId))} // Aggiunto controllo Device ID
+                                disabled={isProcessing || (isGpsRequired && !inRangeArea) || !deviceId || (employeeData.deviceIds?.length >= 2 && !employeeData.deviceIds?.includes(deviceId))}
                                 className={`w-full font-bold rounded-lg shadow-lg text-white transition-colors py-4 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed`}
                             >
                                 <div className="text-2xl leading-none">🔴</div>
                                 <span className="text-sm block mt-1">TIMBRA USCITA</span>
                             </button>
                         </div>
-
                     </div>
-                ) : ( // Se l'utente NON è timbrato
+                ) : ( 
                     <div>
                         <p className="text-center text-red-600 font-semibold text-lg">Timbratura NON ATTIVA</p>
-                        
-                        {/* === SELEZIONE AREA PER UTENTI SENZA GPS === */}
                         {!isGpsRequired && (
                             <div className="mb-4">
-                                <label htmlFor="manualArea" className="block text-sm font-medium text-gray-700 mb-1">
-                                    Seleziona Area di Lavoro:
-                                </label>
-                                <select
-                                    id="manualArea"
-                                    value={manualAreaId}
-                                    onChange={(e) => setManualAreaId(e.target.value)}
-                                    className="p-2 border border-gray-300 rounded-md w-full text-sm bg-white"
-                                >
+                                <label htmlFor="manualArea" className="block text-sm font-medium text-gray-700 mb-1">Seleziona Area di Lavoro:</label>
+                                <select id="manualArea" value={manualAreaId} onChange={(e) => setManualAreaId(e.target.value)} className="p-2 border border-gray-300 rounded-md w-full text-sm bg-white">
                                     <option value="">-- Seleziona un'area --</option>
-                                    {/* Aggiungiamo l'area fittizia "Manutenzione" */}
                                     <option value="Manutenzione_Fittizia">Manutenzione (Sede/Generico)</option> 
-                                    
-                                    {/* Mappa le aree assegnate al dipendente */}
-                                    {employeeWorkAreas.map(area => (
-                                        <option key={area.id} value={area.id}>
-                                            {area.name}
-                                        </option>
-                                    ))}
+                                    {employeeWorkAreas.map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}
                                 </select>
                             </div>
                         )}
-                        {/* ========================================= */}
-
-                        {/* Pulsante Entrata UNICO (VERDE) */}
                         <button
                             onClick={() => handleAction('clockIn')}
                             disabled={
                                 isProcessing || 
                                 (isGpsRequired && !inRangeArea) || 
-                                (!isGpsRequired && !manualAreaId) || // <-- BLOCCO AGGIUNTO QUI
+                                (!isGpsRequired && !manualAreaId) || 
                                 (!isGpsRequired && employeeWorkAreas.length === 0 && manualAreaId === "") ||
-                                (!deviceId) || // <-- CONTROLLO DEVICE ID PRESENTE
-                                (employeeData.deviceIds?.length >= 2 && !employeeData.deviceIds?.includes(deviceId)) // <-- CONTROLLO LIMITE DEVICE
+                                (!deviceId) || 
+                                (employeeData.deviceIds?.length >= 2 && !employeeData.deviceIds?.includes(deviceId))
                             }
                             className={`w-full mt-4 text-2xl font-bold py-6 px-4 rounded-lg shadow-lg text-white transition-colors bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed`}
                         >
@@ -809,7 +698,6 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 )}
             </div>
             
-            {/* Box Cronologia Odierna */}
             <div className="bg-white p-4 rounded-lg shadow-md mb-6">
                 <h2 className="text-xl font-bold mb-3 text-center">Timbrature di Oggi</h2>
                 <div className="space-y-2 max-h-40 overflow-y-auto">
@@ -819,61 +707,37 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                                 <span className="font-medium">Entrata:</span> {entry.clockInTime.toDate().toLocaleTimeString('it-IT', { hour:'2-digit', minute:'2-digit' })}
                                 <span className="ml-2 font-medium">Uscita:</span> {entry.clockOutTime ? entry.clockOutTime.toDate().toLocaleTimeString('it-IT', { hour:'2-digit', minute:'2-digit' }) : '...'}
                             </p>
-                            {entry.pauses && entry.pauses.length > 0 && (
-                                <ul className="text-xs text-gray-500 pl-4 list-disc text-left mx-auto max-w-fit">
-                                    {entry.pauses.map((p, index) => (
-                                        <li key={index}>
-                                            Pausa {index + 1}: {p.start.toDate().toLocaleTimeString('it-IT', { hour:'2-digit', minute:'2-digit' })} - {p.end ? p.end.toDate().toLocaleTimeString('it-IT', { hour:'2-digit', minute:'2-digit' }) : 'in corso'}
-                                            {p.isAutomatic && p.durationMinutes && ` (${p.durationMinutes} min)`}
-                                        </li>
-                                    ))}
-                                </ul>
-                            )}
                         </div>
                     )) : <p className="text-sm text-gray-500 text-center">Nessuna timbratura trovata per oggi.</p>}
                 </div>
             </div>
 
-            {/* Box Report Mensile Excel */}
+            {/* === BOX REPORT PDF (SOSTITUISCE QUELLO EXCEL) === */}
             <div className="bg-white p-4 rounded-lg shadow-md mb-6">
-                <h2 className="text-xl font-bold mb-3 text-center">Report Mensile Excel</h2>
+                <h2 className="text-xl font-bold mb-3 text-center">Report Mensile PDF</h2>
                 <div className="grid grid-cols-2 gap-4 mb-4">
-                    {/* Select Mese */}
                     <div>
-                        <label htmlFor="month-select" className="block text-sm font-medium text-gray-700">Mese</label>
-                        <select
-                            id="month-select"
-                            value={selectedMonth}
-                            onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-                            className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
-                        >
+                        <label className="block text-sm font-medium text-gray-700">Mese</label>
+                        <select value={selectedMonth} onChange={(e) => setSelectedMonth(parseInt(e.target.value))} className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white">
                             {months.map((month, index) => (<option key={index} value={index}>{month}</option>))}
                         </select>
                     </div>
-                    {/* Select Anno */}
                     <div>
-                         <label htmlFor="year-select" className="block text-sm font-medium text-gray-700">Anno</label>
-                        <select
-                            id="year-select"
-                            value={selectedYear}
-                            onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                            className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
-                        >
+                         <label className="block text-sm font-medium text-gray-700">Anno</label>
+                        <select value={selectedYear} onChange={(e) => setSelectedYear(parseInt(e.target.value))} className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white">
                             {years.map(year => (<option key={year} value={year}>{year}</option>))}
                         </select>
                     </div>
                 </div>
-                {/* Pulsante Scarica Report */}
                 <button
-                    onClick={handleExportExcel}
+                    onClick={handleExportPDF}
                     disabled={isGenerating}
-                    className="w-full text-lg font-bold py-3 px-4 rounded-lg shadow-md text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full text-lg font-bold py-3 px-4 rounded-lg shadow-md text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                    {isGenerating ? 'Generazione in corso...' : 'Scarica Report Excel'}
+                    {isGenerating ? 'Generazione...' : 'Scarica Report PDF'}
                 </button>
             </div>
 
-            {/* Pulsante Logout in fondo */}
             <button onClick={handleLogout} className="w-full mt-auto px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600">Logout</button>
         </div>
     );
