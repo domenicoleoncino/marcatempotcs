@@ -612,7 +612,6 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
 };
 
 const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
-    // ... [Logica omessa per brevità] ...
     <div>
         <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Gestione Aree di Lavoro</h1>
@@ -1138,6 +1137,20 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         }
         return filterableItems;
     }, [managedEmployees, activeEmployeesDetails, searchTerm, allWorkAreas, sortConfig]);
+
+    
+    // === FILTRO AREE VISIBILI (Nuova Aggiunta per Preposto) ===
+    const visibleWorkAreas = useMemo(() => {
+        if (currentUserRole === 'admin') {
+            return workAreasWithHours;
+        }
+        if (currentUserRole === 'preposto') {
+            const managedAreaIds = userData?.managedAreaIds || [];
+            // Filtra solo le aree che il preposto gestisce
+            return workAreasWithHours.filter(area => managedAreaIds.includes(area.id));
+        }
+        return [];
+    }, [workAreasWithHours, currentUserRole, userData]);
 
 
     // --- LISTENER TIMBRATURE ATTIVE E PENDING REQUESTS (ROBUSTO con isMounted) ---
@@ -1790,7 +1803,8 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                         handleEmployeePauseClick={handleEmployeePauseClick} 
                     />}
                     
-                    {view === 'areas' && <AreaManagementView workAreas={workAreasWithHours} openModal={openModal} currentUserRole={currentUserRole} />}
+                    {/* --- QUI USIAMO LA LISTA FILTRATA 'visibleWorkAreas' --- */}
+                    {view === 'areas' && <AreaManagementView workAreas={visibleWorkAreas} openModal={openModal} currentUserRole={currentUserRole} />}
                     
                     {view === 'admins' && currentUserRole === 'admin' && <AdminManagementView admins={admins} openModal={openModal} user={user} superAdminEmail={superAdminEmail} currentUserRole={currentUserRole} onDataUpdate={fetchData} />}
                     
