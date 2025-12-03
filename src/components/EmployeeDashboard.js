@@ -283,17 +283,14 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                     areaIdToClockIn = inRangeArea.id;
                 } else {
                     areaIdToClockIn = manualAreaId;
-                    note = 'Entrata senza GPS (Manutentore)';
                     
                     if (!areaIdToClockIn) {
                         throw new Error("Seleziona un'area di lavoro per la timbratura manuale.");
                     }
-                    if (areaIdToClockIn === "Manutenzione_Fittizia") {
-                         note = 'Entrata Manutenzione (Generico/Sede)';
-                    } else {
-                         const selectedArea = employeeWorkAreas.find(a => a.id === areaIdToClockIn);
-                         note = `Entrata Manuale su Area: ${selectedArea ? selectedArea.name : 'Sconosciuta'}`;
-                    }
+
+                    // --- MODIFICA: RIMOSSA LOGICA FITTIZIA, ORA SI USA L'AREA REALE ---
+                    const selectedArea = employeeWorkAreas.find(a => a.id === areaIdToClockIn);
+                    note = `Entrata Manuale su Area: ${selectedArea ? selectedArea.name : 'Sconosciuta'}`;
                 }
                 
                 result = await clockIn({ 
@@ -682,7 +679,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                                 <label htmlFor="manualArea" className="block text-sm font-medium text-gray-700 mb-1">Seleziona Area di Lavoro:</label>
                                 <select id="manualArea" value={manualAreaId} onChange={(e) => setManualAreaId(e.target.value)} className="p-2 border border-gray-300 rounded-md w-full text-sm bg-white">
                                     <option value="">-- Seleziona un'area --</option>
-                                    <option value="Manutenzione_Fittizia">Manutenzione (Sede/Generico)</option> 
+                                    {/* RIMOSSA L'OPZIONE FITTIZIA "MANUTENZIONE" */}
                                     {employeeWorkAreas.map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}
                                 </select>
                             </div>
