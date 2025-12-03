@@ -1,4 +1,4 @@
-// File: src/js/components/AdminModal.js (Corretto per distinguere adminClockIn vs adminClockOut)
+// File: src/js/components/AdminModal.js
 /* eslint-disable no-unused-vars */
 
 import React, { useState, useEffect } from 'react';
@@ -11,7 +11,7 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 // e sono replicate qui solo per evitare errori di linting in ambienti che compilano i file isolati.
 // ==================================================================================================
 
-const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, allEmployees, userData, onAdminClockIn, onAdminApplyPause, showNotification }) => { // FIX: showNotification aggiunto qui
+const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, allEmployees, userData, onAdminClockIn, onAdminApplyPause, showNotification }) => {
 
     // Stati generici per i form
     const [formData, setFormData] = useState({});
@@ -200,6 +200,8 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
         setIsLoading(true);
         setError('');
 
+        // NOTA: Manteniamo questa variabile per sicurezza, ma la logica principale
+        // per manualClockIn ora userà direttamente la conversione Date -> toISOString().
         let manualTime = formData.manualTime;
         if (manualTime) {
              manualTime = manualTime.substring(0, 16); 
@@ -228,7 +230,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                     // Logica omessa
                     break;
                 case 'prepostoAddEmployeeToAreas':
-                    // Questo caso non dovrebbe essere raggiunto
                     console.warn("Tentativo di eseguire prepostoAddEmployeeToAreas dalla modale (obsoleto).");
                     throw new Error("Si prega di usare il form in-line per questa azione.");
                 
@@ -257,7 +258,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                      const pauseDuration = Number(formData.pauseDuration || 0);
                      if (isNaN(pauseDuration) || pauseDuration < 0) { throw new Error('Durata pausa deve essere un numero positivo o zero.'); }
                      await updateDoc(doc(db, "work_areas", item.id), { pauseDuration: pauseDuration });
-                     break; // Success message handled at the end
+                     break; 
                 case 'deleteArea':
                     await deleteDoc(doc(db, "work_areas", item.id));
                     break;
@@ -281,6 +282,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                      break;
 
                 // --- TIMBRATURE MANUALI ---
+                // MODIFICA APPLICATA QUI: Conversione in UTC per fixare fuso orario (+1 ora)
                 case 'manualClockIn':
                 case 'adminClockIn': 
                 case 'manualClockOut':
@@ -290,7 +292,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                     const isClockOut = type === 'manualClockOut' || type === 'adminClockOut'; 
 
                     if (!formData.selectedAreaId && isClockIn) throw new Error('Seleziona un\'area.');
-                    if (!manualTime) throw new Error('Seleziona un orario.');
+                    if (!formData.manualTime) throw new Error('Seleziona un orario.');
                     
                     const isNoteRequired = type === 'adminClockIn' || type === 'adminClockOut'; 
                     if (isNoteRequired && !formData.note) {
@@ -299,13 +301,28 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
 
                     if (!user.uid) throw new Error("Utente non autenticato.");
 
+                    // *** INIZIO CORREZIONE FUSO ORARIO ***
+                    // 1. Creiamo un oggetto Date basato sull'input del browser.
+                    // Il browser sa che "2025-12-02T10:00" inserito qui equivale all'ora locale.
+                    const localDateObj = new Date(formData.manualTime);
+                    
+                    // 2. Controllo validità data
+                    if (isNaN(localDateObj.getTime())) {
+                        throw new Error("L'orario inserito non è valido.");
+                    }
+
+                    // 3. Convertiamo in stringa ISO UTC completa (es. ...T09:00:00.000Z)
+                    // In questo modo inviamo al server l'istante esatto universale, evitando la doppia conversione locale.
+                    const utcIsoString = localDateObj.toISOString(); 
+                    // *** FINE CORREZIONE FUSO ORARIO ***
+
                     const functionName = isClockIn ? 'manualClockIn' : 'manualClockOut';
                     const clockFunction = httpsCallable(functions, functionName);
                     
                     const payload = {
                         employeeId: formData.selectedEmployeeId, 
                         workAreaId: isClockIn ? formData.selectedAreaId : undefined,
-                        timestamp: manualTime, 
+                        timestamp: utcIsoString, // <--- INVIAMO LA DATA GIA' CONVERTITA IN UTC
                         note: formData.note, 
                         adminId: user.uid,
                         timezone: clientTimezone,
