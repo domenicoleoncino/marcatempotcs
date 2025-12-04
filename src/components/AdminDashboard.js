@@ -833,7 +833,7 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
                                         {entry.skippedBreak ? (
                                             entry.skipBreakStatus === 'pending' ? (
                                                 <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800 animate-pulse">
-                                                    ⚠️ In Attesa Verifica
+                                                   ⚠️ In Attesa Verifica
                                                 </span>
                                             ) : entry.skipBreakStatus === 'approved' ? (
                                                 <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">

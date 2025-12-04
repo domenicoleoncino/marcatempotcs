@@ -288,7 +288,6 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                         throw new Error("Seleziona un'area di lavoro per la timbratura manuale.");
                     }
 
-                    // --- MODIFICA: RIMOSSA LOGICA FITTIZIA, ORA SI USA L'AREA REALE ---
                     const selectedArea = employeeWorkAreas.find(a => a.id === areaIdToClockIn);
                     note = `Entrata Manuale su Area: ${selectedArea ? selectedArea.name : 'Sconosciuta'}`;
                 }
@@ -428,7 +427,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
 
 
     // ========================================================
-    // --- 2. FUNZIONE GENERAZIONE PDF (NUOVA) ---
+    // --- 2. FUNZIONE GENERAZIONE PDF IBRIDA (DOWNLOAD + SHARE) ---
     // ========================================================
     const handleExportPDF = async () => {
         setIsGenerating(true);
@@ -548,8 +547,34 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             doc.setFont(undefined, 'bold');
             doc.text(`TOTALE ORE LAVORATE: ${finalTotalString}`, 14, finalY);
 
-            // 5. Salvataggio
-            doc.save(`Report_${employeeData.surname}_${monthName}_${selectedYear}.pdf`);
+            // 5. Salvataggio IBRIDO (Share per Mobile, Save per PC)
+            const fileName = `Report_${employeeData.surname}_${monthName}_${selectedYear}.pdf`;
+            
+            // Tenta la Condivisione Nativa (Android/iOS)
+            let shared = false;
+            if (navigator.share && navigator.canShare) {
+                try {
+                    const blob = doc.output('blob');
+                    const file = new File([blob], fileName, { type: "application/pdf" });
+                    const data = {
+                        files: [file],
+                        title: 'Report Ore',
+                        text: `Report ore mensile di ${employeeData.name} ${employeeData.surname}`
+                    };
+                    
+                    if (navigator.canShare(data)) {
+                        await navigator.share(data);
+                        shared = true;
+                    }
+                } catch (shareError) {
+                    console.warn("Condivisione annullata o non supportata, provo download classico:", shareError);
+                }
+            }
+
+            // Fallback: Download classico (PC / Browser) se la condivisione non è partita
+            if (!shared) {
+                doc.save(fileName);
+            }
 
         } catch (error) {
             console.error("Errore generazione PDF:", error);
