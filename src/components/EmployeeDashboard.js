@@ -7,18 +7,19 @@ import { collection, query, where, onSnapshot, orderBy, getDocs, Timestamp, limi
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import CompanyLogo from './CompanyLogo';
 
-// === MODIFICA: IMPORTAZIONI PER PDF INVECE DI EXCEL ===
+// === IMPORTAZIONI PER PDF E FILESYSTEM ===
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { Filesystem, Directory } from '@capacitor/filesystem'; // <--- NUOVA IMPORTAZIONE
 
 // ===========================================
-// --- 1. FUNZIONE UTILITY DEVICE ID ---
+// --- 1. FUNZIONI UTILITY ---
 // ===========================================
 function getOrGenerateDeviceId() {
     let deviceId = localStorage.getItem('marcatempoDeviceId'); 
     
     if (!deviceId) {
-        // Genera un ID pseudo-univoco
+        // Genera un ID pseudo-univoco se non esiste
         deviceId = (Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)).toUpperCase();
         localStorage.setItem('marcatempoDeviceId', deviceId);
     }
@@ -37,7 +38,7 @@ function getDistanceInMeters(lat1, lon1, lat2, lon2) {
     return R * c; // Distanza in metri
 }
 
-// === MOTIVI DI MANCATA PAUSA STRUTTURATI E SEMPLIFICATI ===
+// === MOTIVI DI MANCATA PAUSA ===
 const PAUSE_REASONS = [
     { code: '01', reason: 'Mancata pausa per intervento urgente.' },
     { code: '02', reason: 'Mancata pausa per ore non complete.' },
@@ -63,7 +64,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     // Stati per report PDF
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-    const [isGenerating, setIsGenerating] = useState(false); // Stato caricamento PDF
+    const [isGenerating, setIsGenerating] = useState(false); 
 
     // Funzioni Cloud Firebase
     const functions = getFunctions(undefined, 'europe-west1');
@@ -325,7 +326,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 const currentArea = allWorkAreas.find(a => a.id === currentActiveEntry.workAreaId);
                 const pauseDuration = currentArea?.pauseDuration || 0;
                 
-                // === NUOVA LOGICA: VERIFICA PAUSA NON GODUTA ===
+                // === VERIFICA PAUSA NON GODUTA ===
                 if (pauseDuration > 0 && pauseStatus !== 'COMPLETED') { 
                     const reasonOptions = PAUSE_REASONS.map((r, i) => `${i + 1} - ${r.reason}`).join('\n');
                     const confirmExit = window.confirm(
@@ -363,7 +364,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
 
                 result = await clockOut({ 
                     note: finalNoteText, 
-                    pauseSkipReason: finalReasonCode, // Invia il codice del motivo
+                    pauseSkipReason: finalReasonCode, 
                     deviceId: deviceId,
                     isGpsRequired: isGpsRequiredCheck, 
                     currentLat: currentLat, 
@@ -372,7 +373,6 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 
                 if (result.data.success) {
                     playSound('clock_out'); 
-                    // Messaggio di successo condizionale (Logica Prudente)
                     let successMessage = result.data.message || 'Timbratura di uscita registrata.';
                     if (finalReasonCode) {
                         successMessage += '\n\n⚠️ NOTA IMPORTANTE: Hai dichiarato di non aver fatto pausa. La richiesta è IN ATTESA DI APPROVAZIONE dal tuo responsabile.\nFino all\'approvazione, le ore di pausa verranno scalate cautelativamente.';
@@ -412,7 +412,6 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             }
 
             if ((action === 'clockPause' || action === 'clockOut') && result?.data?.message) {
-                // Se c'è un messaggio ma l'operazione non è un successo pieno (gestito sopra)
                 if (!result.data.success) alert(result.data.message);
             }
 
@@ -427,7 +426,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
 
 
     // ========================================================
-    // --- 2. FUNZIONE GENERAZIONE PDF IBRIDA (DOWNLOAD + SHARE) ---
+    // --- 2. FUNZIONE GENERAZIONE PDF (VERSIONE FILESYSTEM) ---
     // ========================================================
     const handleExportPDF = async () => {
         setIsGenerating(true);
@@ -512,73 +511,77 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             const monthsNames = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
             const monthName = monthsNames[selectedMonth];
 
-            // 1. Aggiunta Logo
+            // 1. Aggiunta Logo (Gestione Asincrona per Mobile)
             try {
                 const img = new Image();
                 img.src = '/icon-192x192.png'; 
-                doc.addImage(img, 'PNG', 14, 10, 30, 30); 
+                await new Promise((resolve) => {
+                    img.onload = () => {
+                        doc.addImage(img, 'PNG', 14, 10, 20, 20); 
+                        resolve();
+                    };
+                    img.onerror = () => {
+                        console.warn("Logo non caricato, proseguo senza.");
+                        resolve(); 
+                    };
+                });
             } catch (e) {
-                console.warn("Logo non trovato o errore caricamento immagine:", e);
-                doc.setFontSize(10);
-                doc.text("Azienda", 14, 20);
+                console.warn("Errore logo:", e);
             }
 
             // 2. Intestazione Testo
             doc.setFontSize(16);
-            doc.text(`Report Ore: ${monthName} ${selectedYear}`, 60, 20);
+            doc.text(`Report Ore: ${monthName} ${selectedYear}`, 40, 20);
             
             doc.setFontSize(12);
-            doc.text(`Dipendente: ${employeeData.name} ${employeeData.surname}`, 60, 28);
-            doc.text(`Data Stampa: ${new Date().toLocaleDateString('it-IT')}`, 60, 34);
+            doc.text(`Dipendente: ${employeeData.name} ${employeeData.surname}`, 40, 28);
+            doc.text(`Data Stampa: ${new Date().toLocaleDateString('it-IT')}`, 40, 34);
 
             // 3. Generazione Tabella
             autoTable(doc, {
                 head: [['Data', 'Entrata', 'Uscita', 'Pausa', 'Totale', 'Note']],
                 body: tableRows,
-                startY: 50,
+                startY: 45,
                 theme: 'striped',
                 headStyles: { fillColor: [41, 128, 185] }, 
-                styles: { fontSize: 10, cellPadding: 3 },
+                styles: { fontSize: 9, cellPadding: 2 }, 
             });
 
-            // 4. Piè di pagina: Solo il Totale
+            // 4. Piè di pagina
             const finalY = doc.lastAutoTable.finalY + 10;
             doc.setFontSize(12);
             doc.setFont(undefined, 'bold');
             doc.text(`TOTALE ORE LAVORATE: ${finalTotalString}`, 14, finalY);
 
-            // 5. Salvataggio IBRIDO (Share per Mobile, Save per PC)
+            // 5. Salvataggio Compatibile Android (Capacitor Filesystem)
             const fileName = `Report_${employeeData.surname}_${monthName}_${selectedYear}.pdf`;
             
-            // Tenta la Condivisione Nativa (Android/iOS)
-            let shared = false;
-            if (navigator.share && navigator.canShare) {
-                try {
-                    const blob = doc.output('blob');
-                    const file = new File([blob], fileName, { type: "application/pdf" });
-                    const data = {
-                        files: [file],
-                        title: 'Report Ore',
-                        text: `Report ore mensile di ${employeeData.name} ${employeeData.surname}`
-                    };
-                    
-                    if (navigator.canShare(data)) {
-                        await navigator.share(data);
-                        shared = true;
-                    }
-                } catch (shareError) {
-                    console.warn("Condivisione annullata o non supportata, provo download classico:", shareError);
-                }
-            }
+            try {
+                // Ottieni la stringa Base64 completa direttamente da jsPDF
+                const base64String = doc.output('datauristring');
+                
+                // Rimuovi l'intestazione (es: "data:application/pdf;base64,") per ottenere solo i dati puri
+                const base64Data = base64String.split(',')[1];
 
-            // Fallback: Download classico (PC / Browser) se la condivisione non è partita
-            if (!shared) {
+                // Scrivi il file nella cartella Documenti pubblica
+                await Filesystem.writeFile({
+                    path: fileName,
+                    data: base64Data,
+                    directory: Directory.Documents
+                });
+
+                // Avvisa l'utente
+                alert(`✅ Report salvato con successo!\n\n📂 Posizione: Cartella "Documenti" del telefono.\n📄 Nome file: ${fileName}`);
+
+            } catch (fsError) {
+                console.error("Errore salvataggio Filesystem, tentativo fallback:", fsError);
+                // Fallback: prova il download classico del browser (per test su PC)
                 doc.save(fileName);
             }
 
         } catch (error) {
             console.error("Errore generazione PDF:", error);
-            alert("Si è verificato un errore durante la generazione del PDF.");
+            alert("Errore generazione PDF: " + error.message);
         } finally {
             setIsGenerating(false);
         }
@@ -659,14 +662,12 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             <GpsAreaStatusBlock />
             
             <div className="bg-white p-4 rounded-lg shadow-md mb-6">
-                <h2 className="text-xl font-bold mb-3 preposto-center text-center">Azioni Rapide</h2>
+                <h2 className="text-xl font-bold mb-3 text-center">Azioni Rapide</h2>
                 {activeEntry ? ( 
                     <div>
                         <p className="text-center text-green-600 font-semibold text-lg mb-4">Timbratura ATTIVA su: <span className="font-bold">{workAreaName}</span></p>
                         
-                        {/* --- LAYOUT SEMAFORO ORIGINALE (GRID-COLS-3) --- */}
                         <div className="grid grid-cols-3 gap-3">
-
                             {/* 1. PAUSA */}
                             <button
                                 onClick={() => handleAction('clockPause')} 
@@ -704,7 +705,6 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                                 <label htmlFor="manualArea" className="block text-sm font-medium text-gray-700 mb-1">Seleziona Area di Lavoro:</label>
                                 <select id="manualArea" value={manualAreaId} onChange={(e) => setManualAreaId(e.target.value)} className="p-2 border border-gray-300 rounded-md w-full text-sm bg-white">
                                     <option value="">-- Seleziona un'area --</option>
-                                    {/* RIMOSSA L'OPZIONE FITTIZIA "MANUTENZIONE" */}
                                     {employeeWorkAreas.map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}
                                 </select>
                             </div>
@@ -741,7 +741,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 </div>
             </div>
 
-            {/* === BOX REPORT PDF (SOSTITUISCE QUELLO EXCEL) === */}
+            {/* === BOX REPORT PDF === */}
             <div className="bg-white p-4 rounded-lg shadow-md mb-6">
                 <h2 className="text-xl font-bold mb-3 text-center">Report Mensile PDF</h2>
                 <div className="grid grid-cols-2 gap-4 mb-4">
