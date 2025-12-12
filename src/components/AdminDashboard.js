@@ -3,8 +3,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db } from '../firebase';
 import {
-     collection, getDocs, query, where,
-     Timestamp, onSnapshot, updateDoc, doc, limit
+    collection, getDocs, query, where,
+    Timestamp, onSnapshot, updateDoc, doc, limit,
+    addDoc 
 } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import CompanyLogo from './CompanyLogo';
@@ -79,7 +80,7 @@ export const renderSingleCheckbox = (formData, handleChange, label, name, descri
     </div>
 );
 
-// === FUNZIONI PER I FORM IN-LINE (Sostituiscono le Modali di creazione) ===
+// === FUNZIONI PER I FORM IN-LINE ===
 
 const NewEmployeeForm = ({ onDataUpdate, user, setView, showNotification }) => {
     const [formData, setFormData] = useState({ name: '', surname: '', email: '', password: '', controlloGpsRichiesto: true });
@@ -111,9 +112,9 @@ const NewEmployeeForm = ({ onDataUpdate, user, setView, showNotification }) => {
             await createUser({ ...formData, role: 'dipendente', createdBy: user.uid });
             showNotification('Dipendente creato con successo!', 'success');
             await onDataUpdate();
-            setView('employees'); // Torna alla gestione dipendenti
+            setView('employees'); 
         } catch (err) {
-            const errorMessage = err.message || "Si è verificato un errore sconosciuto (Server Internal Error).";
+            const errorMessage = err.message || "Si è verificato un errore sconosciuto.";
             setError(errorMessage.includes(":") ? errorMessage.split(":")[1].trim() : errorMessage);
             console.error("Errore creazione dipendente:", err);
         } finally {
@@ -190,7 +191,7 @@ const NewAreaForm = ({ onDataUpdate, setView, showNotification }) => {
 
             showNotification('Area creata con successo!', 'success');
             await onDataUpdate();
-            setView('areas'); // Torna alla gestione aree
+            setView('areas'); 
         } catch (err) {
             const errorMessage = err.message || "Si è verificato un errore sconosciuto.";
             setError(errorMessage.includes(":") ? errorMessage.split(":")[1].trim() : errorMessage);
@@ -262,7 +263,7 @@ const NewAdminForm = ({ onDataUpdate, user, setView, showNotification }) => {
             await createAdminFn({ ...formData, createdBy: user.uid });
             showNotification(`Utente ${formData.role} creato con successo!`, 'success');
             await onDataUpdate();
-            setView('admins'); // Torna alla gestione admin
+            setView('admins'); 
         } catch (err) {
             const errorMessage = err.message || "Si è verificato un errore sconosciuto.";
             setError(errorMessage.includes(":") ? errorMessage.message.split(":")[1].trim() : errorMessage);
@@ -306,8 +307,6 @@ const NewAdminForm = ({ onDataUpdate, user, setView, showNotification }) => {
     );
 };
 
-
-// === NUOVO FORM IN-LINE PER PREPOSTO: ASSEGNA AREE DIPENDENTI ===
 const PrepostoAddEmployeeForm = ({ onDataUpdate, user, setView, showNotification, workAreas, allEmployees, userData }) => {
     const [formData, setFormData] = useState({ selectedEmployee: '', selectedPrepostoAreas: [] });
     const [error, setError] = useState('');
@@ -323,7 +322,6 @@ const PrepostoAddEmployeeForm = ({ onDataUpdate, user, setView, showNotification
             .sort((a,b) => `${a.name} ${a.surname}`.localeCompare(`${b.name} ${b.surname}`))
             .map(emp => ({ value: emp.id, label: `${emp.name} ${emp.surname} (${emp.email})` })),
     [allEmployees]);
-
 
     const handleChange = (e) => {
         const { name, value, type, checked } = e.target;
@@ -341,7 +339,6 @@ const PrepostoAddEmployeeForm = ({ onDataUpdate, user, setView, showNotification
         }
     };
 
-    // Funzione helper per le checkbox
     const renderCheckboxes = (label, name, items, disabled = false) => (
          <div>
              <label className="block text-sm font-medium text-gray-700">{label}</label>
@@ -426,6 +423,187 @@ const PrepostoAddEmployeeForm = ({ onDataUpdate, user, setView, showNotification
     );
 };
 
+// --- FORM DI INSERIMENTO MANUALE (RECUPERO) ---
+const ManualEntryForm = ({ onDataUpdate, setView, showNotification, allEmployees, allWorkAreas, preselectedEmployee }) => {
+    const [f, setF] = useState({
+        employeeId: preselectedEmployee ? preselectedEmployee.id : '',
+        workAreaId: '',
+        date: new Date().toISOString().split('T')[0], 
+        startTime: '08:00',
+        endTime: '17:00'
+    });
+
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        setF(prev => ({ ...prev, [name]: value }));
+    };
+
+    const sub = async (e) => {
+        e.preventDefault();
+        
+        if(!f.employeeId || !f.workAreaId || !f.date || !f.startTime || !f.endTime) {
+            return showNotification("Compila tutti i campi.", "error");
+        }
+
+        try {
+            const startDateTime = new Date(`${f.date}T${f.startTime}`);
+            const endDateTime = new Date(`${f.date}T${f.endTime}`);
+
+            if (endDateTime <= startDateTime) {
+                return showNotification("L'ora di uscita deve essere successiva all'ora di entrata.", "error");
+            }
+
+            const newEntry = {
+                employeeId: f.employeeId,
+                workAreaId: f.workAreaId,
+                clockInTime: Timestamp.fromDate(startDateTime),
+                clockOutTime: Timestamp.fromDate(endDateTime),
+                status: 'clocked-out', 
+                isManual: true, 
+                note: 'Recupero dimenticanza (Inserito da Admin/Preposto)',
+                pauses: [] 
+            };
+
+            await addDoc(collection(db, "time_entries"), newEntry);
+
+            showNotification('Timbratura manuale salvata con successo!', 'success');
+            await onDataUpdate(); 
+            setView('employees'); 
+
+        } catch(err) {
+            console.error("Errore salvataggio manuale:", err);
+            showNotification("Errore durante il salvataggio: " + err.message, 'error');
+        }
+    };
+
+    return (
+        <div className="bg-white shadow-md rounded-lg p-4 mb-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Aggiungi Timbratura Mancante (Recupero)</h3>
+            <form onSubmit={sub} className="space-y-4">
+                {preselectedEmployee ? (
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700">Dipendente</label>
+                        <input disabled value={`${preselectedEmployee.name} ${preselectedEmployee.surname}`} className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-gray-100 rounded-md shadow-sm sm:text-sm text-gray-500" />
+                    </div>
+                ) : (
+                    renderField(f, handleChange, 'Dipendente', 'employeeId', 'select', [{value:'',label:'-- Seleziona --'}, ...allEmployees.map(e=>({value:e.id, label:e.name+' '+e.surname}))])
+                )}
+
+                {renderField(f, handleChange, 'Area di Lavoro', 'workAreaId', 'select', [{value:'',label:'-- Seleziona --'}, ...allWorkAreas.map(a=>({value:a.id, label:a.name}))])}
+                
+                {renderField(f, handleChange, 'Data', 'date', 'date')}
+                
+                <div className="grid grid-cols-2 gap-4">
+                    {renderField(f, handleChange, 'Ora Entrata', 'startTime', 'time')}
+                    {renderField(f, handleChange, 'Ora Uscita', 'endTime', 'time')}
+                </div>
+
+                <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200 text-sm text-yellow-800">
+                    ⚠️ Attenzione: Stai inserendo manualmente una timbratura passata. Questa operazione creerà un record immediato nel report.
+                </div>
+
+                <div className="flex justify-end space-x-3 pt-4">
+                    <button type="button" onClick={() => setView('employees')} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 text-sm font-medium">Annulla</button>
+                    <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium">Salva Timbratura</button>
+                </div>
+            </form>
+        </div>
+    );
+};
+
+// === COMPONENTE AGGIORNATO: MODALE MODIFICA TIMBRATURA ESISTENTE (CON CAMBIO DATA) ===
+const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) => {
+    
+    // Funzione helper: Converte DD/MM/YYYY (visualizzato) in YYYY-MM-DD (per input HTML)
+    const formatDateForInput = (dateStr) => {
+        if (!dateStr) return '';
+        const parts = dateStr.split('/'); // Es. 02/12/2025
+        if (parts.length === 3) return `${parts[2]}-${parts[1]}-${parts[0]}`; // 2025-12-02
+        return dateStr;
+    };
+
+    const [formData, setFormData] = useState({
+        workAreaId: entry.workAreaId || '',
+        note: entry.note || '',
+        date: formatDateForInput(entry.clockInDate), // <--- AGGIUNTO: Stato per la data
+        clockInTime: entry.clockInTimeFormatted || '08:00',
+        clockOutTime: entry.clockOutTimeFormatted !== 'In corso' ? entry.clockOutTimeFormatted : ''
+    });
+
+    const handleChange = (e) => {
+        setFormData({ ...formData, [e.target.name]: e.target.value });
+    };
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        onSave(entry.id, formData);
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl m-4">
+                <h3 className="text-lg font-bold mb-4">Modifica Timbratura</h3>
+                
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    {/* MODIFICA DATA (Nuovo campo) */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700">Data</label>
+                        <input 
+                            type="date" 
+                            name="date" 
+                            value={formData.date} 
+                            onChange={handleChange} 
+                            required
+                            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" 
+                        />
+                    </div>
+
+                    {/* SELEZIONE AREA */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700">Area di Lavoro</label>
+                        <select 
+                            name="workAreaId" 
+                            value={formData.workAreaId} 
+                            onChange={handleChange}
+                            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white"
+                        >
+                            {workAreas.map(area => (
+                                <option key={area.id} value={area.id}>{area.name}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* MODIFICA ORARI */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">Ora Entrata</label>
+                            <input type="time" name="clockInTime" value={formData.clockInTime} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border rounded-md" required />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">Ora Uscita</label>
+                            <input type="time" name="clockOutTime" value={formData.clockOutTime} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border rounded-md" />
+                            <p className="text-xs text-gray-500 mt-1">Lascia vuoto se in corso</p>
+                        </div>
+                    </div>
+
+                    {/* NOTE */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700">Note / Motivo Modifica</label>
+                        <textarea name="note" value={formData.note} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border rounded-md" rows="2"></textarea>
+                    </div>
+
+                    <div className="flex justify-end space-x-2 pt-2">
+                        <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 text-sm">Annulla</button>
+                        <button type="submit" disabled={isLoading} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">
+                            {isLoading ? 'Salvataggio...' : 'Salva Modifiche'}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
 // =======================================================
 
 
@@ -452,7 +630,7 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours }
                             <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Area</th>
                             <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entrata</th>
                             <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stato</th>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pausa</th> {/* NUOVA COLONNA PAUSA */}
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pausa</th>
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
@@ -464,7 +642,6 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours }
                                 <td className="px-4 py-2 whitespace-nowrap">
                                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${entry.status === 'In Pausa' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>{entry.status}</span>
                                 </td>
-                                {/* LOGICA VISUALIZZAZIONE STATO PAUSA */}
                                 <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
                                      {entry.status === 'In Pausa' ? (
                                          <span className="text-yellow-600 font-bold">In Corso</span>
@@ -483,7 +660,7 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours }
     </div>
 );
 
-const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortConfig, requestSort, searchTerm, setSearchTerm, handleResetEmployeeDevice, adminEmployeeId, handleEmployeePauseClick }) => { 
+const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortConfig, requestSort, searchTerm, setSearchTerm, handleResetEmployeeDevice, adminEmployeeId, handleEmployeePauseClick, handleOpenManualEntry }) => { 
     const getSortIndicator = (key) => {
         if (!sortConfig || sortConfig.key !== key) return '';
         return sortConfig.direction === 'ascending' ? ' ▲' : ' ▼';
@@ -514,14 +691,9 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                         {employees.map(emp => {
-                            
-                            // *** LOGICA DI DISCRIMINAZIONE PER LA TIMBRATURA ***
                             const isSelfClockIn = emp.id === adminEmployeeId;
-                            // Tipologia Entrata Manuale/Forzata
                             const clockInType = isSelfClockIn ? 'manualClockIn' : 'adminClockIn'; 
-                            // Tipologia Uscita Manuale/Forzata (CORRETTA: Usa adminClockOut per gli altri)
                             const clockOutType = isSelfClockIn ? 'manualClockOut' : 'adminClockOut'; 
-                            // ************************************************
 
                             return ( 
                                 <tr key={emp.id}>
@@ -537,12 +709,10 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                     <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{emp.workAreaNames?.join(', ') || 'Nessuna'}</td>
                                     <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
                                         <div className="flex flex-col items-start gap-1">
-                                            {/* Pulsanti Timbratura/Pausa (visibili a tutti) */}
                                             {emp.activeEntry ? (
                                                 <>
-                                                    {/* TIMBRA USCITA (CORRETTO ROUTING) */}
                                                     <button
-                                                        onClick={() => openModal(clockOutType, emp)} // <-- USA clockOutType
+                                                        onClick={() => openModal(clockOutType, emp)}
                                                         disabled={emp.activeEntry.status === 'In Pausa'}
                                                         className={`px-2 py-1 text-xs text-white rounded-md w-full text-center ${
                                                             emp.activeEntry.status === 'In Pausa'
@@ -552,11 +722,9 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                                     >
                                                         Timbra Uscita
                                                     </button>
-
-                                                    {/* APPLICA PAUSA */}
                                                     <button
-                                                        onClick={() => handleEmployeePauseClick(emp)} // <--- CHIAMATA DIRETTA ALLA PAUSA
-                                                        disabled={!emp.activeEntry || emp.activeEntry.status === 'In Pausa' || emp.activeEntry.pauses?.some(p => p.start && p.end)} // Disabilita se pausa già completata
+                                                        onClick={() => handleEmployeePauseClick(emp)} 
+                                                        disabled={!emp.activeEntry || emp.activeEntry.status === 'In Pausa' || emp.activeEntry.pauses?.some(p => p.start && p.end)}
                                                         className={`px-2 py-1 text-xs text-white rounded-md w-full text-center mt-1 ${
                                                             !emp.activeEntry || emp.activeEntry.status === 'In Pausa' || emp.activeEntry.pauses?.some(p => p.start && p.end)
                                                             ? 'bg-gray-400 cursor-not-allowed'
@@ -567,10 +735,9 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                                     </button>
                                                 </>
                                             ) : (
-                                                /* TIMBRA ENTRATA */
-                                                <button onClick={() => openModal(clockInType, emp)} className="px-2 py-1 text-xs bg-blue-500 text-white rounded-md hover:bg-blue-600 w-full text-center">Timbra Entrata</button> // <-- USA clockInType
+                                                <button onClick={() => openModal(clockInType, emp)} className="px-2 py-1 text-xs bg-blue-500 text-white rounded-md hover:bg-blue-600 w-full text-center">Timbra Entrata</button>
                                             )}
-                                            {/* Pulsanti specifici per Admin */}
+                                            
                                             <div className="flex flex-col sm:flex-row gap-2 w-full justify-start mt-1 items-start sm:items-center">
                                                 {currentUserRole === 'admin' && (
                                                     <>
@@ -579,7 +746,7 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                                         <button onClick={() => openModal('deleteEmployee', emp)} className="text-xs text-red-600 hover:text-red-900">Elimina</button>
                                                     </>
                                                 )}
-                                                {/* Pulsanti specifici per Preposto/Admin - RESET DEVICE */}
+                                                
                                                 <div className="flex gap-2">
                                                     {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (
                                                         <button onClick={() => openModal('resetDevice', emp)} disabled={emp.deviceIds?.length === 0} className="text-xs px-2 py-1 bg-yellow-500 text-gray-800 rounded-md hover:bg-yellow-600 whitespace-nowrap disabled:bg-gray-400 disabled:cursor-not-allowed">
@@ -591,6 +758,16 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                                 {currentUserRole === 'preposto' && (
                                                     <button onClick={() => openModal('assignEmployeeToPrepostoArea', emp)} className="text-xs text-blue-600 hover:text-blue-900 whitespace-nowrap">Gestisci Mie Aree</button>
                                                 )}
+
+                                                {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (
+                                                    <button 
+                                                        onClick={() => handleOpenManualEntry(emp)} 
+                                                        className="text-xs px-2 py-1 bg-purple-500 text-white rounded-md hover:bg-purple-600 whitespace-nowrap"
+                                                        title="Inserisci manualmente una timbratura dimenticata (es. ieri)"
+                                                    >
+                                                        ➕ Agg. Ore
+                                                    </button>
+                                                )}
                                             </div>
                                         </div>
                                     </td>
@@ -599,7 +776,6 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                         })}
                     </tbody>
                 </table>
-                 {/* Aggiunta messaggio se la lista filtrata è vuota */}
                  {employees.length === 0 && searchTerm === '' && currentUserRole === 'preposto' && (
                      <p className="p-4 text-sm text-gray-500">Nessun dipendente attualmente assegnato alle tue aree di gestione. Usa il pulsante "Aggiungi Dipendente..." per assegnarne.</p>
                  )}
@@ -648,7 +824,6 @@ const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
                             )}
                             <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
                                 <div className="flex items-center gap-4">
-                                    {/* MODIFICA LOGICA MODALE: Admin vs Preposto */}
                                     {currentUserRole === 'admin' ? (
                                         <button onClick={() => openModal('editArea', area)} className="text-green-600 hover:text-green-900">Modifica</button>
                                     ) : currentUserRole === 'preposto' ? (
@@ -668,22 +843,17 @@ const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
 
 const AdminManagementView = ({ admins, openModal, user, superAdminEmail, currentUserRole, onDataUpdate }) => {
     
-    // Mostra solo il contenuto se l'utente è ADMIN
     if (currentUserRole !== 'admin') {
          return <div className="p-4 text-sm text-red-600 font-medium">Accesso negato. Solo gli amministratori hanno accesso a questa sezione.</div>;
     }
 
     const isSuperAdmin = user?.email === superAdminEmail;
-    
-    // FILTRO CHIAVE: Rimuove l'utente Super Admin dalla lista visualizzata
     const filteredAdmins = admins.filter(admin => admin.email !== superAdminEmail);
-
 
     return (
         <div>
             <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Gestione Utenti Admin/Preposti</h1>
-                {/* Rimosso: Pulsante Crea Nuovo Admin/Preposto (Spostato in ActionHeader) */}
             </div>
             
             <p className="text-sm text-gray-500 mb-4">
@@ -701,7 +871,7 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                        {filteredAdmins.map(admin => ( // <-- Usa filteredAdmins
+                        {filteredAdmins.map(admin => ( 
                             <tr key={admin.id}>
                                 <td className="px-4 py-2 whitespace-nowrap">
                                     <div className="text-sm font-medium text-gray-900">{admin.name} {admin.surname}</div>
@@ -711,19 +881,15 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
                                 <td className="px-4 py-2 whitespace-normal text-sm text-gray-500">{admin.managedAreaNames?.join(', ') || 'Nessuna Area'}</td>
                                 <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
                                     <div className="flex items-center gap-2">
-                                        
-                                        {/* Elimina utente (Solo Super Admin può eliminare Admin, Admin può eliminare Preposto) */}
                                         {(isSuperAdmin || (currentUserRole === 'admin' && admin.role === 'preposto')) && (
                                             <button 
                                                 onClick={() => openModal('deleteAdmin', admin)} 
                                                 className="px-2 py-1 text-xs text-white bg-red-500 rounded-md hover:bg-red-600"
-                                                disabled={admin.email === user?.email} // Non puoi eliminare te stesso
+                                                disabled={admin.email === user?.email}
                                             >
                                                 Elimina
                                             </button>
                                         )}
-
-                                        {/* Assegna Aree (Solo se è un Preposto) */}
                                         {admin.role === 'preposto' && (
                                             <button 
                                                 onClick={() => openModal('assignPrepostoAreas', admin)} 
@@ -746,10 +912,9 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
     );
 };
 
-// === REPORT VIEW COMPLETO CON PULSANTI DI ESPORTAZIONE E LOGICA DI APPROVAZIONE PAUSA ===
-const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, allEmployees, currentUserRole, userData, setDateRange, setReportAreaFilter, reportAreaFilter, reportEmployeeFilter, setReportEmployeeFilter, generateReport, isLoading, isActionLoading, managedEmployees, showNotification, handleReviewSkipBreak }) => {
+// === REPORT VIEW: AGGIUNTO PULSANTE MODIFICA E CALLBACK ===
+const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, allEmployees, currentUserRole, userData, setDateRange, setReportAreaFilter, reportAreaFilter, reportEmployeeFilter, setReportEmployeeFilter, generateReport, isLoading, isActionLoading, managedEmployees, showNotification, handleReviewSkipBreak, onEditEntry }) => {
     
-    // --- FUNZIONE ESPORTAZIONE EXCEL ---
     const handleExportExcel = () => {
         if (typeof utils === 'undefined' || typeof writeFile === 'undefined') {
             showNotification("Libreria esportazione non caricata.", 'error'); return;
@@ -784,24 +949,17 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
         writeFile(wb, `${(title || 'Report').replace(/ /g, '_')}.xlsx`);
         showNotification(`File Excel '${(title || 'Report').replace(/ /g, '_')}.xlsx' generato con successo.`, 'success');
     };
-    // --- FINE FUNZIONE ESPORTAZIONE EXCEL ---
-
 
     return (
         <div>
-            {/* Rimosso il form di generazione del report da qui, è nel main component per condizionale */}
-
-            {/* SEZIONE PULSANTI DI ESPORTAZIONE */}
             <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 flex-wrap gap-4">
                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">{title || 'Report Risultati'}</h1>
                 <div className="flex items-center space-x-2">
-                    {/* PULSANTI DI ESPORTAZIONE VISIBILI SOLO SE CI SONO DATI */}
                     <button onClick={handleExportExcel} disabled={!reports || reports.length === 0} className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 text-sm">Esporta Excel</button>
                     <button onClick={() => handleExportXml(reports)} disabled={!reports || reports.length === 0} className="px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:bg-gray-400 text-sm">Esporta XML</button>
                 </div>
             </div>
             
-            {/* TABELLA DEI RISULTATI */}
             <div className="bg-white shadow-md rounded-lg overflow-x-auto">
                 {!reports || reports.length === 0 ? <p className="p-4 text-sm text-gray-500">Nessun dato per il periodo selezionato.</p> : (
                     <table className="min-w-full divide-y divide-gray-200">
@@ -823,12 +981,10 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
                                     <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.employeeName}{entry.createdBy && entry.employeeId && entry.createdBy !== entry.employeeId ? <span className="text-red-500 ml-1 font-bold">*</span> : ''}</td>
                                     <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.areaName}</td>
                                     <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.clockInDate}</td>
-                                    {/* FIX: USO VARIABILI CORRETTE PER VISUALIZZARE L'ORA */}
                                     <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.clockInTimeFormatted}</td> 
                                     <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.clockOutTimeFormatted}</td> 
                                     <td className="px-4 py-2 whitespace-nowrap text-sm font-bold text-gray-800">{entry.duration !== null ? entry.duration.toFixed(2) : '...'}</td>
                                     
-                                    {/* COLONNA STATO PAUSA */}
                                     <td className="px-4 py-2 whitespace-nowrap text-sm">
                                         {entry.skippedBreak ? (
                                             entry.skipBreakStatus === 'pending' ? (
@@ -849,31 +1005,41 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
                                         )}
                                     </td>
 
-                                    {/* COLONNA AZIONI / NOTE */}
                                     <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
-                                        {entry.skippedBreak && entry.skipBreakStatus === 'pending' ? (
-                                            <div className="flex flex-col gap-1">
-                                                <span className="text-xs italic text-gray-600">"{entry.note}"</span>
-                                                <div className="flex gap-2 mt-1">
-                                                    <button 
-                                                        onClick={() => handleReviewSkipBreak(entry.id, 'approved')}
-                                                        disabled={isActionLoading}
-                                                        className="bg-green-500 hover:bg-green-600 text-white text-xs px-2 py-1 rounded"
-                                                    >
-                                                        Approva
-                                                    </button>
-                                                    <button 
-                                                        onClick={() => handleReviewSkipBreak(entry.id, 'rejected')}
-                                                        disabled={isActionLoading}
-                                                        className="bg-red-500 hover:bg-red-600 text-white text-xs px-2 py-1 rounded"
-                                                    >
-                                                        Rifiuta
-                                                    </button>
+                                        <div className="flex flex-col gap-2">
+                                            {/* PULSANTE MODIFICA (NUOVO) */}
+                                            <button 
+                                                onClick={() => onEditEntry(entry)}
+                                                className="flex items-center text-blue-600 hover:text-blue-900 font-medium"
+                                                title="Correggi timbratura (Area, Orari, Note)"
+                                            >
+                                                ✏️ Modifica
+                                            </button>
+
+                                            {entry.skippedBreak && entry.skipBreakStatus === 'pending' ? (
+                                                <div className="flex flex-col gap-1">
+                                                    <span className="text-xs italic text-gray-600">"{entry.note}"</span>
+                                                    <div className="flex gap-2 mt-1">
+                                                        <button 
+                                                            onClick={() => handleReviewSkipBreak(entry.id, 'approved')}
+                                                            disabled={isActionLoading}
+                                                            className="bg-green-500 hover:bg-green-600 text-white text-xs px-2 py-1 rounded"
+                                                        >
+                                                            Approva
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => handleReviewSkipBreak(entry.id, 'rejected')}
+                                                            disabled={isActionLoading}
+                                                            className="bg-red-500 hover:bg-red-600 text-white text-xs px-2 py-1 rounded"
+                                                        >
+                                                            Rifiuta
+                                                        </button>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        ) : (
-                                            <span>{entry.note}</span>
-                                        )}
+                                            ) : (
+                                                <span>{entry.note}</span>
+                                            )}
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
@@ -887,23 +1053,19 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
 // =======================================================
 
 
-// === HEADER AZIONI GENERALI (SPOSTATO IN ALTO) ===
 const ActionHeader = ({ view, currentUserRole, setView, openModal, isSuperAdmin }) => { 
     if (currentUserRole !== 'admin' && currentUserRole !== 'preposto') return null;
 
     let button = null;
     let text = null;
     
-    // Controlla se la vista corrente è una vista di form in-line
     const isCurrentViewForm = ['newEmployeeForm', 'newAreaForm', 'newAdminForm', 'prepostoAddEmployeeForm'].includes(view);
     
-    // Determina la vista di destinazione corretta
     let targetView = view;
     if (view === 'newEmployeeForm' || view === 'prepostoAddEmployeeForm') targetView = 'employees';
     else if (view === 'newAreaForm') targetView = 'areas';
     else if (view === 'newAdminForm') targetView = 'admins';
 
-    // Logica per Admin: Creazione Dipendenti (pulsante visibile solo in vista employees/form)
     if (targetView === 'employees' && currentUserRole === 'admin') {
         text = 'Crea Nuovo Dipendente';
         button = (
@@ -915,8 +1077,6 @@ const ActionHeader = ({ view, currentUserRole, setView, openModal, isSuperAdmin 
             </button>
         );
     } 
-
-    // Logica per Admin: Aggiungi Area (pulsante visibile solo in vista areas/form)
     else if (targetView === 'areas' && currentUserRole === 'admin') {
         text = 'Aggiungi Area';
         button = (
@@ -928,8 +1088,6 @@ const ActionHeader = ({ view, currentUserRole, setView, openModal, isSuperAdmin 
             </button>
         );
     }
-    
-    // Logica per Admin: Crea Admin/Preposto (pulsante visibile solo in vista admins/form)
     else if (targetView === 'admins' && currentUserRole === 'admin' && isSuperAdmin) { 
         text = 'Crea Nuovo Admin/Preposto';
         button = (
@@ -941,13 +1099,11 @@ const ActionHeader = ({ view, currentUserRole, setView, openModal, isSuperAdmin 
             </button>
         );
     }
-    
-    // Logica per Preposto: Aggiunge dipendenti (esistenti) alle sue aree
-    else if (targetView === 'employees' && currentUserRole === 'preposto') { // Pulsante Preposto sempre mostrato in vista employees
+    else if (targetView === 'employees' && currentUserRole === 'preposto') {
          text = 'Aggiungi Dipendente alle Mie Aree';
          button = (
             <button
-                onClick={() => setView('prepostoAddEmployeeForm')} // CAMBIATO: Usa setView
+                onClick={() => setView('prepostoAddEmployeeForm')} 
                 className={`px-4 py-2 ${view === 'prepostoAddEmployeeForm' ? 'bg-teal-300' : 'bg-teal-600 hover:bg-teal-700'} text-white rounded-lg w-full sm:w-auto text-sm`}
                 disabled={isCurrentViewForm && view !== 'prepostoAddEmployeeForm'}
             >
@@ -983,7 +1139,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const [showModal, setShowModal] = useState(false);
     const [modalType, setModalType] = useState('');
     const [selectedItem, setSelectedItem] = useState(null);
-    const [isLoading, setIsLoading] = useState(false); // Inizializzato a false
+    const [isLoading, setIsLoading] = useState(false); 
     const [isActionLoading, setIsActionLoading] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'ascending' });
@@ -1000,21 +1156,21 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     
     // === STATO NOTIFICHE PENDING ===
     const [pendingRequestsCount, setPendingRequestsCount] = useState(0); 
-
-    // === STATO NUOVO PER NOTIFICHE ===
     const [notification, setNotification] = useState(null); // { message, type }
+    
+    // === STATO PER INSERIMENTO MANUALE e MODIFICA ===
+    const [manualEntryEmployee, setManualEntryEmployee] = useState(null);
+    const [entryToEdit, setEntryToEdit] = useState(null); // <--- STATO MODIFICA TIMBRATURA
 
     const showNotification = useCallback((message, type = 'success') => {
         setNotification({ message, type });
-        setTimeout(() => setNotification(null), 4000); // Nascondi dopo 4 secondi
+        setTimeout(() => setNotification(null), 4000); 
     }, []);
     // ==================================
 
     const currentUserRole = userData?.role;
-    // VARIABILE ESSENZIALE PER I CONTROLLI DI ADMIN/SUPERADMIN
     const superAdminEmail = SUPER_ADMIN_EMAIL; 
 
-    // --- CORREZIONE AMBITO (1): managedEmployees è definito PRIMA di sortedAndFilteredEmployees ---
     const managedEmployees = useMemo(() => {
         if (currentUserRole === 'admin') {
             return allEmployees;
@@ -1037,7 +1193,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     }, [allEmployees, currentUserRole, userData]);
 
 
-    // --- CARICAMENTO DATI (fetchData - CORREZIONE isMounted) ---
+    // --- CARICAMENTO DATI ---
     const fetchData = useCallback(async () => {
         if (!user || !userData) { setIsLoading(false); return; }
         const role = userData?.role;
@@ -1102,7 +1258,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     }, [user, userData, fetchData]); 
 
 
-    // --- CALCOLI MEMOIZED (sortedAndFilteredEmployees) ---
     const sortedAndFilteredEmployees = useMemo(() => {
         const employeesWithDetails = managedEmployees.map(emp => ({
             ...emp,
@@ -1139,27 +1294,24 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     }, [managedEmployees, activeEmployeesDetails, searchTerm, allWorkAreas, sortConfig]);
 
     
-    // === FILTRO AREE VISIBILI (Nuova Aggiunta per Preposto) ===
     const visibleWorkAreas = useMemo(() => {
         if (currentUserRole === 'admin') {
             return workAreasWithHours;
         }
         if (currentUserRole === 'preposto') {
             const managedAreaIds = userData?.managedAreaIds || [];
-            // Filtra solo le aree che il preposto gestisce
             return workAreasWithHours.filter(area => managedAreaIds.includes(area.id));
         }
         return [];
     }, [workAreasWithHours, currentUserRole, userData]);
 
 
-    // --- LISTENER TIMBRATURE ATTIVE E PENDING REQUESTS (ROBUSTO con isMounted) ---
+    // --- LISTENER TIMBRATURE ATTIVE ---
     useEffect(() => {
         if (!allEmployees.length || !allWorkAreas.length) return;
 
         let isMounted = true; 
 
-        // 1. LISTENER TIMBRATURE ATTIVE
         const qActive = query(collection(db, "time_entries"), where("status", "==", "clocked-in"));
         const unsubscribeActive = onSnapshot(qActive, (snapshot) => {
             if (!isMounted) return; 
@@ -1227,8 +1379,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
              }
         });
 
-        // 2. NUOVO LISTENER: PENDING REQUESTS (Richieste Pausa in Attesa)
-        // Per semplicità ascoltiamo tutte le pending e filtriamo in memoria
         const qPending = query(collection(db, "time_entries"), where("skipBreakStatus", "==", "pending"));
         const unsubscribePending = onSnapshot(qPending, (snapshot) => {
             if (!isMounted) return;
@@ -1239,7 +1389,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 count = pendingDocs.length;
             } else if (currentUserRole === 'preposto') {
                 const managedAreaIds = userData?.managedAreaIds || [];
-                // Conta solo se l'area della timbratura è tra quelle gestite
                 const myPending = pendingDocs.filter(d => managedAreaIds.includes(d.workAreaId));
                 count = myPending.length;
             }
@@ -1254,7 +1403,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     }, [allEmployees, allWorkAreas, adminEmployeeProfile, currentUserRole, userData, showNotification]);
 
 
-    // --- LISTENER ORE TOTALI (ROBUSTO con isMounted) ---
+    // --- LISTENER ORE TOTALI ---
     useEffect(() => {
         let isMounted = true; 
         const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
@@ -1305,7 +1454,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     }, [currentUserRole, userData, allEmployees, showNotification]);
 
 
-    // --- FUNZIONI HANDLER (AGGIORNATE PER LA PAUSA UNIFICATA) ---
     const handleAdminClockIn = useCallback(async (areaId, timestamp, note) => {
         if (!adminEmployeeProfile) return showNotification("Profilo dipendente non trovato.", 'error');
         console.log(`[AdminDashboard] Tentativo Timbratura ENTRATA manuale per ${adminEmployeeProfile.name}`);
@@ -1316,12 +1464,11 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         console.log(`[AdminDashboard] Tentativo Timbratura USCITA manuale per ${adminEmployeeProfile.name}`);
     }, [adminActiveEntry, adminEmployeeProfile, showNotification]);
 
-    // FUNZIONE PER PAUSA PERSONALE (Preposto/Admin Loggato)
+    // FUNZIONE PER PAUSA PERSONALE
     const handleAdminPause = useCallback(async () => {
         if (!adminEmployeeProfile) return showNotification("Profilo dipendente non trovato.", 'error');
         if (!adminActiveEntry) return showNotification("Nessuna timbratura attiva trovata.", 'error');
         
-        // 1. Logica per TERMINARE la pausa (Se è già in pausa, l'unica azione possibile è chiuderla)
         if (adminActiveEntry.isOnBreak) {
             setIsActionLoading(true);
             try {
@@ -1337,12 +1484,10 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             return; 
         }
         
-        // 2. Logica per INIZIARE la pausa (solo se NON in pausa e NON completata)
         if (adminActiveEntry.hasCompletedPause) {
              return showNotification("Hai già completato la pausa automatica in questa sessione.", 'info');
         }
         
-        // Trova l'area e la sua durata pausa predefinita
         const workArea = allWorkAreas.find(area => area.id === adminActiveEntry.workAreaId);
         if (!workArea || !workArea.pauseDuration || workArea.pauseDuration <= 0) {
             return showNotification(`Nessuna pausa predefinita (>0 min) configurata per l'area "${workArea?.name || 'sconosciuta'}".`, 'info');
@@ -1367,9 +1512,8 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     }, [adminActiveEntry, adminEmployeeProfile, allWorkAreas, showNotification]);
 
 
-    // FUNZIONE: GESTISCE IL CLICK SULLA PAUSA DEL DIPENDENTE (BYPASS MODALE) - CORREZIONE ID TIMBRATURA
     const handleEmployeePauseClick = useCallback(async (employee) => {
-        const timeEntryId = employee?.activeEntry?.id; // L'ID TIMBRATURA ATTIVA
+        const timeEntryId = employee?.activeEntry?.id; 
 
         if (!timeEntryId) return showNotification("Errore: ID della timbratura attiva non trovato.", 'error');
         
@@ -1380,7 +1524,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         }
         const pauseDurationInMinutes = workArea.pauseDuration;
         
-        // Controlla se la pausa è già stata completata in questa sessione
         if (employee.activeEntry.hasCompletedPause) {
              return showNotification(`La pausa predefinita di ${pauseDurationInMinutes} minuti è stata già completata per ${employee.name} in questa sessione.`, 'info');
         }
@@ -1390,15 +1533,14 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
              return;
         }
 
-
         setIsActionLoading(true);
         try {
             const applyPauseFunction = httpsCallable(getFunctions(undefined, 'europe-west1'), 'applyAutoPauseEmployee');
             const result = await applyPauseFunction({ 
-                timeEntryId: timeEntryId, // PASSATO ID TIMBRATURA CORRETTO
+                timeEntryId: timeEntryId, 
                 durationMinutes: pauseDurationInMinutes, 
                 deviceId: 'PREPOSTO_MANUAL_ACTION',
-                employeeIdToUpdate: employee.id // ID del DIPENDENTE (per la Cloud Function)
+                employeeIdToUpdate: employee.id 
             });
             showNotification(result.data.message, 'success');
         } catch (error) { 
@@ -1413,7 +1555,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
 
     const openModal = useCallback((type, item = null) => {
-        // RESETA LA VISTA PRINCIPALE PRIMA DI APRIRE LA MODALE (per nascondere form in-line)
         setView(type.includes('Employee') ? 'employees' : (type.includes('Area') ? 'areas' : 'admins'));
         
         setModalType(type);
@@ -1421,7 +1562,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         setShowModal(true);
     }, []);
 
-    // FUNZIONE DI RESET DEVICE (SENZA ALERT NATIVI)
     const handleResetEmployeeDevice = useCallback(async (employee) => {
         if (!employee || !employee.id) return showNotification("Dipendente non valido.", 'error');
         
@@ -1441,7 +1581,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         }
     }, [fetchData, showNotification]);
     
-    // --- FUNZIONE GENERATE REPORT (DEFINITA PRIMA DI handleReviewSkipBreak) ---
+    // --- FUNZIONE GENERATE REPORT ---
     const generateReport = useCallback(async () => {
         if (!dateRange.start || !dateRange.end) return showNotification("Seleziona date valide.", 'info');
         setIsLoading(true);
@@ -1452,7 +1592,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             const functions = getFunctions(undefined, 'europe-west1');
             const generateReportFunction = httpsCallable(functions, 'generateTimeReport');
 
-            // Chiama la Cloud Function con i filtri
             const result = await generateReportFunction({
                 startDate: dateRange.start, 
                 endDate: dateRange.end,
@@ -1462,16 +1601,12 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
             if (!isMounted) return; 
 
-            // Recupera i dati serializzati dalla Cloud Function
             const fetchedEntries = result.data.reports;
             
             const areaHoursMap = new Map(allWorkAreas.map(area => [area.id, 0]));
 
-            // Definiamo formatTime qui, dove è usato.
             const formatTime = (date, time) => {
-                // Se l'uscita è 'In corso', usa un orario molto tardivo per l'ordinamento
                 const finalTime = time === 'In corso' ? '99:99' : time;
-                // Converte dd/mm/yyyy in yyyy-mm-dd per la data (necessario per new Date())
                 const formattedDate = date.replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3-$2-$1');
                 return new Date(`${formattedDate} ${finalTime}`);
             };
@@ -1479,16 +1614,14 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
             const reportData = fetchedEntries.map(entry => {
                 
-                // 1. Riconverti le stringhe ISO in oggetti Date
                 const clockIn = entry.clockInTime ? new Date(entry.clockInTime) : null;
                 const clockOut = entry.clockOutTime ? new Date(entry.clockOutTime) : null;
                 
-                if (!clockIn) return null; // Salta entry non valide
+                if (!clockIn) return null; 
 
-                // 2. Recupera info Employee/Area
                 const employee = allEmployees.find(e => e.id === entry.employeeId);
                 const area = allWorkAreas.find(a => a.id === entry.workAreaId);
-                if (!employee || !area) return null; // Filtra se mancano metadati locali
+                if (!employee || !area) return null; 
 
                 let durationHours = null;
                 let pauseDurationMinutes = 0; 
@@ -1496,7 +1629,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 let clockInFormatted = 'N/D';
                 let clockOutFormatted = 'In corso';
 
-                // 3. Formattazione
                 try {
                     clockInFormatted = new Intl.DateTimeFormat('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' }).format(clockIn);
                     if (clockOut) {
@@ -1505,11 +1637,9 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 } catch (e) { console.error("Errore formattazione ora report:", e); }
 
 
-                // 4. Calcolo Durata e Pausa
                 if (clockOut) {
                     const totalMs = clockOut.getTime() - clockIn.getTime();
                     
-                    // A. Calcolo pause fisicamente registrate (pulsanti start/stop)
                     const recordedPausesMs = (entry.pauses || []).reduce((acc, p) => {
                         const pauseStart = p.start ? new Date(p.start) : null;
                         const pauseEnd = p.end ? new Date(p.end) : null;
@@ -1519,25 +1649,17 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                         return acc;
                     }, 0);
 
-                    // B. Durata Pausa Predefinita Area (in ms)
                     const areaPauseMs = (area.pauseDuration || 0) * 60000;
                     
                     let finalPauseDeductionMs = recordedPausesMs;
 
-                    // --- LOGICA NO-PAUSA (PRUDENTE) ---
                     if (entry.skippedBreak) {
                         if (entry.skipBreakStatus === 'approved') {
-                            // APPROVATO: Il preposto conferma che non ha fatto pausa.
-                            // Deduciamo 0 (o solo le pause effettivamente cliccate se ce ne sono state per sbaglio)
                             finalPauseDeductionMs = 0; 
                         } else {
-                            // PENDING o REJECTED (Approccio Prudente):
-                            // Sottraiamo comunque la pausa dell'area finché non viene approvata.
                             finalPauseDeductionMs = areaPauseMs;
                         }
                     } else {
-                        // CASO STANDARD (Nessuna richiesta di salto pausa)
-                        // Se le pause registrate sono meno della pausa d'area obbligatoria, usiamo quella d'area
                         if (areaPauseMs > 0 && recordedPausesMs < areaPauseMs) {
                             finalPauseDeductionMs = areaPauseMs;
                         }
@@ -1547,7 +1669,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                     pauseHours = pauseDurationMinutes / 60; 
 
                     let calculatedDurationMs = totalMs > 0 ? (totalMs - finalPauseDeductionMs) : 0;
-                    // Evitiamo ore negative in casi estremi
                     if (calculatedDurationMs < 0) calculatedDurationMs = 0;
 
                     durationHours = calculatedDurationMs > 0 ? (calculatedDurationMs / 3600000) : 0; 
@@ -1565,14 +1686,13 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                     pauseHours: pauseHours, 
                     note: entry.note || '',
                     createdBy: entry.createdBy || null,
-                    // Nuovi campi per report view
                     skippedBreak: entry.skippedBreak,
                     skipBreakStatus: entry.skipBreakStatus,
-                    skippedBreakReason: entry.skippedBreakReason
+                    skippedBreakReason: entry.skippedBreakReason,
+                    workAreaId: entry.workAreaId // PER MODIFICA
                 };
             }).filter(Boolean)
               .sort((a, b) => {
-                  // === Ordinamento per data/ora di timbratura ===
                   const dateA = formatTime(a.clockInDate, a.clockInTimeFormatted); 
                   const dateB = formatTime(b.clockInDate, b.clockOutTimeFormatted); 
                   
@@ -1608,7 +1728,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
     }, [dateRange, reportAreaFilter, reportEmployeeFilter, allEmployees, allWorkAreas, showNotification]);
 
-    // === NUOVA FUNZIONE: REVISIONE RICHIESTA NO-PAUSA (DEFINITA DOPO generateReport) ===
     const handleReviewSkipBreak = useCallback(async (entryId, decision) => {
         if (!entryId || !decision) return;
         
@@ -1630,8 +1749,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             });
 
             showNotification(`Richiesta ${decision === 'approved' ? 'APPROVATA' : 'RIFIUTATA'} con successo.`, 'success');
-            
-            // Aggiorna i report ricalcolando
             generateReport(); 
             
         } catch (error) {
@@ -1641,6 +1758,58 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             setIsActionLoading(false);
         }
     }, [user, showNotification, generateReport]);
+
+    // === LOGICA SALVATAGGIO MODIFICA (DATA, ORA, AREA, NOTE) ===
+    const handleSaveEntryEdit = async (entryId, updatedData) => {
+        setIsActionLoading(true);
+        try {
+            const entryRef = doc(db, "time_entries", entryId);
+            
+            // 1. Costruisci le nuove date complete (Data scelta + Ora scelta)
+            // updatedData.date è formato YYYY-MM-DD
+            // updatedData.clockInTime è formato HH:mm
+            
+            const newClockInDate = new Date(`${updatedData.date}T${updatedData.clockInTime}:00`);
+            
+            let updatePayload = {
+                workAreaId: updatedData.workAreaId,
+                note: updatedData.note,
+                clockInTime: Timestamp.fromDate(newClockInDate)
+            };
+
+            // 2. Gestisci l'uscita
+            if (updatedData.clockOutTime) {
+                const newClockOutDate = new Date(`${updatedData.date}T${updatedData.clockOutTime}:00`);
+                
+                // Controllo validità: Uscita deve essere dopo Entrata
+                if (newClockOutDate <= newClockInDate) {
+                    throw new Error("L'ora di uscita deve essere successiva all'entrata.");
+                }
+
+                updatePayload.clockOutTime = Timestamp.fromDate(newClockOutDate);
+                updatePayload.status = 'clocked-out'; // Forza lo stato se c'è l'uscita
+            } else {
+                // Se l'admin cancella l'ora di uscita, rimettiamo null (opzionale, o lascia inalterato)
+                // updatePayload.clockOutTime = null; 
+                // updatePayload.status = 'clocked-in';
+            }
+
+            // 3. Aggiungi traccia della modifica (Audit log opzionale)
+            updatePayload.lastModifiedBy = user.email;
+            updatePayload.lastModifiedAt = Timestamp.now();
+
+            await updateDoc(entryRef, updatePayload);
+
+            showNotification("Timbratura (data e orari) aggiornata con successo!", "success");
+            setEntryToEdit(null); // Chiudi modale
+            generateReport(); // Ricarica il report
+        } catch (error) {
+            console.error("Errore modifica:", error);
+            showNotification("Errore: " + error.message, "error");
+        } finally {
+            setIsActionLoading(false);
+        }
+    };
 
     const handleExportXml = useCallback((dataToExport) => {
         if (!dataToExport || dataToExport.length === 0) return showNotification("Nessun dato da esportare.", 'info'); 
@@ -1674,6 +1843,10 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         setSortConfig({ key, direction });
     }, [sortConfig]);
     
+    const handleOpenManualEntry = (employee) => {
+        setManualEntryEmployee(employee);
+        setView('manualEntryForm');
+    };
 
     // --- RENDER ---
     if (isLoading || !user || !userData) {
@@ -1704,10 +1877,10 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                                             disabled={isActionLoading || (!adminActiveEntry.isOnBreak && adminActiveEntry.hasCompletedPause)} 
                                             className={`text-xs px-3 py-1 text-white rounded ${adminActiveEntry.isOnBreak ? 'bg-green-500 hover:bg-green-600' : 'bg-yellow-500 hover:bg-yellow-600'} disabled:opacity-50`}
                                          >
-                                             {adminActiveEntry.isOnBreak ? 'Termina Pausa' : 'Inizia Pausa'}
+                                              {adminActiveEntry.isOnBreak ? 'Termina Pausa' : 'Inizia Pausa'}
                                          </button>
                                          <button onClick={() => openModal('manualClockOut', adminEmployeeProfile)} disabled={adminActiveEntry.isOnBreak || isActionLoading} className="text-xs px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 disabled:bg-gray-400 disabled:opacity-50">
-                                             Timbra Uscita
+                                              Timbra Uscita
                                          </button>
                                      </div>
                                  </div>
@@ -1738,14 +1911,12 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                              <button onClick={() => setView('employees')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'employees' || view === 'newEmployeeForm' || view === 'prepostoAddEmployeeForm' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Dipendenti</button>
                              <button onClick={() => setView('areas')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'areas' || view === 'newAreaForm' || view === 'editAreaPauseOnly' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Aree</button>
                              {currentUserRole === 'admin' && <button onClick={() => setView('admins')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'admins' || view === 'newAdminForm' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Admin</button>}
-                             {/* NUOVA TAB REPORT PER ADMIN E PREPOSTO */}
                              {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (
                                 <button 
                                     onClick={() => setView('reports')} 
                                     className={`py-2 px-3 sm:border-b-2 text-sm font-medium flex items-center ${view === 'reports' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}
                                 >
                                     Report Presenze
-                                    {/* BADGE DI NOTIFICA PENDING */}
                                     {pendingRequestsCount > 0 && (
                                         <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
                                             ⚠️ {pendingRequestsCount}
@@ -1758,11 +1929,8 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                  </div>
             </nav>
 
-            {/* HEADER AZIONI GENERALI (CREA DIPENDENTE / AGGIUNGI AREA / CREA ADMIN) */}
-            {/* eslint-disable-next-line react/jsx-no-undef */}
             <ActionHeader view={view} currentUserRole={currentUserRole} setView={setView} openModal={openModal} isSuperAdmin={user?.email === superAdminEmail} />
 
-            {/* Form Genera Report (SOLO SE view è impostata a 'reports') */}
             {view === 'reports' && (
                 <div className="max-w-7xl mx-auto w-full p-4 sm:p-6 lg:p-8">
                     <div className="bg-white shadow-md rounded-lg p-4 mb-6">
@@ -1778,15 +1946,21 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 </div>
             )}
             
-            {/* Contenuto principale (DASHBOARD/GESTIONI E REPORT VIEW SENZA FORM SOPRA) */}
             <div className="max-w-7xl mx-auto w-full p-4 sm:p-6 lg:p-8">
-                {/* RENDERIZZAZIONE FORM DI CREAZIONE IN LINEA */}
                 {view === 'newEmployeeForm' && <NewEmployeeForm onDataUpdate={fetchData} user={user} setView={setView} showNotification={showNotification} />}
                 {view === 'newAreaForm' && <NewAreaForm onDataUpdate={fetchData} setView={setView} showNotification={showNotification} />}
                 {view === 'newAdminForm' && <NewAdminForm onDataUpdate={fetchData} user={user} setView={setView} showNotification={showNotification} />}
                 {view === 'prepostoAddEmployeeForm' && <PrepostoAddEmployeeForm onDataUpdate={fetchData} user={user} setView={setView} showNotification={showNotification} workAreas={allWorkAreas} allEmployees={allEmployees} userData={userData} />}
                 
-                {/* RENDERIZZAZIONE VISTE PRINCIPALI (se non stiamo visualizzando un form di creazione) */}
+                {view === 'manualEntryForm' && <ManualEntryForm 
+                    onDataUpdate={fetchData} 
+                    setView={setView} 
+                    showNotification={showNotification} 
+                    allEmployees={managedEmployees} 
+                    allWorkAreas={currentUserRole === 'admin' ? allWorkAreas : allWorkAreas.filter(a => userData?.managedAreaIds?.includes(a.id))}
+                    preselectedEmployee={manualEntryEmployee}
+                />}
+                
                 <main>
                     {view === 'dashboard' && <DashboardView totalEmployees={managedEmployees.length} activeEmployeesDetails={activeEmployeesDetails} totalDayHours={totalDayHours} />}
                     
@@ -1801,14 +1975,13 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                         handleResetEmployeeDevice={handleResetEmployeeDevice} 
                         adminEmployeeId={adminEmployeeProfile?.id}
                         handleEmployeePauseClick={handleEmployeePauseClick} 
+                        handleOpenManualEntry={handleOpenManualEntry}
                     />}
                     
-                    {/* --- QUI USIAMO LA LISTA FILTRATA 'visibleWorkAreas' --- */}
                     {view === 'areas' && <AreaManagementView workAreas={visibleWorkAreas} openModal={openModal} currentUserRole={currentUserRole} />}
                     
                     {view === 'admins' && currentUserRole === 'admin' && <AdminManagementView admins={admins} openModal={openModal} user={user} superAdminEmail={superAdminEmail} currentUserRole={currentUserRole} onDataUpdate={fetchData} />}
                     
-                    {/* eslint-disable-next-line react/jsx-no-undef */}
                     {view === 'reports' && <ReportView 
                          reports={reports} 
                          title={reportTitle} 
@@ -1828,12 +2001,12 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                          isActionLoading={isActionLoading}
                          managedEmployees={managedEmployees}
                          showNotification={showNotification}
-                         handleReviewSkipBreak={handleReviewSkipBreak} // PASSATA LA NUOVA FUNZIONE
+                         handleReviewSkipBreak={handleReviewSkipBreak} 
+                         onEditEntry={(entry) => setEntryToEdit(entry)} 
                     />}
                 </main>
             </div>
             
-            {/* Avviso di Copyright */}
             <footer className="w-full bg-white border-t border-gray-200 py-3 mt-8">
                 <p className="text-center text-xs text-gray-500">
                      &copy; {new Date().getFullYear()} TCS Italia S.r.l. Tutti i diritti riservati.
@@ -1841,7 +2014,17 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             </footer>
 
 
-            {/* Modale */}
+            {/* Modale Modifica Timbratura */}
+            {entryToEdit && (
+                <EditTimeEntryModal 
+                    entry={entryToEdit}
+                    workAreas={allWorkAreas}
+                    onClose={() => setEntryToEdit(null)}
+                    onSave={handleSaveEntryEdit}
+                    isLoading={isActionLoading}
+                />
+            )}
+
             {showModal && (
                  <AdminModal
                      type={modalType}
@@ -1855,7 +2038,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                      currentUserRole={currentUserRole}
                      userData={userData} 
                      onAdminClockIn={handleAdminClockIn}
-                     showNotification={showNotification} // PASSATO showNotification
+                     showNotification={showNotification} 
                  />
              )}
         </div>
