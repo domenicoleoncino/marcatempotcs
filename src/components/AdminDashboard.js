@@ -522,6 +522,9 @@ const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) =>
         return dateStr;
     };
 
+    // STATO PER LA CHECKBOX PAUSA
+    const [skipPause, setSkipPause] = useState(!!entry.skippedBreak);
+
     const [formData, setFormData] = useState({
         workAreaId: entry.workAreaId || '',
         note: entry.note || '',
@@ -536,7 +539,15 @@ const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) =>
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        onSave(entry.id, formData);
+        
+        // VALIDAZIONE: Se dice che non ha fatto pausa, il motivo è obbligatorio
+        if (skipPause && (!formData.note || formData.note.trim() === '')) {
+            alert("ATTENZIONE: Se indichi che il dipendente NON ha effettuato la pausa, è OBBLIGATORIO inserire il motivo nelle note.");
+            return;
+        }
+
+        // Passa anche lo stato skippedBreak
+        onSave(entry.id, { ...formData, skippedBreak: skipPause });
     };
 
     return (
@@ -586,10 +597,38 @@ const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) =>
                         </div>
                     </div>
 
+                    {/* --- CHECKBOX PAUSA --- */}
+                    <div className="bg-orange-50 p-3 rounded-md border border-orange-200">
+                        <div className="flex items-center">
+                            <input
+                                id="skipPauseCheck"
+                                type="checkbox"
+                                checked={skipPause}
+                                onChange={(e) => setSkipPause(e.target.checked)}
+                                className="h-5 w-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                            />
+                            <label htmlFor="skipPauseCheck" className="ml-3 block text-sm font-bold text-gray-800">
+                                Non ha effettuato la pausa
+                            </label>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1 ml-8">
+                            Se selezionato, le ore verranno calcolate per intero (senza detrazione). Motivo obbligatorio.
+                        </p>
+                    </div>
+
                     {/* NOTE */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700">Note / Motivo Modifica</label>
-                        <textarea name="note" value={formData.note} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border rounded-md" rows="2"></textarea>
+                        <label className="block text-sm font-medium text-gray-700">
+                            Note / Motivo Modifica {skipPause && <span className="text-red-500">*</span>}
+                        </label>
+                        <textarea 
+                            name="note" 
+                            value={formData.note} 
+                            onChange={handleChange} 
+                            placeholder={skipPause ? "Inserire OBBLIGATORIAMENTE il motivo..." : "Opzionale"}
+                            className={`mt-1 block w-full px-3 py-2 border rounded-md ${skipPause && !formData.note ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-300'}`} 
+                            rows="2"
+                        ></textarea>
                     </div>
 
                     <div className="flex justify-end space-x-2 pt-2">
@@ -1774,7 +1813,11 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             let updatePayload = {
                 workAreaId: updatedData.workAreaId,
                 note: updatedData.note,
-                clockInTime: Timestamp.fromDate(newClockInDate)
+                clockInTime: Timestamp.fromDate(newClockInDate),
+                // AGGIUNTO: Salvataggio stato pausa
+                skippedBreak: updatedData.skippedBreak,
+                // Se true, lo approviamo automaticamente dato che lo sta facendo l'admin
+                skipBreakStatus: updatedData.skippedBreak ? 'approved' : 'none' 
             };
 
             // 2. Gestisci l'uscita
@@ -1800,7 +1843,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
             await updateDoc(entryRef, updatePayload);
 
-            showNotification("Timbratura (data e orari) aggiornata con successo!", "success");
+            showNotification("Timbratura (orari e stato pausa) aggiornata con successo!", "success");
             setEntryToEdit(null); // Chiudi modale
             generateReport(); // Ricarica il report
         } catch (error) {
