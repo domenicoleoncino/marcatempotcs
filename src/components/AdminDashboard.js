@@ -10,6 +10,7 @@ import {
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import CompanyLogo from './CompanyLogo';
 import AdminModal from './AdminModal'; 
+import MappaPresenze from './MappaPresenze'; 
 import { utils, writeFile } from 'xlsx';
 import { saveAs } from 'file-saver';
 
@@ -645,59 +646,118 @@ const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) =>
 
 // =======================================================
 
+// --- VIEW DELLA DASHBOARD AGGIORNATA (CON BOTTONE MAPPA) ---
+const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, workAreas }) => {
+    // Stato per gestire la visibilità del modale mappa
+    const [showMap, setShowMap] = useState(false);
 
-const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours }) => (
-    <div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-4">Dashboard</h1>
-        <div className="flex flex-col md:grid md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-            <div className="bg-white p-4 rounded-lg shadow-md text-center sm:text-left">
-                <p className="text-sm text-gray-500">Dipendenti Attivi</p>
-                <p className="2xl font-bold text-gray-800">{activeEmployeesDetails.length} / {totalEmployees}</p>
+    return (
+        <div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-4">Dashboard</h1>
+            
+            {/* Stats Cards */}
+            <div className="flex flex-col md:grid md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                <div className="bg-white p-4 rounded-lg shadow-md text-center sm:text-left">
+                    <p className="text-sm text-gray-500">Dipendenti Attivi</p>
+                    <p className="text-2xl font-bold text-gray-800">{activeEmployeesDetails.length} / {totalEmployees}</p>
+                </div>
+                <div className="bg-white p-4 rounded-lg shadow-md text-center sm:text-left">
+                    <p className="text-sm text-gray-500">Ore Lavorate Oggi (Totali)</p>
+                    <p className="text-2xl font-bold text-gray-800">{totalDayHours}</p>
+                </div>
             </div>
-            <div className="bg-white p-4 rounded-lg shadow-md text-center sm:text-left">
-                <p className="text-sm text-gray-500">Ore Lavorate Oggi (Totali)</p>
-                <p className="2xl font-bold text-gray-800">{totalDayHours}</p>
+
+            {/* --- PULSANTE PER APRIRE LA MAPPA --- */}
+            <div className="mb-6">
+                 <button
+                    onClick={() => setShowMap(true)}
+                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white font-bold rounded-lg shadow-md hover:bg-blue-700 transition-transform transform hover:scale-105"
+                >
+                    🌍 Apri Mappa Presenze
+                </button>
             </div>
-        </div>
-        <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-3">Chi è al Lavoro Ora</h2>
-        <div className="bg-white shadow-md rounded-lg overflow-x-auto">
-            {activeEmployeesDetails.length > 0 ? (
-                <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                        <tr>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dipendente</th>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Area</th>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entrata</th>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stato</th>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pausa</th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                        {activeEmployeesDetails.map(entry => (
-                            <tr key={entry.id}>
-                                <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.employeeName}</td>
-                                <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.areaName}</td>
-                                <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.clockInTimeFormatted}</td>
-                                <td className="px-4 py-2 whitespace-nowrap">
-                                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${entry.status === 'In Pausa' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>{entry.status}</span>
-                                </td>
-                                <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
-                                     {entry.status === 'In Pausa' ? (
-                                         <span className="text-yellow-600 font-bold">In Corso</span>
-                                     ) : entry.hasCompletedPause ? (
-                                         <span className="text-green-600 font-bold">Eseguita</span>
-                                     ) : (
-                                         <span className="text-gray-400">-</span>
-                                     )}
-                                </td>
+
+            {/* --- MODALE MAPPA (Overlay) --- */}
+            {showMap && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm p-4 transition-opacity">
+                    <div className="bg-white rounded-lg shadow-2xl w-full max-w-5xl overflow-hidden relative animate-fade-in-up">
+                        
+                        {/* Header Modale */}
+                        <div className="flex justify-between items-center p-4 border-b bg-gray-50">
+                            <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                                🌍 Mappa Cantieri in Tempo Reale
+                            </h3>
+                            <button 
+                                onClick={() => setShowMap(false)} 
+                                className="text-gray-400 hover:text-gray-700 transition-colors text-2xl font-bold leading-none focus:outline-none"
+                            >
+                                &times;
+                            </button>
+                        </div>
+                        
+                        {/* Corpo Modale (Mappa) */}
+                        <div className="p-4 bg-gray-100">
+                             <MappaPresenze 
+                                aree={workAreas} 
+                                presenzeAttive={activeEmployeesDetails} 
+                            />
+                        </div>
+
+                        {/* Footer Modale */}
+                        <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse border-t">
+                            <button
+                                type="button"
+                                onClick={() => setShowMap(false)}
+                                className="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:ml-3 sm:w-auto sm:text-sm"
+                            >
+                                Chiudi Mappa
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* ------------------------------------- */}
+
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-3">Chi è al Lavoro Ora</h2>
+            <div className="bg-white shadow-md rounded-lg overflow-x-auto">
+                {activeEmployeesDetails.length > 0 ? (
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                            <tr>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dipendente</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Area</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entrata</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stato</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pausa</th>
                             </tr>
-                        ))}
-                    </tbody>
-                </table>
-            ) : <p className="p-4 text-sm text-gray-500">Nessun dipendente (tra quelli che gestisci) è attualmente al lavoro.</p>}
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                            {activeEmployeesDetails.map(entry => (
+                                <tr key={entry.id}>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.employeeName}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.areaName}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.clockInTimeFormatted}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap">
+                                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${entry.status === 'In Pausa' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>{entry.status}</span>
+                                    </td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
+                                         {entry.status === 'In Pausa' ? (
+                                             <span className="text-yellow-600 font-bold">In Corso</span>
+                                         ) : entry.hasCompletedPause ? (
+                                             <span className="text-green-600 font-bold">Eseguita</span>
+                                         ) : (
+                                             <span className="text-gray-400">-</span>
+                                         )}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                ) : <p className="p-4 text-sm text-gray-500">Nessun dipendente (tra quelli che gestisci) è attualmente al lavoro.</p>}
+            </div>
         </div>
-    </div>
-);
+    );
+};
 
 const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortConfig, requestSort, searchTerm, setSearchTerm, handleResetEmployeeDevice, adminEmployeeId, handleEmployeePauseClick, handleOpenManualEntry }) => { 
     const getSortIndicator = (key) => {
@@ -1578,7 +1638,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             const result = await applyPauseFunction({ 
                 timeEntryId: timeEntryId, 
                 durationMinutes: pauseDurationInMinutes, 
-                deviceId: 'PREPOSTO_MANUAL_ACTION',
+                deviceId: 'PREPOSTO_MANUAL_ACTION', 
                 employeeIdToUpdate: employee.id 
             });
             showNotification(result.data.message, 'success');
@@ -2005,7 +2065,12 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 />}
                 
                 <main>
-                    {view === 'dashboard' && <DashboardView totalEmployees={managedEmployees.length} activeEmployeesDetails={activeEmployeesDetails} totalDayHours={totalDayHours} />}
+                    {view === 'dashboard' && <DashboardView 
+                        totalEmployees={managedEmployees.length} 
+                        activeEmployeesDetails={activeEmployeesDetails} 
+                        totalDayHours={totalDayHours} 
+                        workAreas={visibleWorkAreas} 
+                    />}
                     
                     {view === 'employees' && <EmployeeManagementView 
                         employees={sortedAndFilteredEmployees} 

@@ -8,7 +8,6 @@ Assicurati che sia importato in src/index.js.
 
 /* Stili del Body Predefiniti (Ripristino) */
 body {
-  /* Nuove proprietà definite dall'utente */
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
@@ -32,4 +31,18 @@ code {
   align-items: flex-start; /* Allinea il contenuto in alto (necessario per l'header) */
   min-height: 100vh;
   width: 100%;
+}
+
+/* --- NUOVI STILI PER LA MAPPA (Puntini Rossi con Numero) --- */
+.marker-counter-pin {
+  background-color: #ef4444; /* Rosso acceso (Tailwind red-500) */
+  color: white;
+  border-radius: 50%;
+  border: 2px solid white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 14px;
+  box-shadow: 0 3px 6px rgba(0,0,0,0.4);
 }
