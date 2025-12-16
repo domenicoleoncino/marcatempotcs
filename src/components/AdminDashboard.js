@@ -936,7 +936,7 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
          return <div className="p-4 text-sm text-red-600 font-medium">Accesso negato. Solo gli amministratori hanno accesso a questa sezione.</div>;
     }
 
-    const isSuperAdmin = user?.email === superAdminEmail;
+    // Qui filtriamo via il Super Admin per nasconderlo a TUTTI
     const filteredAdmins = admins.filter(admin => admin.email !== superAdminEmail);
 
     return (
@@ -946,7 +946,7 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
             </div>
             
             <p className="text-sm text-gray-500 mb-4">
-                In questa lista sono inclusi tutti gli utenti con ruolo "admin" e "preposto" (eccetto il Super Admin).
+                In questa lista sono inclusi tutti gli utenti con ruolo "admin" e "preposto".
             </p>
 
             <div className="bg-white shadow-md rounded-lg overflow-x-auto">
@@ -970,11 +970,15 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
                                 <td className="px-4 py-2 whitespace-normal text-sm text-gray-500">{admin.managedAreaNames?.join(', ') || 'Nessuna Area'}</td>
                                 <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
                                     <div className="flex items-center gap-2">
-                                        {(isSuperAdmin || (currentUserRole === 'admin' && admin.role === 'preposto')) && (
+                                        {/* MODIFICA SICUREZZA: 
+                                            Tutti gli admin possono vedere questo pulsante per gli utenti in lista.
+                                            Il Super Admin è già escluso dalla lista (filteredAdmins), quindi è al sicuro.
+                                        */}
+                                        {currentUserRole === 'admin' && (
                                             <button 
                                                 onClick={() => openModal('deleteAdmin', admin)} 
-                                                className="px-2 py-1 text-xs text-white bg-red-500 rounded-md hover:bg-red-600"
-                                                disabled={admin.email === user?.email}
+                                                className="px-2 py-1 text-xs text-white bg-red-500 rounded-md hover:bg-red-600 disabled:opacity-50"
+                                                disabled={admin.email === user?.email} // Impedisce di auto-eliminarsi
                                             >
                                                 Elimina
                                             </button>
@@ -1177,7 +1181,8 @@ const ActionHeader = ({ view, currentUserRole, setView, openModal, isSuperAdmin 
             </button>
         );
     }
-    else if (targetView === 'admins' && currentUserRole === 'admin' && isSuperAdmin) { 
+    // MODIFICA QUI: Rimosso && isSuperAdmin
+    else if (targetView === 'admins' && currentUserRole === 'admin') { 
         text = 'Crea Nuovo Admin/Preposto';
         button = (
             <button onClick={() => setView('newAdminForm')} 
