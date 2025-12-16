@@ -5,7 +5,7 @@ import { db } from '../firebase';
 import {
     collection, getDocs, query, where,
     Timestamp, onSnapshot, updateDoc, doc, limit,
-    addDoc 
+    addDoc, writeBatch // <--- IMPORTANTE: writeBatch aggiunto
 } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import CompanyLogo from './CompanyLogo';
@@ -18,7 +18,7 @@ import { saveAs } from 'file-saver';
 // --- SUB-COMPONENTI E FUNZIONI INIZIALI ---
 // ===========================================
 
-// VARIABILE PER IL CONTROLLO SUPER ADMIN (NON MODIFICARE QUI!)
+// VARIABILE PER IL CONTROLLO SUPER ADMIN
 const SUPER_ADMIN_EMAIL = "domenico.leoncino@tcsitalia.com"; 
 
 const NotificationPopup = ({ message, type, onClose }) => {
@@ -512,6 +512,151 @@ const ManualEntryForm = ({ onDataUpdate, setView, showNotification, allEmployees
     );
 };
 
+// --- NUOVO FORM: INSERIMENTO GIUSTIFICATIVO (RANGE DATE) ---
+const AbsenceEntryForm = ({ onDataUpdate, setView, showNotification, allEmployees, preselectedEmployee }) => {
+    const [f, setF] = useState({
+        employeeId: preselectedEmployee ? preselectedEmployee.id : '',
+        startDate: new Date().toISOString().split('T')[0], // Data Inizio
+        endDate: new Date().toISOString().split('T')[0],   // Data Fine (default uguale a inizio)
+        type: 'Ferie', 
+        note: ''
+    });
+
+    const absenceTypes = [
+        { value: 'Ferie', label: '🏖️ Ferie' },
+        { value: 'Malattia', label: '🤒 Malattia' },
+        { value: 'Permesso', label: '🕒 Permesso Retribuito' },
+        { value: 'Legge 104', label: '♿ Legge 104' },
+        { value: 'Infortunio', label: '🚑 Infortunio' },
+        { value: 'Assenza Ingiustificata', label: '❌ Assenza Ingiustificata' },
+        { value: 'Altro', label: '📝 Altro Motivo' }
+    ];
+
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        setF(prev => ({ ...prev, [name]: value }));
+    };
+
+    const sub = async (e) => {
+        e.preventDefault();
+        
+        if(!f.employeeId || !f.startDate || !f.endDate || !f.type) {
+            return showNotification("Compila tutti i campi obbligatori.", "error");
+        }
+
+        const start = new Date(f.startDate);
+        const end = new Date(f.endDate);
+
+        if (end < start) {
+            return showNotification("La data di fine deve essere successiva o uguale alla data di inizio.", "error");
+        }
+
+        try {
+            // Usiamo il batch per salvare tutto insieme (o tutto o niente)
+            const batch = writeBatch(db);
+            const timeEntriesRef = collection(db, "time_entries");
+
+            let current = new Date(start);
+            let count = 0;
+
+            // Ciclo dal giorno inizio al giorno fine
+            while (current <= end) {
+                // Imposta orario a mezzogiorno per evitare problemi di fuso orario
+                const eventDate = new Date(current);
+                eventDate.setHours(12, 0, 0, 0);
+
+                // Crea il riferimento per il nuovo documento
+                const newDocRef = doc(timeEntriesRef); // ID generato automaticamente
+
+                const newEntry = {
+                    employeeId: f.employeeId,
+                    workAreaId: null,
+                    clockInTime: Timestamp.fromDate(eventDate),
+                    clockOutTime: Timestamp.fromDate(eventDate),
+                    status: 'clocked-out',
+                    isManual: true,
+                    isAbsence: true,
+                    absenceType: f.type,
+                    note: f.note ? f.note : f.type,
+                    pauses: []
+                };
+
+                batch.set(newDocRef, newEntry);
+
+                // Passa al giorno successivo
+                current.setDate(current.getDate() + 1);
+                count++;
+            }
+
+            // Esegui il salvataggio
+            await batch.commit();
+
+            showNotification(`Inseriti ${count} giorni di "${f.type}" con successo!`, 'success');
+            await onDataUpdate(); 
+            setView('employees'); 
+
+        } catch(err) {
+            console.error("Errore salvataggio assenza:", err);
+            showNotification("Errore durante il salvataggio: " + err.message, 'error');
+        }
+    };
+
+    return (
+        <div className="bg-white shadow-md rounded-lg p-4 mb-6 animate-fade-in">
+            <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Inserisci Giustificativo / Assenza</h3>
+            <form onSubmit={sub} className="space-y-4">
+                {preselectedEmployee ? (
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700">Dipendente</label>
+                        <input disabled value={`${preselectedEmployee.name} ${preselectedEmployee.surname}`} className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-gray-100 rounded-md shadow-sm sm:text-sm text-gray-500" />
+                    </div>
+                ) : (
+                    renderField(f, handleChange, 'Dipendente', 'employeeId', 'select', [{value:'',label:'-- Seleziona --'}, ...allEmployees.map(e=>({value:e.id, label:e.name+' '+e.surname}))])
+                )}
+
+                {/* Selezione Tipo Assenza */}
+                <div>
+                    <label htmlFor="type" className="block text-sm font-medium text-gray-700">Tipo di Assenza</label>
+                    <select
+                        id="type" name="type" value={f.type} onChange={handleChange}
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                    >
+                        {absenceTypes.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                    </select>
+                </div>
+                
+                {/* Selezione Date (Range) */}
+                <div className="grid grid-cols-2 gap-4">
+                    {renderField(f, handleChange, 'Dal giorno', 'startDate', 'date')}
+                    {renderField(f, handleChange, 'Al giorno (incluso)', 'endDate', 'date')}
+                </div>
+                
+                {/* Note */}
+                <div>
+                    <label className="block text-sm font-medium text-gray-700">Note Aggiuntive (Opzionale)</label>
+                    <textarea 
+                        name="note" 
+                        value={f.note} 
+                        onChange={handleChange} 
+                        placeholder="Es. Protocollo medico n. 123..."
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 sm:text-sm"
+                        rows="3"
+                    ></textarea>
+                </div>
+
+                <div className="bg-blue-50 p-3 rounded-lg border border-blue-200 text-sm text-blue-800">
+                    ℹ️ Verrà creata una riga di assenza (0 ore) per <strong>ogni giorno</strong> dell'intervallo selezionato.
+                </div>
+
+                <div className="flex justify-end space-x-3 pt-4">
+                    <button type="button" onClick={() => setView('employees')} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 text-sm font-medium">Annulla</button>
+                    <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm font-medium">Salva Assenze</button>
+                </div>
+            </form>
+        </div>
+    );
+};
+
 // === COMPONENTE AGGIORNATO: MODALE MODIFICA TIMBRATURA ESISTENTE (CON CAMBIO DATA) ===
 const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) => {
     
@@ -570,52 +715,58 @@ const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) =>
                         />
                     </div>
 
-                    {/* SELEZIONE AREA */}
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700">Area di Lavoro</label>
-                        <select 
-                            name="workAreaId" 
-                            value={formData.workAreaId} 
-                            onChange={handleChange}
-                            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white"
-                        >
-                            {workAreas.map(area => (
-                                <option key={area.id} value={area.id}>{area.name}</option>
-                            ))}
-                        </select>
-                    </div>
-
-                    {/* MODIFICA ORARI */}
-                    <div className="grid grid-cols-2 gap-4">
+                    {/* SELEZIONE AREA (Solo se NON è un'assenza) */}
+                    {!entry.isAbsence && (
                         <div>
-                            <label className="block text-sm font-medium text-gray-700">Ora Entrata</label>
-                            <input type="time" name="clockInTime" value={formData.clockInTime} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border rounded-md" required />
+                            <label className="block text-sm font-medium text-gray-700">Area di Lavoro</label>
+                            <select 
+                                name="workAreaId" 
+                                value={formData.workAreaId} 
+                                onChange={handleChange}
+                                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white"
+                            >
+                                {workAreas.map(area => (
+                                    <option key={area.id} value={area.id}>{area.name}</option>
+                                ))}
+                            </select>
                         </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Ora Uscita</label>
-                            <input type="time" name="clockOutTime" value={formData.clockOutTime} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border rounded-md" />
-                            <p className="text-xs text-gray-500 mt-1">Lascia vuoto se in corso</p>
-                        </div>
-                    </div>
+                    )}
 
-                    {/* --- CHECKBOX PAUSA --- */}
-                    <div className="bg-orange-50 p-3 rounded-md border border-orange-200">
-                        <div className="flex items-center">
-                            <input
-                                id="skipPauseCheck"
-                                type="checkbox"
-                                checked={skipPause}
-                                onChange={(e) => setSkipPause(e.target.checked)}
-                                className="h-5 w-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                            />
-                            <label htmlFor="skipPauseCheck" className="ml-3 block text-sm font-bold text-gray-800">
-                                Non ha effettuato la pausa
-                            </label>
+                    {/* MODIFICA ORARI (Solo se NON è un'assenza) */}
+                    {!entry.isAbsence && (
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Ora Entrata</label>
+                                <input type="time" name="clockInTime" value={formData.clockInTime} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border rounded-md" required />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Ora Uscita</label>
+                                <input type="time" name="clockOutTime" value={formData.clockOutTime} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border rounded-md" />
+                                <p className="text-xs text-gray-500 mt-1">Lascia vuoto se in corso</p>
+                            </div>
                         </div>
-                        <p className="text-xs text-gray-500 mt-1 ml-8">
-                            Se selezionato, le ore verranno calcolate per intero (senza detrazione). Motivo obbligatorio.
-                        </p>
-                    </div>
+                    )}
+
+                    {/* --- CHECKBOX PAUSA (Solo se NON è un'assenza) --- */}
+                    {!entry.isAbsence && (
+                        <div className="bg-orange-50 p-3 rounded-md border border-orange-200">
+                            <div className="flex items-center">
+                                <input
+                                    id="skipPauseCheck"
+                                    type="checkbox"
+                                    checked={skipPause}
+                                    onChange={(e) => setSkipPause(e.target.checked)}
+                                    className="h-5 w-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                                />
+                                <label htmlFor="skipPauseCheck" className="ml-3 block text-sm font-bold text-gray-800">
+                                    Non ha effettuato la pausa
+                                </label>
+                            </div>
+                            <p className="text-xs text-gray-500 mt-1 ml-8">
+                                Se selezionato, le ore verranno calcolate per intero (senza detrazione). Motivo obbligatorio.
+                            </p>
+                        </div>
+                    )}
 
                     {/* NOTE */}
                     <div>
@@ -749,7 +900,7 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
     );
 };
 
-const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortConfig, requestSort, searchTerm, setSearchTerm, handleResetEmployeeDevice, adminEmployeeId, handleEmployeePauseClick, handleOpenManualEntry }) => { 
+const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortConfig, requestSort, searchTerm, setSearchTerm, handleResetEmployeeDevice, adminEmployeeId, handleEmployeePauseClick, handleOpenManualEntry, handleOpenAbsenceEntry }) => { 
     const getSortIndicator = (key) => {
         if (!sortConfig || sortConfig.key !== key) return '';
         return sortConfig.direction === 'ascending' ? ' ▲' : ' ▼';
@@ -849,13 +1000,23 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                                 )}
 
                                                 {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (
-                                                    <button 
-                                                        onClick={() => handleOpenManualEntry(emp)} 
-                                                        className="text-xs px-2 py-1 bg-purple-500 text-white rounded-md hover:bg-purple-600 whitespace-nowrap"
-                                                        title="Inserisci manualmente una timbratura dimenticata (es. ieri)"
-                                                    >
-                                                        ➕ Agg. Ore
-                                                    </button>
+                                                    <div className="flex flex-col gap-1 mt-1">
+                                                        <button 
+                                                            onClick={() => handleOpenManualEntry(emp)} 
+                                                            className="text-xs px-2 py-1 bg-purple-500 text-white rounded-md hover:bg-purple-600 whitespace-nowrap"
+                                                            title="Inserisci manualmente una timbratura dimenticata (es. ieri)"
+                                                        >
+                                                            ➕ Agg. Ore
+                                                        </button>
+                                                        {/* NUOVO PULSANTE GIUSTIFICA */}
+                                                        <button 
+                                                            onClick={() => handleOpenAbsenceEntry(emp)} 
+                                                            className="text-xs px-2 py-1 bg-teal-600 text-white rounded-md hover:bg-teal-700 whitespace-nowrap"
+                                                            title="Inserisci Ferie, Malattia, Permessi..."
+                                                        >
+                                                            🤒 Giustifica
+                                                        </button>
+                                                    </div>
                                                 )}
                                             </div>
                                         </div>
@@ -936,7 +1097,6 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
          return <div className="p-4 text-sm text-red-600 font-medium">Accesso negato. Solo gli amministratori hanno accesso a questa sezione.</div>;
     }
 
-    // Qui filtriamo via il Super Admin per nasconderlo a TUTTI
     const filteredAdmins = admins.filter(admin => admin.email !== superAdminEmail);
 
     return (
@@ -946,7 +1106,7 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
             </div>
             
             <p className="text-sm text-gray-500 mb-4">
-                In questa lista sono inclusi tutti gli utenti con ruolo "admin" e "preposto".
+                In questa lista sono inclusi tutti gli utenti con ruolo "admin" e "preposto" (eccetto il Super Admin).
             </p>
 
             <div className="bg-white shadow-md rounded-lg overflow-x-auto">
@@ -970,15 +1130,11 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
                                 <td className="px-4 py-2 whitespace-normal text-sm text-gray-500">{admin.managedAreaNames?.join(', ') || 'Nessuna Area'}</td>
                                 <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
                                     <div className="flex items-center gap-2">
-                                        {/* MODIFICA SICUREZZA: 
-                                            Tutti gli admin possono vedere questo pulsante per gli utenti in lista.
-                                            Il Super Admin è già escluso dalla lista (filteredAdmins), quindi è al sicuro.
-                                        */}
                                         {currentUserRole === 'admin' && (
                                             <button 
                                                 onClick={() => openModal('deleteAdmin', admin)} 
                                                 className="px-2 py-1 text-xs text-white bg-red-500 rounded-md hover:bg-red-600 disabled:opacity-50"
-                                                disabled={admin.email === user?.email} // Impedisce di auto-eliminarsi
+                                                disabled={admin.email === user?.email} 
                                             >
                                                 Elimina
                                             </button>
@@ -1022,7 +1178,7 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
             'Data': entry.clockInDate,
             'Entrata': entry.clockInTimeFormatted, 
             'Uscita': entry.clockOutTimeFormatted,
-            'Ore Lavorate (Netto)': (entry.duration !== null) ? parseFloat(entry.duration.toFixed(2)) : "In corso",
+            'Ore Lavorate (Netto)': entry.isAbsence ? 0 : ((entry.duration !== null) ? parseFloat(entry.duration.toFixed(2)) : "In corso"),
             'Pausa Totale (Ore)': (entry.pauseHours !== null) ? parseFloat(entry.pauseHours.toFixed(2)) : 0,
             'Stato Pausa': entry.skippedBreak ? (entry.skipBreakStatus === 'approved' ? 'No Pausa (Approvato)' : 'Pausa Scalata (Default)') : 'Standard',
             'Motivo/Nota': entry.note
@@ -1070,70 +1226,98 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                             {reports.map((entry) => (
-                                <tr key={entry.id}>
+                                <tr key={entry.id} className={entry.isAbsence ? "bg-red-50" : ""}>
                                     <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.employeeName}{entry.createdBy && entry.employeeId && entry.createdBy !== entry.employeeId ? <span className="text-red-500 ml-1 font-bold">*</span> : ''}</td>
-                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.areaName}</td>
-                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.clockInDate}</td>
-                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.clockInTimeFormatted}</td> 
-                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.clockOutTimeFormatted}</td> 
-                                    <td className="px-4 py-2 whitespace-nowrap text-sm font-bold text-gray-800">{entry.duration !== null ? entry.duration.toFixed(2) : '...'}</td>
                                     
-                                    <td className="px-4 py-2 whitespace-nowrap text-sm">
-                                        {entry.skippedBreak ? (
-                                            entry.skipBreakStatus === 'pending' ? (
-                                                <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800 animate-pulse">
-                                                    ⚠️ In Attesa Verifica
+                                    {entry.isAbsence ? (
+                                        <>
+                                            <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-400 italic">N/A</td>
+                                            <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.clockInDate}</td>
+                                            <td className="px-4 py-2 whitespace-nowrap text-sm text-center" colSpan="2">
+                                                <span className="px-2 py-1 inline-flex text-xs leading-5 font-bold rounded-full bg-teal-100 text-teal-800">
+                                                    {entry.statusLabel}
                                                 </span>
-                                            ) : entry.skipBreakStatus === 'approved' ? (
-                                                <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                                                    ✅ No Pausa (Approvato)
-                                                </span>
-                                            ) : (
-                                                <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
-                                                    ❌ Pausa Scalata
-                                                </span>
-                                            )
-                                        ) : (
-                                            <span className="text-gray-500 text-xs">Standard ({entry.pauseHours !== null ? entry.pauseHours.toFixed(2) : '0.00'}h)</span>
-                                        )}
-                                    </td>
-
-                                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
-                                        <div className="flex flex-col gap-2">
-                                            {/* PULSANTE MODIFICA (NUOVO) */}
-                                            <button 
-                                                onClick={() => onEditEntry(entry)}
-                                                className="flex items-center text-blue-600 hover:text-blue-900 font-medium"
-                                                title="Correggi timbratura (Area, Orari, Note)"
-                                            >
-                                                ✏️ Modifica
-                                            </button>
-
-                                            {entry.skippedBreak && entry.skipBreakStatus === 'pending' ? (
-                                                <div className="flex flex-col gap-1">
-                                                    <span className="text-xs italic text-gray-600">"{entry.note}"</span>
-                                                    <div className="flex gap-2 mt-1">
-                                                        <button 
-                                                            onClick={() => handleReviewSkipBreak(entry.id, 'approved')}
-                                                            disabled={isActionLoading}
-                                                            className="bg-green-500 hover:bg-green-600 text-white text-xs px-2 py-1 rounded"
-                                                        >
-                                                            Approva
-                                                        </button>
-                                                        <button 
-                                                            onClick={() => handleReviewSkipBreak(entry.id, 'rejected')}
-                                                            disabled={isActionLoading}
-                                                            className="bg-red-500 hover:bg-red-600 text-white text-xs px-2 py-1 rounded"
-                                                        >
-                                                            Rifiuta
-                                                        </button>
-                                                    </div>
+                                            </td>
+                                            <td className="px-4 py-2 whitespace-nowrap text-sm font-bold text-gray-400">0.00</td>
+                                            <td className="px-4 py-2 whitespace-nowrap text-sm">-</td>
+                                            <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-700 font-medium">
+                                                <div className="flex flex-col gap-2">
+                                                    <button 
+                                                        onClick={() => onEditEntry(entry)} 
+                                                        className="flex items-center text-blue-600 hover:text-blue-900 font-medium"
+                                                        title="Modifica Giustificativo"
+                                                    >
+                                                        ✏️ Modifica
+                                                    </button>
+                                                    {entry.note}
                                                 </div>
-                                            ) : (
-                                                <span>{entry.note}</span>
-                                            )}
-                                        </div>
-                                    </td>
+                                            </td>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.areaName}</td>
+                                            <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.clockInDate}</td>
+                                            <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.clockInTimeFormatted}</td> 
+                                            <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.clockOutTimeFormatted}</td> 
+                                            <td className="px-4 py-2 whitespace-nowrap text-sm font-bold text-gray-800">{entry.duration !== null ? entry.duration.toFixed(2) : '...'}</td>
+                                            
+                                            <td className="px-4 py-2 whitespace-nowrap text-sm">
+                                                {entry.skippedBreak ? (
+                                                    entry.skipBreakStatus === 'pending' ? (
+                                                        <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800 animate-pulse">
+                                                            ⚠️ In Attesa Verifica
+                                                        </span>
+                                                    ) : entry.skipBreakStatus === 'approved' ? (
+                                                        <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                                                            ✅ No Pausa (Approvato)
+                                                        </span>
+                                                    ) : (
+                                                        <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
+                                                            ❌ Pausa Scalata
+                                                        </span>
+                                                    )
+                                                ) : (
+                                                    <span className="text-gray-500 text-xs">Standard ({entry.pauseHours !== null ? entry.pauseHours.toFixed(2) : '0.00'}h)</span>
+                                                )}
+                                            </td>
+
+                                            <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
+                                                <div className="flex flex-col gap-2">
+                                                    <button 
+                                                        onClick={() => onEditEntry(entry)}
+                                                        className="flex items-center text-blue-600 hover:text-blue-900 font-medium"
+                                                        title="Correggi timbratura (Area, Orari, Note)"
+                                                    >
+                                                        ✏️ Modifica
+                                                    </button>
+
+                                                    {entry.skippedBreak && entry.skipBreakStatus === 'pending' ? (
+                                                        <div className="flex flex-col gap-1">
+                                                            <span className="text-xs italic text-gray-600">"{entry.note}"</span>
+                                                            <div className="flex gap-2 mt-1">
+                                                                <button 
+                                                                    onClick={() => handleReviewSkipBreak(entry.id, 'approved')}
+                                                                    disabled={isActionLoading}
+                                                                    className="bg-green-500 hover:bg-green-600 text-white text-xs px-2 py-1 rounded"
+                                                                >
+                                                                    Approva
+                                                                </button>
+                                                                <button 
+                                                                    onClick={() => handleReviewSkipBreak(entry.id, 'rejected')}
+                                                                    disabled={isActionLoading}
+                                                                    className="bg-red-500 hover:bg-red-600 text-white text-xs px-2 py-1 rounded"
+                                                                >
+                                                                    Rifiuta
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <span>{entry.note}</span>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        </>
+                                    )}
                                 </tr>
                             ))}
                         </tbody>
@@ -1152,10 +1336,10 @@ const ActionHeader = ({ view, currentUserRole, setView, openModal, isSuperAdmin 
     let button = null;
     let text = null;
     
-    const isCurrentViewForm = ['newEmployeeForm', 'newAreaForm', 'newAdminForm', 'prepostoAddEmployeeForm'].includes(view);
+    const isCurrentViewForm = ['newEmployeeForm', 'newAreaForm', 'newAdminForm', 'prepostoAddEmployeeForm', 'absenceEntryForm'].includes(view);
     
     let targetView = view;
-    if (view === 'newEmployeeForm' || view === 'prepostoAddEmployeeForm') targetView = 'employees';
+    if (view === 'newEmployeeForm' || view === 'prepostoAddEmployeeForm' || view === 'absenceEntryForm') targetView = 'employees';
     else if (view === 'newAreaForm') targetView = 'areas';
     else if (view === 'newAdminForm') targetView = 'admins';
 
@@ -1181,7 +1365,6 @@ const ActionHeader = ({ view, currentUserRole, setView, openModal, isSuperAdmin 
             </button>
         );
     }
-    // MODIFICA QUI: Rimosso && isSuperAdmin
     else if (targetView === 'admins' && currentUserRole === 'admin') { 
         text = 'Crea Nuovo Admin/Preposto';
         button = (
@@ -1252,9 +1435,10 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const [pendingRequestsCount, setPendingRequestsCount] = useState(0); 
     const [notification, setNotification] = useState(null); // { message, type }
     
-    // === STATO PER INSERIMENTO MANUALE e MODIFICA ===
+    // === STATO PER INSERIMENTO MANUALE, GIUSTIFICATIVI e MODIFICA ===
     const [manualEntryEmployee, setManualEntryEmployee] = useState(null);
-    const [entryToEdit, setEntryToEdit] = useState(null); // <--- STATO MODIFICA TIMBRATURA
+    const [absenceEmployee, setAbsenceEmployee] = useState(null); // <--- NUOVO
+    const [entryToEdit, setEntryToEdit] = useState(null); 
 
     const showNotification = useCallback((message, type = 'success') => {
         setNotification({ message, type });
@@ -1715,7 +1899,8 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
                 const employee = allEmployees.find(e => e.id === entry.employeeId);
                 const area = allWorkAreas.find(a => a.id === entry.workAreaId);
-                if (!employee || !area) return null; 
+                // NOTA: Se area è null (es. ferie), la gestiamo sotto. Per i dipendenti deve esistere
+                if (!employee) return null; 
 
                 let durationHours = null;
                 let pauseDurationMinutes = 0; 
@@ -1730,6 +1915,25 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                     }
                 } catch (e) { console.error("Errore formattazione ora report:", e); }
 
+                // --- GESTIONE ASSENZE (NUOVO) ---
+                if (entry.isAbsence) {
+                    return {
+                        id: entry.id,
+                        employeeName: `${employee.name} ${employee.surname}`,
+                        employeeId: entry.employeeId,
+                        areaName: "---",
+                        clockInDate: clockIn.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+                        clockInTimeFormatted: "-",
+                        clockOutTimeFormatted: "-",
+                        duration: 0,
+                        pauseHours: 0,
+                        note: entry.note || entry.absenceType,
+                        statusLabel: entry.absenceType ? entry.absenceType.toUpperCase() : "ASSENZA",
+                        isAbsence: true,
+                        workAreaId: null
+                    };
+                }
+                // ---------------------------------
 
                 if (clockOut) {
                     const totalMs = clockOut.getTime() - clockIn.getTime();
@@ -1743,7 +1947,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                         return acc;
                     }, 0);
 
-                    const areaPauseMs = (area.pauseDuration || 0) * 60000;
+                    const areaPauseMs = (area?.pauseDuration || 0) * 60000;
                     
                     let finalPauseDeductionMs = recordedPausesMs;
 
@@ -1766,13 +1970,16 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                     if (calculatedDurationMs < 0) calculatedDurationMs = 0;
 
                     durationHours = calculatedDurationMs > 0 ? (calculatedDurationMs / 3600000) : 0; 
-                    areaHoursMap.set(area.id, (areaHoursMap.get(area.id) || 0) + durationHours);
+                    
+                    if (area) {
+                        areaHoursMap.set(area.id, (areaHoursMap.get(area.id) || 0) + durationHours);
+                    }
                 }
                 return {
                     id: entry.id,
                     employeeName: `${employee.name} ${employee.surname}`,
                     employeeId: entry.employeeId,
-                    areaName: area.name,
+                    areaName: area ? area.name : 'Sconosciuta',
                     clockInDate: clockIn.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' }),
                     clockInTimeFormatted: clockInFormatted, 
                     clockOutTimeFormatted: clockOutFormatted, 
@@ -1783,7 +1990,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                     skippedBreak: entry.skippedBreak,
                     skipBreakStatus: entry.skipBreakStatus,
                     skippedBreakReason: entry.skippedBreakReason,
-                    workAreaId: entry.workAreaId // PER MODIFICA
+                    workAreaId: entry.workAreaId
                 };
             }).filter(Boolean)
               .sort((a, b) => {
@@ -1946,6 +2153,12 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         setView('manualEntryForm');
     };
 
+    // --- NUOVO: Gestione Apertura Form Assenza ---
+    const handleOpenAbsenceEntry = (employee) => {
+        setAbsenceEmployee(employee);
+        setView('absenceEntryForm');
+    };
+
     // --- RENDER ---
     if (isLoading || !user || !userData) {
         return <div className="min-h-screen flex items-center justify-center bg-gray-100 w-full"><p>Caricamento...</p></div>;
@@ -2006,7 +2219,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                      <div className="flex justify-center">
                          <div className="flex flex-wrap justify-center py-2 sm:space-x-4">
                              <button onClick={() => setView('dashboard')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'dashboard' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Dashboard</button>
-                             <button onClick={() => setView('employees')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'employees' || view === 'newEmployeeForm' || view === 'prepostoAddEmployeeForm' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Dipendenti</button>
+                             <button onClick={() => setView('employees')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'employees' || view === 'newEmployeeForm' || view === 'prepostoAddEmployeeForm' || view === 'absenceEntryForm' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Dipendenti</button>
                              <button onClick={() => setView('areas')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'areas' || view === 'newAreaForm' || view === 'editAreaPauseOnly' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Aree</button>
                              {currentUserRole === 'admin' && <button onClick={() => setView('admins')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'admins' || view === 'newAdminForm' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Admin</button>}
                              {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (
@@ -2058,6 +2271,15 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                     allWorkAreas={currentUserRole === 'admin' ? allWorkAreas : allWorkAreas.filter(a => userData?.managedAreaIds?.includes(a.id))}
                     preselectedEmployee={manualEntryEmployee}
                 />}
+
+                {/* --- NUOVO: Vista Form Giustificativo --- */}
+                {view === 'absenceEntryForm' && <AbsenceEntryForm 
+                    onDataUpdate={fetchData} 
+                    setView={setView} 
+                    showNotification={showNotification} 
+                    allEmployees={managedEmployees} 
+                    preselectedEmployee={absenceEmployee}
+                />}
                 
                 <main>
                     {view === 'dashboard' && <DashboardView 
@@ -2079,6 +2301,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                         adminEmployeeId={adminEmployeeProfile?.id}
                         handleEmployeePauseClick={handleEmployeePauseClick} 
                         handleOpenManualEntry={handleOpenManualEntry}
+                        handleOpenAbsenceEntry={handleOpenAbsenceEntry} // <--- Passiamo la nuova funzione
                     />}
                     
                     {view === 'areas' && <AreaManagementView workAreas={visibleWorkAreas} openModal={openModal} currentUserRole={currentUserRole} />}
