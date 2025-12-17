@@ -243,7 +243,7 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
                                     ))}
                                 </tbody>
                             </table>
-                        ) : <p className="p-4 text-sm text-gray-500">Nessun dipendente (tra quelli che gestisci) è attualmente al lavoro.</p>}
+                        ) : <p className="p-4 text-sm text-gray-500">Nessun dipendente è attualmente al lavoro.</p>}
                     </div>
                 </>
             )}
