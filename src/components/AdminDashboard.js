@@ -38,695 +38,6 @@ const NotificationPopup = ({ message, type, onClose }) => {
     );
 };
 
-export const renderField = (formData, handleChange, label, name, type = 'text', options = [], required = true) => (
-    <div>
-        <label htmlFor={name} className="block text-sm font-medium text-gray-700">{label}</label>
-        {type === 'select' ? (
-             <select
-                 id={name} name={name} value={formData[name] ?? ''} onChange={handleChange}
-                 required={required}
-                 className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-             >
-                 {(!required || options.length > 0) && <option value="">{options.length > 0 ? '-- Seleziona --' : '-- Nessuna Opzione --'}</option>}
-                 {options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-             </select>
-        ) : (
-            <input
-                id={name} name={name} type={type} value={formData[name] ?? ''} onChange={handleChange}
-                step={type === 'number' ? 'any' : undefined}
-                required={required}
-                placeholder={name === 'latitude' ? 'Es. 40.8518' : name === 'longitude' ? 'Es. 14.2681' : undefined}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-            />
-        )}
-    </div>
-);
-
-export const renderSingleCheckbox = (formData, handleChange, label, name, description = '') => (
-    <div className="flex items-start pt-4">
-        <div className="flex items-center h-5">
-            <input
-                id={name}
-                name={name}
-                type="checkbox"
-                checked={!!formData[name]}
-                onChange={handleChange}
-                className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-            />
-        </div>
-        <div className="ml-3 text-sm">
-            <label htmlFor={name} className="font-medium text-gray-700">{label}</label>
-            {description && <p className="text-gray-500">{description}</p>}
-        </div>
-    </div>
-);
-
-// === FUNZIONI PER I FORM IN-LINE ===
-
-const NewEmployeeForm = ({ onDataUpdate, user, setView, showNotification }) => {
-    const [formData, setFormData] = useState({ name: '', surname: '', email: '', password: '', controlloGpsRichiesto: true });
-    const [error, setError] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
-    const functions = getFunctions(undefined, 'europe-west1');
-
-    const handleChange = (e) => {
-        const { name, value, type, checked } = e.target;
-        setFormData(prev => ({ 
-            ...prev, 
-            [name]: type === 'checkbox' ? checked : value 
-        }));
-    };
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setIsLoading(true);
-        setError('');
-
-        if (!formData.name || !formData.surname || !formData.email || !formData.password) {
-            setError('Nome, Cognome, Email e Password sono obbligatori.');
-            setIsLoading(false);
-            return;
-        }
-
-        try {
-            const createUser = httpsCallable(functions, 'createUser');
-            await createUser({ ...formData, role: 'dipendente', createdBy: user.uid });
-            showNotification('Dipendente creato con successo!', 'success');
-            await onDataUpdate();
-            setView('employees'); 
-        } catch (err) {
-            const errorMessage = err.message || "Si è verificato un errore sconosciuto.";
-            setError(errorMessage.includes(":") ? errorMessage.split(":")[1].trim() : errorMessage);
-            console.error("Errore creazione dipendente:", err);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    return (
-        <div className="bg-white shadow-md rounded-lg p-4 mb-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Crea Nuovo Dipendente</h3>
-            <form onSubmit={handleSubmit} className="space-y-4">
-                {error && <p className="text-sm text-red-600 mb-4 bg-red-100 p-3 rounded border border-red-200">{error}</p>}
-                
-                {renderField(formData, handleChange, 'Nome', 'name')}
-                {renderField(formData, handleChange, 'Cognome', 'surname')}
-                {renderField(formData, handleChange, 'Email', 'email', 'email')}
-                {renderField(formData, handleChange, 'Password (min. 6 caratteri)', 'password', 'password')}
-                {renderSingleCheckbox(formData, handleChange, 'Richiedi controllo GPS', 'controlloGpsRichiesto', 'Se deselezionato, l\'utente potrà timbrare ovunque.')}
-                
-                <div className="flex justify-end space-x-3 pt-4">
-                    <button type="button" onClick={() => setView('employees')} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 text-sm font-medium">Annulla</button>
-                    <button
-                        type="submit"
-                        disabled={isLoading}
-                        className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed text-sm font-medium"
-                    >
-                        {isLoading ? 'Creazione...' : 'Crea Dipendente'}
-                    </button>
-                </div>
-            </form>
-        </div>
-    );
-};
-
-// --- NUOVO: MODIFICA DIPENDENTE (PAGINA PULITA) ---
-const EditEmployeeForm = ({ employee, onDataUpdate, setView, showNotification }) => {
-    const [formData, setFormData] = useState({
-        name: employee?.name || '',
-        surname: employee?.surname || '',
-        email: employee?.email || '', 
-        controlloGpsRichiesto: employee?.controlloGpsRichiesto !== false 
-    });
-    const [isLoading, setIsLoading] = useState(false);
-
-    const handleChange = (e) => {
-        const { name, value, type, checked } = e.target;
-        setFormData(prev => ({ 
-            ...prev, 
-            [name]: type === 'checkbox' ? checked : value 
-        }));
-    };
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setIsLoading(true);
-
-        try {
-            const employeeRef = doc(db, "employees", employee.id);
-            
-            await updateDoc(employeeRef, {
-                name: formData.name,
-                surname: formData.surname,
-                controlloGpsRichiesto: formData.controlloGpsRichiesto
-            });
-
-            showNotification('Dipendente aggiornato con successo!', 'success');
-            await onDataUpdate();
-            setView('employees'); 
-        } catch (err) {
-            console.error("Errore aggiornamento:", err);
-            showNotification("Errore durante l'aggiornamento: " + err.message, 'error');
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    return (
-        <div className="bg-white shadow-md rounded-lg p-4 mb-6 animate-fade-in">
-            <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Modifica Dipendente: {employee?.name} {employee?.surname}</h3>
-            
-            <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {renderField(formData, handleChange, 'Nome', 'name')}
-                    {renderField(formData, handleChange, 'Cognome', 'surname')}
-                </div>
-
-                <div>
-                    <label className="block text-sm font-medium text-gray-700">Email (Sola lettura)</label>
-                    <input 
-                        disabled 
-                        value={formData.email} 
-                        className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-gray-100 text-gray-500 rounded-md shadow-sm sm:text-sm cursor-not-allowed"
-                    />
-                    <p className="text-xs text-gray-400 mt-1">Per modificare l'email di accesso, contattare l'assistenza tecnica.</p>
-                </div>
-
-                {renderSingleCheckbox(formData, handleChange, 'Richiedi controllo GPS', 'controlloGpsRichiesto', 'Se deselezionato, l\'utente potrà timbrare ovunque.')}
-                
-                <div className="flex justify-end space-x-3 pt-6">
-                    <button type="button" onClick={() => setView('employees')} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 text-sm font-medium">Annulla</button>
-                    <button
-                        type="submit"
-                        disabled={isLoading}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed text-sm font-medium"
-                    >
-                        {isLoading ? 'Salvataggio...' : 'Salva Modifiche'}
-                    </button>
-                </div>
-            </form>
-        </div>
-    );
-};
-
-const NewAreaForm = ({ onDataUpdate, setView, showNotification }) => {
-    const [formData, setFormData] = useState({ name: '', pauseDuration: 0, latitude: '', longitude: '', radius: 100 });
-    const [error, setError] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
-    const functions = getFunctions(undefined, 'europe-west1');
-
-    const handleChange = (e) => {
-        const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
-    };
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setIsLoading(true);
-        setError('');
-
-        if (!formData.name || formData.latitude == null || formData.longitude == null || formData.radius == null) {
-            setError('Tutti i campi (Nome, Latitudine, Longitudine, Raggio) sono obbligatori.');
-            setIsLoading(false);
-            return;
-        }
-
-        try {
-            const lat = Number(formData.latitude); 
-            const lon = Number(formData.longitude); 
-            const rad = Number(formData.radius);
-            
-            if (isNaN(lat) || isNaN(lon) || isNaN(rad) || rad <= 0) { 
-                throw new Error('Latitudine, Longitudine devono essere numeri validi e Raggio deve essere > 0.'); 
-            }
-
-            const createArea = httpsCallable(functions, 'createWorkArea');
-            await createArea({ 
-                name: formData.name, 
-                pauseDuration: Number(formData.pauseDuration || 0), 
-                latitude: lat, 
-                longitude: lon, 
-                radius: rad 
-            });
-
-            showNotification('Area creata con successo!', 'success');
-            await onDataUpdate();
-            setView('areas'); 
-        } catch (err) {
-            const errorMessage = err.message || "Si è verificato un errore sconosciuto.";
-            setError(errorMessage.includes(":") ? errorMessage.split(":")[1].trim() : errorMessage);
-            console.error("Errore creazione area:", err);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    return (
-        <div className="bg-white shadow-md rounded-lg p-4 mb-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Aggiungi Nuova Area di Lavoro</h3>
-            <form onSubmit={handleSubmit} className="space-y-4">
-                 {error && <p className="text-sm text-red-600 mb-4 bg-red-100 p-3 rounded border border-red-200">{error}</p>}
-                
-                 {renderField(formData, handleChange, 'Nome Area', 'name')}
-                 {renderField(formData, handleChange, 'Durata Pausa Predefinita (minuti)', 'pauseDuration', 'number', [], false)}
-                 {renderField(formData, handleChange, 'Latitudine', 'latitude', 'number')}
-                 {renderField(formData, handleChange, 'Longitudine', 'longitude', 'number')}
-                 {renderField(formData, handleChange, 'Raggio di Tolleranza (metri)', 'radius', 'number')}
-                
-                <div className="flex justify-end space-x-3 pt-4">
-                    <button type="button" onClick={() => setView('areas')} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 text-sm font-medium">Annulla</button>
-                    <button
-                        type="submit"
-                        disabled={isLoading}
-                        className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed text-sm font-medium"
-                    >
-                        {isLoading ? 'Creazione...' : 'Crea Area'}
-                    </button>
-                </div>
-            </form>
-        </div>
-    );
-};
-
-const NewAdminForm = ({ onDataUpdate, user, setView, showNotification }) => {
-    const [formData, setFormData] = useState({ name: '', surname: '', email: '', password: '', phone: '', role: 'preposto', controlloGpsRichiesto: true });
-    const [error, setError] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
-    const functions = getFunctions(undefined, 'europe-west1');
-
-    const handleChange = (e) => {
-        const { name, value, type, checked } = e.target;
-        setFormData(prev => ({ 
-            ...prev, 
-            [name]: type === 'checkbox' ? checked : value 
-        }));
-    };
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setIsLoading(true);
-        setError('');
-
-        if (!formData.name || !formData.surname || !formData.email || !formData.password || !formData.role) {
-            setError('Tutti i campi (eccetto Telefono) sono obbligatori.');
-            setIsLoading(false);
-            return;
-        }
-        if (formData.password.length < 6) {
-            setError('La password deve essere di almeno 6 caratteri.');
-            setIsLoading(false);
-            return;
-        }
-
-        try {
-            const createAdminFn = httpsCallable(functions, 'createUser');
-            await createAdminFn({ ...formData, createdBy: user.uid });
-            showNotification(`Utente ${formData.role} creato con successo!`, 'success');
-            await onDataUpdate();
-            setView('admins'); 
-        } catch (err) {
-            const errorMessage = err.message || "Si è verificato un errore sconosciuto.";
-            setError(errorMessage.includes(":") ? errorMessage.message.split(":")[1].trim() : errorMessage);
-            console.error("Errore creazione Admin/Preposto:", err);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const roleOptions = [
-        {value: 'preposto', label: 'Preposto (Caposquadra)'}, 
-        {value: 'admin', label: 'Admin (Amministratore)'}
-    ];
-
-    return (
-        <div className="bg-white shadow-md rounded-lg p-4 mb-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Crea Nuovo Admin/Preposto</h3>
-            <form onSubmit={handleSubmit} className="space-y-4">
-                 {error && <p className="text-sm text-red-600 mb-4 bg-red-100 p-3 rounded border border-red-200">{error}</p>}
-                
-                {renderField(formData, handleChange, 'Nome', 'name')}
-                {renderField(formData, handleChange, 'Cognome', 'surname')}
-                {renderField(formData, handleChange, 'Email', 'email', 'email')}
-                {renderField(formData, handleChange, 'Password (min. 6 caratteri)', 'password', 'password')}
-                {renderField(formData, handleChange, 'Telefono (Opzionale)', 'phone', 'tel', [], false)}
-                {renderField(formData, handleChange, 'Ruolo', 'role', 'select', roleOptions)}
-                {renderSingleCheckbox(formData, handleChange, 'Richiedi controllo GPS', 'controlloGpsRichiesto', 'Se deselezionato, questo preposto/admin potrà timbrare ovunque.')}
-                
-                <div className="flex justify-end space-x-3 pt-4">
-                    <button type="button" onClick={() => setView('admins')} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 text-sm font-medium">Annulla</button>
-                    <button
-                        type="submit"
-                        disabled={isLoading}
-                        className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed text-sm font-medium"
-                    >
-                        {isLoading ? 'Creazione...' : 'Crea Utente'}
-                    </button>
-                </div>
-            </form>
-        </div>
-    );
-};
-
-const PrepostoAddEmployeeForm = ({ onDataUpdate, user, setView, showNotification, workAreas, allEmployees, userData }) => {
-    const [formData, setFormData] = useState({ selectedEmployee: '', selectedPrepostoAreas: [] });
-    const [error, setError] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
-    const functions = getFunctions(undefined, 'europe-west1');
-
-    const managedAreas = useMemo(() => 
-        workAreas.filter(wa => userData?.managedAreaIds?.includes(wa.id)), 
-    [workAreas, userData]);
-
-    const employeeOptions = useMemo(() => 
-        allEmployees
-            .sort((a,b) => `${a.name} ${a.surname}`.localeCompare(`${b.name} ${b.surname}`))
-            .map(emp => ({ value: emp.id, label: `${emp.name} ${emp.surname} (${emp.email})` })),
-    [allEmployees]);
-
-    const handleChange = (e) => {
-        const { name, value, type, checked } = e.target;
-        if (type === 'checkbox') {
-            if (name === 'selectedPrepostoAreas') {
-                const currentSelection = formData[name] || [];
-                if (checked) {
-                    setFormData(prev => ({ ...prev, [name]: [...currentSelection, value] }));
-                } else {
-                    setFormData(prev => ({ ...prev, [name]: currentSelection.filter(id => id !== value) }));
-                }
-            }
-        } else {
-            setFormData(prev => ({ ...prev, [name]: value }));
-        }
-    };
-
-    const renderCheckboxes = (label, name, items, disabled = false) => (
-         <div>
-             <label className="block text-sm font-medium text-gray-700">{label}</label>
-             {items && items.length > 0 ? (
-                  <div className="mt-2 max-h-60 overflow-y-auto border border-gray-200 rounded-md p-2 space-y-2 bg-gray-50">
-                      {items
-                          .sort((a, b) => a.name.localeCompare(b.name))
-                          .map(it => (
-                              <div key={it.id} className="flex items-center">
-                                  <input
-                                      id={`${name}-${it.id}`} name={name} type="checkbox" value={it.id}
-                                      checked={(formData[name] || []).includes(it.id)}
-                                      onChange={handleChange} disabled={disabled}
-                                      className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 disabled:opacity-50"
-                                  />
-                                  <label htmlFor={`${name}-${it.id}`} className={`ml-3 block text-sm ${disabled ? 'text-gray-400' : 'text-gray-800'}`}>{it.name}</label>
-                              </div>
-                          ))}
-                      </div>
-                 ) : (
-                      <p className="text-sm text-red-500 mt-2">{disabled ? 'Nessuna area disponibile.' : 'Nessuna area definita.'}</p>
-                 )}
-         </div>
-      );
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setIsLoading(true);
-        setError('');
-
-        if (!formData.selectedEmployee) {
-            setError("Devi selezionare un dipendente.");
-            setIsLoading(false);
-            return;
-        }
-        if (!formData.selectedPrepostoAreas || formData.selectedPrepostoAreas.length === 0) {
-            setError("Devi selezionare almeno un'area da assegnare.");
-            setIsLoading(false);
-            return;
-        }
-        
-        try {
-            const employeeToAssignId = formData.selectedEmployee;
-            const areaIdsToAssign = formData.selectedPrepostoAreas;
-
-            const prepostoAssign = httpsCallable(functions, 'prepostoAssignEmployeeToArea');
-            await prepostoAssign({ employeeId: employeeToAssignId, areaIds: areaIdsToAssign });
-
-            showNotification('Aree assegnate con successo al dipendente selezionato.', 'success');
-            await onDataUpdate();
-            setView('employees'); 
-        } catch (err) {
-            const errorMessage = err.message || "Si è verificato un errore sconosciuto.";
-            setError(errorMessage.includes(":") ? errorMessage.message.split(":")[1].trim() : errorMessage);
-            console.error("Errore assegnazione aree:", err);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    return (
-        <div className="bg-white shadow-md rounded-lg p-4 mb-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Assegna Aree di Tua Competenza</h3>
-            <form onSubmit={handleSubmit} className="space-y-4">
-                {error && <p className="text-sm text-red-600 mb-4 bg-red-100 p-3 rounded border border-red-200">{error}</p>}
-                
-                {renderField(formData, handleChange, 'Seleziona Dipendente da Aggiungere', 'selectedEmployee', 'select', employeeOptions, true)}
-                {renderCheckboxes('Seleziona le aree di tua competenza a cui assegnarlo', 'selectedPrepostoAreas', managedAreas, managedAreas.length === 0)}
-                
-                <div className="flex justify-end space-x-3 pt-4">
-                    <button type="button" onClick={() => setView('employees')} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 text-sm font-medium">Annulla</button>
-                    <button
-                        type="submit"
-                        disabled={isLoading}
-                        className="px-4 py-2 bg-teal-600 text-white rounded-md hover:bg-teal-700 disabled:bg-teal-300 disabled:cursor-not-allowed text-sm font-medium"
-                    >
-                        {isLoading ? 'Assegnazione...' : 'Assegna Aree'}
-                    </button>
-                </div>
-            </form>
-        </div>
-    );
-};
-
-// --- FORM DI INSERIMENTO MANUALE (RECUPERO) ---
-const ManualEntryForm = ({ onDataUpdate, setView, showNotification, allEmployees, allWorkAreas, preselectedEmployee }) => {
-    const [f, setF] = useState({
-        employeeId: preselectedEmployee ? preselectedEmployee.id : '',
-        workAreaId: '',
-        date: new Date().toISOString().split('T')[0], 
-        startTime: '08:00',
-        endTime: '17:00'
-    });
-
-    const handleChange = (e) => {
-        const { name, value } = e.target;
-        setF(prev => ({ ...prev, [name]: value }));
-    };
-
-    const sub = async (e) => {
-        e.preventDefault();
-        
-        if(!f.employeeId || !f.workAreaId || !f.date || !f.startTime || !f.endTime) {
-            return showNotification("Compila tutti i campi.", "error");
-        }
-
-        try {
-            const startDateTime = new Date(`${f.date}T${f.startTime}`);
-            const endDateTime = new Date(`${f.date}T${f.endTime}`);
-
-            if (endDateTime <= startDateTime) {
-                return showNotification("L'ora di uscita deve essere successiva all'ora di entrata.", "error");
-            }
-
-            const newEntry = {
-                employeeId: f.employeeId,
-                workAreaId: f.workAreaId,
-                clockInTime: Timestamp.fromDate(startDateTime),
-                clockOutTime: Timestamp.fromDate(endDateTime),
-                status: 'clocked-out', 
-                isManual: true, 
-                note: 'Recupero dimenticanza (Inserito da Admin/Preposto)',
-                pauses: [] 
-            };
-
-            await addDoc(collection(db, "time_entries"), newEntry);
-
-            showNotification('Timbratura manuale salvata con successo!', 'success');
-            await onDataUpdate(); 
-            setView('employees'); 
-
-        } catch(err) {
-            console.error("Errore salvataggio manuale:", err);
-            showNotification("Errore durante il salvataggio: " + err.message, 'error');
-        }
-    };
-
-    return (
-        <div className="bg-white shadow-md rounded-lg p-4 mb-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Aggiungi Timbratura Mancante (Recupero)</h3>
-            <form onSubmit={sub} className="space-y-4">
-                {preselectedEmployee ? (
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700">Dipendente</label>
-                        <input disabled value={`${preselectedEmployee.name} ${preselectedEmployee.surname}`} className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-gray-100 rounded-md shadow-sm sm:text-sm text-gray-500" />
-                    </div>
-                ) : (
-                    renderField(f, handleChange, 'Dipendente', 'employeeId', 'select', [{value:'',label:'-- Seleziona --'}, ...allEmployees.map(e=>({value:e.id, label:e.name+' '+e.surname}))])
-                )}
-
-                {renderField(f, handleChange, 'Area di Lavoro', 'workAreaId', 'select', [{value:'',label:'-- Seleziona --'}, ...allWorkAreas.map(a=>({value:a.id, label:a.name}))])}
-                
-                {renderField(f, handleChange, 'Data', 'date', 'date')}
-                
-                <div className="grid grid-cols-2 gap-4">
-                    {renderField(f, handleChange, 'Ora Entrata', 'startTime', 'time')}
-                    {renderField(f, handleChange, 'Ora Uscita', 'endTime', 'time')}
-                </div>
-
-                <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200 text-sm text-yellow-800">
-                    ⚠️ Attenzione: Stai inserendo manualmente una timbratura passata. Questa operazione creerà un record immediato nel report.
-                </div>
-
-                <div className="flex justify-end space-x-3 pt-4">
-                    <button type="button" onClick={() => setView('employees')} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 text-sm font-medium">Annulla</button>
-                    <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium">Salva Timbratura</button>
-                </div>
-            </form>
-        </div>
-    );
-};
-
-// --- NUOVO FORM: INSERIMENTO GIUSTIFICATIVO (RANGE DATE) ---
-const AbsenceEntryForm = ({ onDataUpdate, setView, showNotification, allEmployees, preselectedEmployee }) => {
-    const [f, setF] = useState({
-        employeeId: preselectedEmployee ? preselectedEmployee.id : '',
-        startDate: new Date().toISOString().split('T')[0], 
-        endDate: new Date().toISOString().split('T')[0],   
-        type: 'Ferie', 
-        note: ''
-    });
-
-    const absenceTypes = [
-        { value: 'Ferie', label: '🏖️ Ferie' },
-        { value: 'Malattia', label: '🤒 Malattia' },
-        { value: 'Permesso', label: '🕒 Permesso Retribuito' },
-        { value: 'Legge 104', label: '♿ Legge 104' },
-        { value: 'Infortunio', label: '🚑 Infortunio' },
-        { value: 'Assenza Ingiustificata', label: '❌ Assenza Ingiustificata' },
-        { value: 'Altro', label: '📝 Altro Motivo' }
-    ];
-
-    const handleChange = (e) => {
-        const { name, value } = e.target;
-        setF(prev => ({ ...prev, [name]: value }));
-    };
-
-    const sub = async (e) => {
-        e.preventDefault();
-        
-        if(!f.employeeId || !f.startDate || !f.endDate || !f.type) {
-            return showNotification("Compila tutti i campi obbligatori.", "error");
-        }
-
-        const start = new Date(f.startDate);
-        const end = new Date(f.endDate);
-
-        if (end < start) {
-            return showNotification("La data di fine deve essere successiva o uguale alla data di inizio.", "error");
-        }
-
-        try {
-            const batch = writeBatch(db);
-            const timeEntriesRef = collection(db, "time_entries");
-
-            let current = new Date(start);
-            let count = 0;
-
-            while (current <= end) {
-                const eventDate = new Date(current);
-                eventDate.setHours(12, 0, 0, 0);
-
-                const newDocRef = doc(timeEntriesRef); 
-
-                const newEntry = {
-                    employeeId: f.employeeId,
-                    workAreaId: null,
-                    clockInTime: Timestamp.fromDate(eventDate),
-                    clockOutTime: Timestamp.fromDate(eventDate),
-                    status: 'clocked-out',
-                    isManual: true,
-                    isAbsence: true,
-                    absenceType: f.type,
-                    note: f.note ? f.note : f.type,
-                    pauses: []
-                };
-
-                batch.set(newDocRef, newEntry);
-
-                current.setDate(current.getDate() + 1);
-                count++;
-            }
-
-            await batch.commit();
-
-            showNotification(`Inseriti ${count} giorni di "${f.type}" con successo!`, 'success');
-            await onDataUpdate(); 
-            setView('employees'); 
-
-        } catch(err) {
-            console.error("Errore salvataggio assenza:", err);
-            showNotification("Errore durante il salvataggio: " + err.message, 'error');
-        }
-    };
-
-    return (
-        <div className="bg-white shadow-md rounded-lg p-4 mb-6 animate-fade-in">
-            <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Inserisci Giustificativo / Assenza</h3>
-            <form onSubmit={sub} className="space-y-4">
-                {preselectedEmployee ? (
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700">Dipendente</label>
-                        <input disabled value={`${preselectedEmployee.name} ${preselectedEmployee.surname}`} className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-gray-100 rounded-md shadow-sm sm:text-sm text-gray-500" />
-                    </div>
-                ) : (
-                    renderField(f, handleChange, 'Dipendente', 'employeeId', 'select', [{value:'',label:'-- Seleziona --'}, ...allEmployees.map(e=>({value:e.id, label:e.name+' '+e.surname}))])
-                )}
-
-                <div>
-                    <label htmlFor="type" className="block text-sm font-medium text-gray-700">Tipo di Assenza</label>
-                    <select
-                        id="type" name="type" value={f.type} onChange={handleChange}
-                        className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                    >
-                        {absenceTypes.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                    </select>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                    {renderField(f, handleChange, 'Dal giorno', 'startDate', 'date')}
-                    {renderField(f, handleChange, 'Al giorno (incluso)', 'endDate', 'date')}
-                </div>
-                
-                <div>
-                    <label className="block text-sm font-medium text-gray-700">Note Aggiuntive (Opzionale)</label>
-                    <textarea 
-                        name="note" 
-                        value={f.note} 
-                        onChange={handleChange} 
-                        placeholder="Es. Protocollo medico n. 123..."
-                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 sm:text-sm"
-                        rows="3"
-                    ></textarea>
-                </div>
-
-                <div className="bg-blue-50 p-3 rounded-lg border border-blue-200 text-sm text-blue-800">
-                    ℹ️ Verrà creata una riga di assenza (0 ore) per <strong>ogni giorno</strong> dell'intervallo selezionato.
-                </div>
-
-                <div className="flex justify-end space-x-3 pt-4">
-                    <button type="button" onClick={() => setView('employees')} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 text-sm font-medium">Annulla</button>
-                    <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm font-medium">Salva Assenze</button>
-                </div>
-            </form>
-        </div>
-    );
-};
-
 // === COMPONENTE AGGIORNATO: MODALE MODIFICA TIMBRATURA ESISTENTE (CON CAMBIO DATA) ===
 const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) => {
     
@@ -954,7 +265,7 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
     );
 };
 
-const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortConfig, requestSort, searchTerm, setSearchTerm, handleResetEmployeeDevice, adminEmployeeId, handleEmployeePauseClick, handleOpenManualEntry, handleOpenAbsenceEntry, handleOpenEditEmployee }) => { 
+const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortConfig, requestSort, searchTerm, setSearchTerm, handleResetEmployeeDevice, adminEmployeeId, handleEmployeePauseClick }) => { 
     const getSortIndicator = (key) => {
         if (!sortConfig || sortConfig.key !== key) return '';
         return sortConfig.direction === 'ascending' ? ' ▲' : ' ▼';
@@ -1036,8 +347,7 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                                 {currentUserRole === 'admin' && (
                                                     <>
                                                         <button onClick={() => openModal('assignArea', emp)} className="text-xs text-indigo-600 hover:text-indigo-900 whitespace-nowrap">Assegna Aree (Tutte)</button>
-                                                        {/* PULSANTE MODIFICA AGGIORNATO */}
-                                                        <button onClick={() => handleOpenEditEmployee(emp)} className="text-xs text-green-600 hover:text-green-900">Modifica</button>
+                                                        <button onClick={() => openModal('editEmployee', emp)} className="text-xs text-green-600 hover:text-green-900">Modifica</button>
                                                         <button onClick={() => openModal('deleteEmployee', emp)} className="text-xs text-red-600 hover:text-red-900">Elimina</button>
                                                     </>
                                                 )}
@@ -1057,14 +367,14 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                                 {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (
                                                     <div className="flex flex-col gap-1 mt-1">
                                                         <button 
-                                                            onClick={() => handleOpenManualEntry(emp)} 
+                                                            onClick={() => openModal('manualEntryForm', emp)} 
                                                             className="text-xs px-2 py-1 bg-purple-500 text-white rounded-md hover:bg-purple-600 whitespace-nowrap"
                                                             title="Inserisci manualmente una timbratura dimenticata (es. ieri)"
                                                         >
                                                             ➕ Agg. Ore
                                                         </button>
                                                         <button 
-                                                            onClick={() => handleOpenAbsenceEntry(emp)} 
+                                                            onClick={() => openModal('absenceEntryForm', emp)} 
                                                             className="text-xs px-2 py-1 bg-teal-600 text-white rounded-md hover:bg-teal-700 whitespace-nowrap"
                                                             title="Inserisci Ferie, Malattia, Permessi..."
                                                         >
@@ -1381,60 +691,49 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
     );
 };
 
-const ActionHeader = ({ view, currentUserRole, handleSwitchView, isSuperAdmin }) => { 
+const ActionHeader = ({ view, currentUserRole, openModal }) => { 
     if (currentUserRole !== 'admin' && currentUserRole !== 'preposto') return null;
 
     let button = null;
     let text = null;
     
     // Logica per determinare quale bottone mostrare basandosi sulla vista
-    let targetView = view;
-    if (view === 'newEmployeeForm' || view === 'prepostoAddEmployeeForm' || view === 'absenceEntryForm' || view === 'editEmployeeForm') targetView = 'employees';
-    else if (view === 'newAreaForm') targetView = 'areas';
-    else if (view === 'newAdminForm') targetView = 'admins';
-
-    const isCurrentViewForm = ['newEmployeeForm', 'newAreaForm', 'newAdminForm', 'prepostoAddEmployeeForm', 'absenceEntryForm', 'editEmployeeForm'].includes(view);
-
-    if (targetView === 'employees' && currentUserRole === 'admin') {
+    if (view === 'employees' && currentUserRole === 'admin') {
         text = 'Crea Nuovo Dipendente';
         button = (
-            <button onClick={() => handleSwitchView('newEmployeeForm')} 
-                className={`px-4 py-2 ${view === 'newEmployeeForm' ? 'bg-indigo-300' : 'bg-indigo-600 hover:bg-indigo-700'} text-white rounded-lg w-full sm:w-auto text-sm`}
-                disabled={isCurrentViewForm && view !== 'newEmployeeForm'}
+            <button onClick={() => openModal('newEmployee')} 
+                className={`px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg w-full sm:w-auto text-sm`}
             >
                 {text}
             </button>
         );
     } 
-    else if (targetView === 'areas' && currentUserRole === 'admin') {
+    else if (view === 'areas' && currentUserRole === 'admin') {
         text = 'Aggiungi Area';
         button = (
-            <button onClick={() => handleSwitchView('newAreaForm')} 
-                className={`px-4 py-2 ${view === 'newAreaForm' ? 'bg-indigo-300' : 'bg-indigo-600 hover:bg-indigo-700'} text-white rounded-lg w-full sm:w-auto text-sm`}
-                disabled={isCurrentViewForm && view !== 'newAreaForm'}
+            <button onClick={() => openModal('newArea')} 
+                className={`px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg w-full sm:w-auto text-sm`}
             >
                 {text}
             </button>
         );
     }
-    else if (targetView === 'admins' && currentUserRole === 'admin') { 
+    else if (view === 'admins' && currentUserRole === 'admin') { 
         text = 'Crea Nuovo Admin/Preposto';
         button = (
-            <button onClick={() => handleSwitchView('newAdminForm')} 
-                className={`px-4 py-2 ${view === 'newAdminForm' ? 'bg-indigo-300' : 'bg-indigo-600 hover:bg-indigo-700'} text-white rounded-lg w-full sm:w-auto text-sm`}
-                disabled={isCurrentViewForm && view !== 'newAdminForm'}
+            <button onClick={() => openModal('newAdmin')} 
+                className={`px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg w-full sm:w-auto text-sm`}
             >
                 {text}
             </button>
         );
     }
-    else if (targetView === 'employees' && currentUserRole === 'preposto') {
+    else if (view === 'employees' && currentUserRole === 'preposto') {
          text = 'Aggiungi Dipendente alle Mie Aree';
          button = (
             <button
-                onClick={() => handleSwitchView('prepostoAddEmployeeForm')} 
-                className={`px-4 py-2 ${view === 'prepostoAddEmployeeForm' ? 'bg-teal-300' : 'bg-teal-600 hover:bg-teal-700'} text-white rounded-lg w-full sm:w-auto text-sm`}
-                disabled={isCurrentViewForm && view !== 'prepostoAddEmployeeForm'}
+                onClick={() => openModal('prepostoAddEmployeeToAreas')} 
+                className={`px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg w-full sm:w-auto text-sm`}
             >
                 {text}
             </button>
@@ -1483,33 +782,13 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     // === STATO NOTIFICHE PENDING ===
     const [pendingRequestsCount, setPendingRequestsCount] = useState(0); 
     const [notification, setNotification] = useState(null); 
-    
-    // === STATI PER FORM E MODALI ===
-    const [manualEntryEmployee, setManualEntryEmployee] = useState(null);
-    const [absenceEmployee, setAbsenceEmployee] = useState(null); 
     const [entryToEdit, setEntryToEdit] = useState(null);
-    const [employeeToEdit, setEmployeeToEdit] = useState(null);
 
     const currentUserRole = userData?.role;
     const superAdminEmail = SUPER_ADMIN_EMAIL; 
 
-    // === FUNZIONE PULIZIA TOTALE (RESET) ===
-    const resetAllForms = useCallback(() => {
-        // Chiude eventuali modali
-        setShowModal(false);
-        setSelectedItem(null);
-        setEntryToEdit(null);
-        
-        // Pulisce stati dei form "pagina intera"
-        setManualEntryEmployee(null);
-        setAbsenceEmployee(null);
-        setEmployeeToEdit(null);
-        
-    }, []);
-
-    // Wrapper per cambiare vista pulendo tutto
+    // Wrapper per cambiare vista
     const handleSwitchView = (newView) => {
-        resetAllForms();
         setView(newView);
     };
 
@@ -1767,36 +1046,12 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         finally { setIsActionLoading(false); }
     }, [allWorkAreas, showNotification]);
 
-    // HANDLERS AGGIORNATI CON RESET
+    // HANDLERS MODALI
     const openModal = useCallback((type, item = null) => {
-        // Resetta i form a pagina intera ma NON la vista, poiché il modale si sovrappone
-        setManualEntryEmployee(null); setAbsenceEmployee(null); setEmployeeToEdit(null);
-        
-        // Imposta vista di base se necessario (es. torna a 'employees' se apri un modale dipendente)
-        setView(type.includes('Employee') ? 'employees' : (type.includes('Area') ? 'areas' : 'admins'));
-        
         setModalType(type);
         setSelectedItem(item);
         setShowModal(true);
     }, []);
-
-    const handleOpenManualEntry = (employee) => {
-        resetAllForms();
-        setManualEntryEmployee(employee);
-        setView('manualEntryForm');
-    };
-
-    const handleOpenAbsenceEntry = (employee) => {
-        resetAllForms();
-        setAbsenceEmployee(employee);
-        setView('absenceEntryForm');
-    };
-
-    const handleOpenEditEmployee = (employee) => {
-        resetAllForms();
-        setEmployeeToEdit(employee);
-        setView('editEmployeeForm');
-    };
 
     const handleResetEmployeeDevice = useCallback(async (employee) => {
         if (!employee || !employee.id) return showNotification("Dipendente non valido.", 'error');
@@ -1980,9 +1235,9 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                      <div className="flex justify-center">
                          <div className="flex flex-wrap justify-center py-2 sm:space-x-4">
                              <button onClick={() => handleSwitchView('dashboard')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'dashboard' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Dashboard</button>
-                             <button onClick={() => handleSwitchView('employees')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'employees' || view === 'newEmployeeForm' || view === 'prepostoAddEmployeeForm' || view === 'absenceEntryForm' || view === 'editEmployeeForm' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Dipendenti</button>
-                             <button onClick={() => handleSwitchView('areas')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'areas' || view === 'newAreaForm' || view === 'editAreaPauseOnly' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Aree</button>
-                             {currentUserRole === 'admin' && <button onClick={() => handleSwitchView('admins')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'admins' || view === 'newAdminForm' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Admin</button>}
+                             <button onClick={() => handleSwitchView('employees')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'employees' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Dipendenti</button>
+                             <button onClick={() => handleSwitchView('areas')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'areas' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Aree</button>
+                             {currentUserRole === 'admin' && <button onClick={() => handleSwitchView('admins')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'admins' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Admin</button>}
                              {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (
                                 <button 
                                     onClick={() => handleSwitchView('reports')} 
@@ -2001,7 +1256,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                  </div>
             </nav>
 
-            <ActionHeader view={view} currentUserRole={currentUserRole} handleSwitchView={handleSwitchView} openModal={openModal} isSuperAdmin={user?.email === superAdminEmail} />
+            <ActionHeader view={view} currentUserRole={currentUserRole} openModal={openModal} />
 
             {view === 'reports' && (
                 <div className="max-w-7xl mx-auto w-full p-4 sm:p-6 lg:p-8">
@@ -2019,37 +1274,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             )}
             
             <div className="max-w-7xl mx-auto w-full p-4 sm:p-6 lg:p-8">
-                {view === 'newEmployeeForm' && <NewEmployeeForm onDataUpdate={fetchData} user={user} setView={setView} showNotification={showNotification} />}
-                
-                {/* --- NUOVO: Form Modifica Dipendente (Pagina Intera) --- */}
-                {view === 'editEmployeeForm' && <EditEmployeeForm 
-                    employee={employeeToEdit}
-                    onDataUpdate={fetchData} 
-                    setView={setView} 
-                    showNotification={showNotification} 
-                />}
-                
-                {view === 'newAreaForm' && <NewAreaForm onDataUpdate={fetchData} setView={setView} showNotification={showNotification} />}
-                {view === 'newAdminForm' && <NewAdminForm onDataUpdate={fetchData} user={user} setView={setView} showNotification={showNotification} />}
-                {view === 'prepostoAddEmployeeForm' && <PrepostoAddEmployeeForm onDataUpdate={fetchData} user={user} setView={setView} showNotification={showNotification} workAreas={allWorkAreas} allEmployees={allEmployees} userData={userData} />}
-                
-                {view === 'manualEntryForm' && <ManualEntryForm 
-                    onDataUpdate={fetchData} 
-                    setView={setView} 
-                    showNotification={showNotification} 
-                    allEmployees={managedEmployees} 
-                    allWorkAreas={currentUserRole === 'admin' ? allWorkAreas : allWorkAreas.filter(a => userData?.managedAreaIds?.includes(a.id))}
-                    preselectedEmployee={manualEntryEmployee}
-                />}
-
-                {/* --- Vista Form Giustificativo --- */}
-                {view === 'absenceEntryForm' && <AbsenceEntryForm 
-                    onDataUpdate={fetchData} 
-                    setView={setView} 
-                    showNotification={showNotification} 
-                    allEmployees={managedEmployees} 
-                    preselectedEmployee={absenceEmployee}
-                />}
                 
                 <main>
                     {view === 'dashboard' && <DashboardView 
@@ -2070,9 +1294,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                         handleResetEmployeeDevice={handleResetEmployeeDevice} 
                         adminEmployeeId={adminEmployeeProfile?.id}
                         handleEmployeePauseClick={handleEmployeePauseClick} 
-                        handleOpenManualEntry={handleOpenManualEntry}
-                        handleOpenAbsenceEntry={handleOpenAbsenceEntry} 
-                        handleOpenEditEmployee={handleOpenEditEmployee} 
                     />}
                     
                     {view === 'areas' && <AreaManagementView workAreas={visibleWorkAreas} openModal={openModal} currentUserRole={currentUserRole} />}
