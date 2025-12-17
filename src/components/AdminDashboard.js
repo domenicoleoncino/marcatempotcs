@@ -188,7 +188,7 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
                     }`}
                 >
                     {isMapMode ? (
-                        <>🔙 Torna alla Lista</>
+                        <>🔙 Chiudi mappa</>
                     ) : (
                         <>🌍 Apri Mappa Presenze</>
                     )}
