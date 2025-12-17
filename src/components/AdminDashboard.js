@@ -5,7 +5,7 @@ import { db } from '../firebase';
 import {
     collection, getDocs, query, where,
     Timestamp, onSnapshot, updateDoc, doc, limit,
-    addDoc, writeBatch // <--- IMPORTANTE: writeBatch aggiunto
+    addDoc, writeBatch
 } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import CompanyLogo from './CompanyLogo';
@@ -143,6 +143,85 @@ const NewEmployeeForm = ({ onDataUpdate, user, setView, showNotification }) => {
                         className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed text-sm font-medium"
                     >
                         {isLoading ? 'Creazione...' : 'Crea Dipendente'}
+                    </button>
+                </div>
+            </form>
+        </div>
+    );
+};
+
+// --- NUOVO: MODIFICA DIPENDENTE (PAGINA PULITA) ---
+const EditEmployeeForm = ({ employee, onDataUpdate, setView, showNotification }) => {
+    const [formData, setFormData] = useState({
+        name: employee?.name || '',
+        surname: employee?.surname || '',
+        email: employee?.email || '', 
+        controlloGpsRichiesto: employee?.controlloGpsRichiesto !== false 
+    });
+    const [isLoading, setIsLoading] = useState(false);
+
+    const handleChange = (e) => {
+        const { name, value, type, checked } = e.target;
+        setFormData(prev => ({ 
+            ...prev, 
+            [name]: type === 'checkbox' ? checked : value 
+        }));
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setIsLoading(true);
+
+        try {
+            const employeeRef = doc(db, "employees", employee.id);
+            
+            await updateDoc(employeeRef, {
+                name: formData.name,
+                surname: formData.surname,
+                controlloGpsRichiesto: formData.controlloGpsRichiesto
+            });
+
+            showNotification('Dipendente aggiornato con successo!', 'success');
+            await onDataUpdate();
+            setView('employees'); 
+        } catch (err) {
+            console.error("Errore aggiornamento:", err);
+            showNotification("Errore durante l'aggiornamento: " + err.message, 'error');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    return (
+        <div className="bg-white shadow-md rounded-lg p-4 mb-6 animate-fade-in">
+            <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Modifica Dipendente: {employee?.name} {employee?.surname}</h3>
+            
+            <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {renderField(formData, handleChange, 'Nome', 'name')}
+                    {renderField(formData, handleChange, 'Cognome', 'surname')}
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-gray-700">Email (Sola lettura)</label>
+                    <input 
+                        disabled 
+                        value={formData.email} 
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-gray-100 text-gray-500 rounded-md shadow-sm sm:text-sm cursor-not-allowed"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">Per modificare l'email di accesso, contattare l'assistenza tecnica.</p>
+                </div>
+
+                {renderSingleCheckbox(formData, handleChange, 'Richiedi controllo GPS', 'controlloGpsRichiesto', 'Se deselezionato, l\'utente potrà timbrare ovunque.')}
+                
+                <div className="flex justify-end space-x-3 pt-6">
+                    <button type="button" onClick={() => setView('employees')} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 text-sm font-medium">Annulla</button>
+                    <button
+                        type="submit"
+                        disabled={isLoading}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed text-sm font-medium"
+                    >
+                        {isLoading ? 'Salvataggio...' : 'Salva Modifiche'}
                     </button>
                 </div>
             </form>
@@ -516,8 +595,8 @@ const ManualEntryForm = ({ onDataUpdate, setView, showNotification, allEmployees
 const AbsenceEntryForm = ({ onDataUpdate, setView, showNotification, allEmployees, preselectedEmployee }) => {
     const [f, setF] = useState({
         employeeId: preselectedEmployee ? preselectedEmployee.id : '',
-        startDate: new Date().toISOString().split('T')[0], // Data Inizio
-        endDate: new Date().toISOString().split('T')[0],   // Data Fine (default uguale a inizio)
+        startDate: new Date().toISOString().split('T')[0], 
+        endDate: new Date().toISOString().split('T')[0],   
         type: 'Ferie', 
         note: ''
     });
@@ -552,21 +631,17 @@ const AbsenceEntryForm = ({ onDataUpdate, setView, showNotification, allEmployee
         }
 
         try {
-            // Usiamo il batch per salvare tutto insieme (o tutto o niente)
             const batch = writeBatch(db);
             const timeEntriesRef = collection(db, "time_entries");
 
             let current = new Date(start);
             let count = 0;
 
-            // Ciclo dal giorno inizio al giorno fine
             while (current <= end) {
-                // Imposta orario a mezzogiorno per evitare problemi di fuso orario
                 const eventDate = new Date(current);
                 eventDate.setHours(12, 0, 0, 0);
 
-                // Crea il riferimento per il nuovo documento
-                const newDocRef = doc(timeEntriesRef); // ID generato automaticamente
+                const newDocRef = doc(timeEntriesRef); 
 
                 const newEntry = {
                     employeeId: f.employeeId,
@@ -583,12 +658,10 @@ const AbsenceEntryForm = ({ onDataUpdate, setView, showNotification, allEmployee
 
                 batch.set(newDocRef, newEntry);
 
-                // Passa al giorno successivo
                 current.setDate(current.getDate() + 1);
                 count++;
             }
 
-            // Esegui il salvataggio
             await batch.commit();
 
             showNotification(`Inseriti ${count} giorni di "${f.type}" con successo!`, 'success');
@@ -614,7 +687,6 @@ const AbsenceEntryForm = ({ onDataUpdate, setView, showNotification, allEmployee
                     renderField(f, handleChange, 'Dipendente', 'employeeId', 'select', [{value:'',label:'-- Seleziona --'}, ...allEmployees.map(e=>({value:e.id, label:e.name+' '+e.surname}))])
                 )}
 
-                {/* Selezione Tipo Assenza */}
                 <div>
                     <label htmlFor="type" className="block text-sm font-medium text-gray-700">Tipo di Assenza</label>
                     <select
@@ -625,13 +697,11 @@ const AbsenceEntryForm = ({ onDataUpdate, setView, showNotification, allEmployee
                     </select>
                 </div>
                 
-                {/* Selezione Date (Range) */}
                 <div className="grid grid-cols-2 gap-4">
                     {renderField(f, handleChange, 'Dal giorno', 'startDate', 'date')}
                     {renderField(f, handleChange, 'Al giorno (incluso)', 'endDate', 'date')}
                 </div>
                 
-                {/* Note */}
                 <div>
                     <label className="block text-sm font-medium text-gray-700">Note Aggiuntive (Opzionale)</label>
                     <textarea 
@@ -660,21 +730,19 @@ const AbsenceEntryForm = ({ onDataUpdate, setView, showNotification, allEmployee
 // === COMPONENTE AGGIORNATO: MODALE MODIFICA TIMBRATURA ESISTENTE (CON CAMBIO DATA) ===
 const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) => {
     
-    // Funzione helper: Converte DD/MM/YYYY (visualizzato) in YYYY-MM-DD (per input HTML)
     const formatDateForInput = (dateStr) => {
         if (!dateStr) return '';
-        const parts = dateStr.split('/'); // Es. 02/12/2025
-        if (parts.length === 3) return `${parts[2]}-${parts[1]}-${parts[0]}`; // 2025-12-02
+        const parts = dateStr.split('/'); 
+        if (parts.length === 3) return `${parts[2]}-${parts[1]}-${parts[0]}`; 
         return dateStr;
     };
 
-    // STATO PER LA CHECKBOX PAUSA
     const [skipPause, setSkipPause] = useState(!!entry.skippedBreak);
 
     const [formData, setFormData] = useState({
         workAreaId: entry.workAreaId || '',
         note: entry.note || '',
-        date: formatDateForInput(entry.clockInDate), // <--- AGGIUNTO: Stato per la data
+        date: formatDateForInput(entry.clockInDate), 
         clockInTime: entry.clockInTimeFormatted || '08:00',
         clockOutTime: entry.clockOutTimeFormatted !== 'In corso' ? entry.clockOutTimeFormatted : ''
     });
@@ -686,13 +754,11 @@ const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) =>
     const handleSubmit = (e) => {
         e.preventDefault();
         
-        // VALIDAZIONE: Se dice che non ha fatto pausa, il motivo è obbligatorio
         if (skipPause && (!formData.note || formData.note.trim() === '')) {
             alert("ATTENZIONE: Se indichi che il dipendente NON ha effettuato la pausa, è OBBLIGATORIO inserire il motivo nelle note.");
             return;
         }
 
-        // Passa anche lo stato skippedBreak
         onSave(entry.id, { ...formData, skippedBreak: skipPause });
     };
 
@@ -702,7 +768,6 @@ const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) =>
                 <h3 className="text-lg font-bold mb-4">Modifica Timbratura</h3>
                 
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    {/* MODIFICA DATA (Nuovo campo) */}
                     <div>
                         <label className="block text-sm font-medium text-gray-700">Data</label>
                         <input 
@@ -715,7 +780,6 @@ const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) =>
                         />
                     </div>
 
-                    {/* SELEZIONE AREA (Solo se NON è un'assenza) */}
                     {!entry.isAbsence && (
                         <div>
                             <label className="block text-sm font-medium text-gray-700">Area di Lavoro</label>
@@ -732,7 +796,6 @@ const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) =>
                         </div>
                     )}
 
-                    {/* MODIFICA ORARI (Solo se NON è un'assenza) */}
                     {!entry.isAbsence && (
                         <div className="grid grid-cols-2 gap-4">
                             <div>
@@ -747,7 +810,6 @@ const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) =>
                         </div>
                     )}
 
-                    {/* --- CHECKBOX PAUSA (Solo se NON è un'assenza) --- */}
                     {!entry.isAbsence && (
                         <div className="bg-orange-50 p-3 rounded-md border border-orange-200">
                             <div className="flex items-center">
@@ -768,7 +830,6 @@ const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) =>
                         </div>
                     )}
 
-                    {/* NOTE */}
                     <div>
                         <label className="block text-sm font-medium text-gray-700">
                             Note / Motivo Modifica {skipPause && <span className="text-red-500">*</span>}
@@ -797,14 +858,11 @@ const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) =>
 
 // =======================================================
 
-// --- VIEW DELLA DASHBOARD AGGIORNATA (MODALITÀ MAPPA FULL) ---
 const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, workAreas }) => {
-    // Stato per gestire la modalità visualizzazione: 'standard' o 'map'
     const [isMapMode, setIsMapMode] = useState(false);
 
     return (
         <div className="fade-in">
-            {/* Header della Dashboard con Titolo e Pulsante switch */}
             <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">
                     {isMapMode ? 'Mappa in Tempo Reale' : 'Dashboard'}
@@ -814,8 +872,8 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
                     onClick={() => setIsMapMode(!isMapMode)}
                     className={`flex items-center gap-2 px-6 py-2 font-bold rounded-lg shadow-md transition-all transform hover:scale-105 ${
                         isMapMode 
-                        ? 'bg-gray-600 text-white hover:bg-gray-700' // Stile bottone "Chiudi"
-                        : 'bg-blue-600 text-white hover:bg-blue-700' // Stile bottone "Apri"
+                        ? 'bg-gray-600 text-white hover:bg-gray-700' 
+                        : 'bg-blue-600 text-white hover:bg-blue-700' 
                     }`}
                 >
                     {isMapMode ? (
@@ -826,10 +884,8 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
                 </button>
             </div>
             
-            {/* --- CONTENUTO STANDARD (Statistiche e Tabella) --- */}
             {!isMapMode && (
                 <>
-                    {/* Stats Cards */}
                     <div className="flex flex-col md:grid md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
                         <div className="bg-white p-4 rounded-lg shadow-md text-center sm:text-left">
                             <p className="text-sm text-gray-500">Dipendenti Attivi</p>
@@ -881,13 +937,11 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
                 </>
             )}
 
-            {/* --- CONTENUTO MAPPA (Solo Mappa Grande) --- */}
             {isMapMode && (
                 <div className="bg-white p-2 rounded-lg shadow-lg h-[600px] flex flex-col animate-fade-in">
                     <p className="text-sm text-gray-500 mb-2 px-2">
                         Visualizzazione live dei cantieri attivi. Clicca sui pin per i dettagli.
                     </p>
-                    {/* Forziamo un'altezza maggiore per la modalità full screen */}
                     <div style={{ flex: 1, minHeight: '500px' }}>
                         <MappaPresenze 
                             aree={workAreas} 
@@ -900,7 +954,7 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
     );
 };
 
-const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortConfig, requestSort, searchTerm, setSearchTerm, handleResetEmployeeDevice, adminEmployeeId, handleEmployeePauseClick, handleOpenManualEntry, handleOpenAbsenceEntry }) => { 
+const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortConfig, requestSort, searchTerm, setSearchTerm, handleResetEmployeeDevice, adminEmployeeId, handleEmployeePauseClick, handleOpenManualEntry, handleOpenAbsenceEntry, handleOpenEditEmployee }) => { 
     const getSortIndicator = (key) => {
         if (!sortConfig || sortConfig.key !== key) return '';
         return sortConfig.direction === 'ascending' ? ' ▲' : ' ▼';
@@ -982,7 +1036,8 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                                 {currentUserRole === 'admin' && (
                                                     <>
                                                         <button onClick={() => openModal('assignArea', emp)} className="text-xs text-indigo-600 hover:text-indigo-900 whitespace-nowrap">Assegna Aree (Tutte)</button>
-                                                        <button onClick={() => openModal('editEmployee', emp)} className="text-xs text-green-600 hover:text-green-900">Modifica</button>
+                                                        {/* PULSANTE MODIFICA AGGIORNATO */}
+                                                        <button onClick={() => handleOpenEditEmployee(emp)} className="text-xs text-green-600 hover:text-green-900">Modifica</button>
                                                         <button onClick={() => openModal('deleteEmployee', emp)} className="text-xs text-red-600 hover:text-red-900">Elimina</button>
                                                     </>
                                                 )}
@@ -1008,7 +1063,6 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                                         >
                                                             ➕ Agg. Ore
                                                         </button>
-                                                        {/* NUOVO PULSANTE GIUSTIFICA */}
                                                         <button 
                                                             onClick={() => handleOpenAbsenceEntry(emp)} 
                                                             className="text-xs px-2 py-1 bg-teal-600 text-white rounded-md hover:bg-teal-700 whitespace-nowrap"
@@ -1106,7 +1160,7 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
             </div>
             
             <p className="text-sm text-gray-500 mb-4">
-                In questa lista sono inclusi tutti gli utenti con ruolo "admin" e "preposto" (eccetto il Super Admin).
+                In questa lista sono inclusi tutti gli utenti con ruolo "admin" e "preposto".
             </p>
 
             <div className="bg-white shadow-md rounded-lg overflow-x-auto">
@@ -1161,7 +1215,6 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
     );
 };
 
-// === REPORT VIEW: AGGIUNTO PULSANTE MODIFICA E CALLBACK ===
 const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, allEmployees, currentUserRole, userData, setDateRange, setReportAreaFilter, reportAreaFilter, reportEmployeeFilter, setReportEmployeeFilter, generateReport, isLoading, isActionLoading, managedEmployees, showNotification, handleReviewSkipBreak, onEditEntry }) => {
     
     const handleExportExcel = () => {
@@ -1327,26 +1380,25 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
         </div>
     );
 };
-// =======================================================
 
-
-const ActionHeader = ({ view, currentUserRole, setView, openModal, isSuperAdmin }) => { 
+const ActionHeader = ({ view, currentUserRole, handleSwitchView, isSuperAdmin }) => { 
     if (currentUserRole !== 'admin' && currentUserRole !== 'preposto') return null;
 
     let button = null;
     let text = null;
     
-    const isCurrentViewForm = ['newEmployeeForm', 'newAreaForm', 'newAdminForm', 'prepostoAddEmployeeForm', 'absenceEntryForm'].includes(view);
-    
+    // Logica per determinare quale bottone mostrare basandosi sulla vista
     let targetView = view;
-    if (view === 'newEmployeeForm' || view === 'prepostoAddEmployeeForm' || view === 'absenceEntryForm') targetView = 'employees';
+    if (view === 'newEmployeeForm' || view === 'prepostoAddEmployeeForm' || view === 'absenceEntryForm' || view === 'editEmployeeForm') targetView = 'employees';
     else if (view === 'newAreaForm') targetView = 'areas';
     else if (view === 'newAdminForm') targetView = 'admins';
+
+    const isCurrentViewForm = ['newEmployeeForm', 'newAreaForm', 'newAdminForm', 'prepostoAddEmployeeForm', 'absenceEntryForm', 'editEmployeeForm'].includes(view);
 
     if (targetView === 'employees' && currentUserRole === 'admin') {
         text = 'Crea Nuovo Dipendente';
         button = (
-            <button onClick={() => setView('newEmployeeForm')} 
+            <button onClick={() => handleSwitchView('newEmployeeForm')} 
                 className={`px-4 py-2 ${view === 'newEmployeeForm' ? 'bg-indigo-300' : 'bg-indigo-600 hover:bg-indigo-700'} text-white rounded-lg w-full sm:w-auto text-sm`}
                 disabled={isCurrentViewForm && view !== 'newEmployeeForm'}
             >
@@ -1357,7 +1409,7 @@ const ActionHeader = ({ view, currentUserRole, setView, openModal, isSuperAdmin 
     else if (targetView === 'areas' && currentUserRole === 'admin') {
         text = 'Aggiungi Area';
         button = (
-            <button onClick={() => setView('newAreaForm')} 
+            <button onClick={() => handleSwitchView('newAreaForm')} 
                 className={`px-4 py-2 ${view === 'newAreaForm' ? 'bg-indigo-300' : 'bg-indigo-600 hover:bg-indigo-700'} text-white rounded-lg w-full sm:w-auto text-sm`}
                 disabled={isCurrentViewForm && view !== 'newAreaForm'}
             >
@@ -1368,7 +1420,7 @@ const ActionHeader = ({ view, currentUserRole, setView, openModal, isSuperAdmin 
     else if (targetView === 'admins' && currentUserRole === 'admin') { 
         text = 'Crea Nuovo Admin/Preposto';
         button = (
-            <button onClick={() => setView('newAdminForm')} 
+            <button onClick={() => handleSwitchView('newAdminForm')} 
                 className={`px-4 py-2 ${view === 'newAdminForm' ? 'bg-indigo-300' : 'bg-indigo-600 hover:bg-indigo-700'} text-white rounded-lg w-full sm:w-auto text-sm`}
                 disabled={isCurrentViewForm && view !== 'newAdminForm'}
             >
@@ -1380,7 +1432,7 @@ const ActionHeader = ({ view, currentUserRole, setView, openModal, isSuperAdmin 
          text = 'Aggiungi Dipendente alle Mie Aree';
          button = (
             <button
-                onClick={() => setView('prepostoAddEmployeeForm')} 
+                onClick={() => handleSwitchView('prepostoAddEmployeeForm')} 
                 className={`px-4 py-2 ${view === 'prepostoAddEmployeeForm' ? 'bg-teal-300' : 'bg-teal-600 hover:bg-teal-700'} text-white rounded-lg w-full sm:w-auto text-sm`}
                 disabled={isCurrentViewForm && view !== 'prepostoAddEmployeeForm'}
             >
@@ -1388,7 +1440,6 @@ const ActionHeader = ({ view, currentUserRole, setView, openModal, isSuperAdmin 
             </button>
         );
     }
-
 
     if (!button) return null;
 
@@ -1400,8 +1451,6 @@ const ActionHeader = ({ view, currentUserRole, setView, openModal, isSuperAdmin 
         </div>
     );
 };
-// ==================================================
-
 
 // --- COMPONENTE PRINCIPALE ---
 const AdminDashboard = ({ user, handleLogout, userData }) => {
@@ -1433,45 +1482,52 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     
     // === STATO NOTIFICHE PENDING ===
     const [pendingRequestsCount, setPendingRequestsCount] = useState(0); 
-    const [notification, setNotification] = useState(null); // { message, type }
+    const [notification, setNotification] = useState(null); 
     
-    // === STATO PER INSERIMENTO MANUALE, GIUSTIFICATIVI e MODIFICA ===
+    // === STATI PER FORM E MODALI ===
     const [manualEntryEmployee, setManualEntryEmployee] = useState(null);
-    const [absenceEmployee, setAbsenceEmployee] = useState(null); // <--- NUOVO
-    const [entryToEdit, setEntryToEdit] = useState(null); 
+    const [absenceEmployee, setAbsenceEmployee] = useState(null); 
+    const [entryToEdit, setEntryToEdit] = useState(null);
+    const [employeeToEdit, setEmployeeToEdit] = useState(null);
+
+    const currentUserRole = userData?.role;
+    const superAdminEmail = SUPER_ADMIN_EMAIL; 
+
+    // === FUNZIONE PULIZIA TOTALE (RESET) ===
+    const resetAllForms = useCallback(() => {
+        // Chiude eventuali modali
+        setShowModal(false);
+        setSelectedItem(null);
+        setEntryToEdit(null);
+        
+        // Pulisce stati dei form "pagina intera"
+        setManualEntryEmployee(null);
+        setAbsenceEmployee(null);
+        setEmployeeToEdit(null);
+        
+    }, []);
+
+    // Wrapper per cambiare vista pulendo tutto
+    const handleSwitchView = (newView) => {
+        resetAllForms();
+        setView(newView);
+    };
 
     const showNotification = useCallback((message, type = 'success') => {
         setNotification({ message, type });
         setTimeout(() => setNotification(null), 4000); 
     }, []);
-    // ==================================
-
-    const currentUserRole = userData?.role;
-    const superAdminEmail = SUPER_ADMIN_EMAIL; 
 
     const managedEmployees = useMemo(() => {
-        if (currentUserRole === 'admin') {
-            return allEmployees;
-        }
-
+        if (currentUserRole === 'admin') return allEmployees;
         if (currentUserRole === 'preposto') {
             const managedAreaIds = userData?.managedAreaIds || []; 
-            if (managedAreaIds.length === 0) {
-                 return [];
-            }
-            
-            const filtered = allEmployees.filter(emp =>
-                emp.workAreaIds &&
-                emp.workAreaIds.some(areaId => managedAreaIds.includes(areaId))
-            );
-            return filtered;
+            if (managedAreaIds.length === 0) return [];
+            return allEmployees.filter(emp => emp.workAreaIds && emp.workAreaIds.some(areaId => managedAreaIds.includes(areaId)));
         }
-
         return []; 
     }, [allEmployees, currentUserRole, userData]);
 
-
-    // --- CARICAMENTO DATI ---
     const fetchData = useCallback(async () => {
         if (!user || !userData) { setIsLoading(false); return; }
         const role = userData?.role;
@@ -1525,17 +1581,14 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             if (isMounted) setIsLoading(false);
         }
         
-        return () => {
-             isMounted = false; 
-        };
-
+        return () => { isMounted = false; };
     }, [user, userData, superAdminEmail, showNotification]);
 
     useEffect(() => {
         if (user && userData) fetchData();
     }, [user, userData, fetchData]); 
 
-
+    // ... (Il resto delle funzioni di calcolo e listener rimane invariato) ...
     const sortedAndFilteredEmployees = useMemo(() => {
         const employeesWithDetails = managedEmployees.map(emp => ({
             ...emp,
@@ -1547,7 +1600,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         }));
         
         let filterableItems = [...employeesWithDetails];
-        
         if (searchTerm) {
             const lowercasedFilter = searchTerm.toLowerCase();
             filterableItems = filterableItems.filter(emp => `${emp.name} ${emp.surname}`.toLowerCase().includes(lowercasedFilter));
@@ -1557,12 +1609,8 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
              filterableItems.sort((a, b) => { 
                  let aValue = (sortConfig.key === 'name') ? `${a.name} ${a.surname}` : a[sortConfig.key];
                  let bValue = (sortConfig.key === 'name') ? `${b.name} ${b.surname}` : b[sortConfig.key];
-
-                 if (aValue == null) aValue = ''; 
-                 if (bValue == null) bValue = '';
-                 aValue = String(aValue);
-                 bValue = String(bValue);
-
+                 if (aValue == null) aValue = ''; if (bValue == null) bValue = '';
+                 aValue = String(aValue); bValue = String(bValue);
                  if (aValue < bValue) return sortConfig.direction === 'ascending' ? -1 : 1;
                  if (aValue > bValue) return sortConfig.direction === 'ascending' ? 1 : -1;
                  return 0;
@@ -1571,11 +1619,8 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         return filterableItems;
     }, [managedEmployees, activeEmployeesDetails, searchTerm, allWorkAreas, sortConfig]);
 
-    
     const visibleWorkAreas = useMemo(() => {
-        if (currentUserRole === 'admin') {
-            return workAreasWithHours;
-        }
+        if (currentUserRole === 'admin') return workAreasWithHours;
         if (currentUserRole === 'preposto') {
             const managedAreaIds = userData?.managedAreaIds || [];
             return workAreasWithHours.filter(area => managedAreaIds.includes(area.id));
@@ -1583,127 +1628,75 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         return [];
     }, [workAreasWithHours, currentUserRole, userData]);
 
-
-    // --- LISTENER TIMBRATURE ATTIVE ---
     useEffect(() => {
         if (!allEmployees.length || !allWorkAreas.length) return;
-
         let isMounted = true; 
-
         const qActive = query(collection(db, "time_entries"), where("status", "==", "clocked-in"));
         const unsubscribeActive = onSnapshot(qActive, (snapshot) => {
             if (!isMounted) return; 
-
             const activeEntriesList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
             if (adminEmployeeProfile) {
                 const adminEntry = activeEntriesList.find(entry => entry.employeeId === adminEmployeeProfile.id);
                 const hasCompletedPause = adminEntry?.pauses?.some(p => p.start && p.end) || false;
                 setAdminActiveEntry(adminEntry ? { ...adminEntry, id: adminEntry.id, isOnBreak: adminEntry.pauses?.some(p => !p.end) || false, hasCompletedPause: hasCompletedPause } : null);
             }
-
-            const details = activeEntriesList
-                .filter(entry => entry.clockInTime) 
-                .map(entry => {
+            const details = activeEntriesList.filter(entry => entry.clockInTime).map(entry => {
                     const employee = allEmployees.find(emp => emp.id === entry.employeeId);
                     const area = allWorkAreas.find(ar => ar.id === entry.workAreaId);
                     const isOnBreak = entry.pauses?.some(p => !p.end) || false; 
                     const hasCompletedPause = entry.pauses?.some(p => p.start && p.end) || false; 
-
                     let clockInFormatted = 'N/D';
-                    
                     if (entry.clockInTime && typeof entry.clockInTime.toDate === 'function') {
                         try {
                            const clockInDate = entry.clockInTime.toDate();
-                           clockInFormatted = new Intl.DateTimeFormat('it-IT', {
-                               hour: '2-digit',
-                               minute: '2-digit',
-                               timeZone: 'Europe/Rome' 
-                           }).format(clockInDate);
-                           
+                           clockInFormatted = new Intl.DateTimeFormat('it-IT', {hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome'}).format(clockInDate);
                         } catch (e) { console.error("Errore formattazione ora entrata:", e); }
                     }
-
-                    return {
-                        id: entry.id,
-                        employeeId: entry.employeeId,
-                        employeeName: employee ? `${employee.name} ${employee.surname}` : 'Sconosciuto',
-                        areaName: area ? area.name : 'Sconosciuta',
-                        workAreaId: entry.workAreaId,
-                        clockInTimeFormatted: clockInFormatted, 
-                        status: isOnBreak ? 'In Pausa' : 'Al Lavoro', 
-                        pauses: entry.pauses || [],
-                        hasCompletedPause: hasCompletedPause 
-                    };
-                })
-                .filter(detail => {
+                    return { id: entry.id, employeeId: entry.employeeId, employeeName: employee ? `${employee.name} ${employee.surname}` : 'Sconosciuto', areaName: area ? area.name : 'Sconosciuta', workAreaId: entry.workAreaId, clockInTimeFormatted: clockInFormatted, status: isOnBreak ? 'In Pausa' : 'Al Lavoro', pauses: entry.pauses || [], hasCompletedPause: hasCompletedPause };
+                }).filter(detail => {
                     if (currentUserRole === 'admin') return true; 
                     if (currentUserRole === 'preposto') {
                          const managedAreaIds = userData?.managedAreaIds || []; 
                          if (managedAreaIds.length === 0) return false; 
-
                         const employee = allEmployees.find(emp => emp.id === detail.employeeId);
                         return employee?.workAreaIds?.some(waId => managedAreaIds.includes(waId));
                     }
                     return false; 
-                })
-                .sort((a, b) => a.employeeName.localeCompare(b.employeeName)); 
-
+                }).sort((a, b) => a.employeeName.localeCompare(b.employeeName)); 
             setActiveEmployeesDetails(details);
-        }, (error) => {
-             if (isMounted) { 
-                 console.error("Errore listener timbratura attive:", error);
-                 showNotification("Errore aggiornamento presenze.", 'error');
-             }
-        });
+        }, (error) => { if (isMounted) { console.error("Errore listener timbratura attive:", error); showNotification("Errore aggiornamento presenze.", 'error'); } });
 
         const qPending = query(collection(db, "time_entries"), where("skipBreakStatus", "==", "pending"));
         const unsubscribePending = onSnapshot(qPending, (snapshot) => {
             if (!isMounted) return;
             const pendingDocs = snapshot.docs.map(doc => doc.data());
-            
             let count = 0;
-            if (currentUserRole === 'admin') {
-                count = pendingDocs.length;
-            } else if (currentUserRole === 'preposto') {
+            if (currentUserRole === 'admin') count = pendingDocs.length;
+            else if (currentUserRole === 'preposto') {
                 const managedAreaIds = userData?.managedAreaIds || [];
                 const myPending = pendingDocs.filter(d => managedAreaIds.includes(d.workAreaId));
                 count = myPending.length;
             }
             setPendingRequestsCount(count);
         });
-
-        return () => {
-            isMounted = false; 
-            unsubscribeActive(); 
-            unsubscribePending();
-        };
+        return () => { isMounted = false; unsubscribeActive(); unsubscribePending(); };
     }, [allEmployees, allWorkAreas, adminEmployeeProfile, currentUserRole, userData, showNotification]);
 
-
-    // --- LISTENER ORE TOTALI ---
     useEffect(() => {
         let isMounted = true; 
         const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
         const q = query(collection(db, "time_entries"), where("clockInTime", ">=", Timestamp.fromDate(startOfDay)));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             if (!isMounted) return; 
-
             let totalMinutes = 0; const now = new Date();
             snapshot.docs.forEach(doc => {
-                const entry = doc.data();
-                if (!entry.clockInTime) return;
-
+                const entry = doc.data(); if (!entry.clockInTime) return;
                 if (currentUserRole === 'preposto') {
                      const managedAreaIds = userData?.managedAreaIds || []; 
                      if (managedAreaIds.length === 0) return; 
-
                      const employee = allEmployees.find(emp => emp.id === entry.employeeId);
-                     if (!employee || !employee.workAreaIds?.some(waId => managedAreaIds.includes(waId))) {
-                          return; 
-                     }
+                     if (!employee || !employee.workAreaIds?.some(waId => managedAreaIds.includes(waId))) return; 
                  }
-
                 const clockIn = entry.clockInTime.toDate();
                 const clockOut = entry.clockOutTime ? entry.clockOutTime.toDate() : (entry.status === 'clocked-in' ? now : clockIn);
                 const pauseDurationMs = (entry.pauses || []).reduce((acc, p) => {
@@ -1711,26 +1704,15 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                         const startMillis = p.start.toMillis ? p.start.toMillis() : new Date(p.start).getTime();
                         const endMillis = p.end.toMillis ? p.end.toMillis() : new Date(p.end).getTime();
                         return acc + (endMillis - startMillis);
-                    }
-                    return acc;
+                    } return acc;
                 }, 0);
-
                 const durationMs = (clockOut.getTime() - clockIn.getTime()) - pauseDurationMs;
                 if (durationMs > 0) totalMinutes += (durationMs / 60000);
             });
             setTotalDayHours((totalMinutes / 60).toFixed(2));
-        }, (error) => {
-            if (isMounted) { 
-                 console.error("Errore listener ore totali:", error);
-                 showNotification("Errore aggiornamento ore totali.", 'error');
-             }
-        });
-        return () => {
-            isMounted = false; 
-            unsubscribe();
-        };
+        }, (error) => { if (isMounted) { console.error("Errore listener ore totali:", error); showNotification("Errore aggiornamento ore totali.", 'error'); } });
+        return () => { isMounted = false; unsubscribe(); };
     }, [currentUserRole, userData, allEmployees, showNotification]);
-
 
     const handleAdminClockIn = useCallback(async (areaId, timestamp, note) => {
         if (!adminEmployeeProfile) return showNotification("Profilo dipendente non trovato.", 'error');
@@ -1742,97 +1724,55 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         console.log(`[AdminDashboard] Tentativo Timbratura USCITA manuale per ${adminEmployeeProfile.name}`);
     }, [adminActiveEntry, adminEmployeeProfile, showNotification]);
 
-    // FUNZIONE PER PAUSA PERSONALE
     const handleAdminPause = useCallback(async () => {
         if (!adminEmployeeProfile) return showNotification("Profilo dipendente non trovato.", 'error');
         if (!adminActiveEntry) return showNotification("Nessuna timbratura attiva trovata.", 'error');
-        
         if (adminActiveEntry.isOnBreak) {
             setIsActionLoading(true);
             try {
                 const togglePauseFunction = httpsCallable(getFunctions(undefined, 'europe-west1'), 'prepostoTogglePause');
                 const result = await togglePauseFunction({ deviceId: 'ADMIN_MANUAL_ACTION' });
                 showNotification(result.data.message, 'success'); 
-            } catch (error) { 
-                const displayMessage = error.message.includes(":") ? error.message.split(":")[1].trim() : error.message;
-                showNotification(`Errore pausa: ${displayMessage || 'Errore Server.'}`, 'error'); 
-                console.error(error); 
-            }
-            finally { setIsActionLoading(false); }
-            return; 
+            } catch (error) { const displayMessage = error.message.includes(":") ? error.message.split(":")[1].trim() : error.message; showNotification(`Errore pausa: ${displayMessage || 'Errore Server.'}`, 'error'); console.error(error); }
+            finally { setIsActionLoading(false); } return; 
         }
-        
-        if (adminActiveEntry.hasCompletedPause) {
-             return showNotification("Hai già completato la pausa automatica in questa sessione.", 'info');
-        }
-        
+        if (adminActiveEntry.hasCompletedPause) return showNotification("Hai già completato la pausa automatica in questa sessione.", 'info');
         const workArea = allWorkAreas.find(area => area.id === adminActiveEntry.workAreaId);
-        if (!workArea || !workArea.pauseDuration || workArea.pauseDuration <= 0) {
-            return showNotification(`Nessuna pausa predefinita (>0 min) configurata per l'area "${workArea?.name || 'sconosciuta'}".`, 'info');
-        }
+        if (!workArea || !workArea.pauseDuration || workArea.pauseDuration <= 0) return showNotification(`Nessuna pausa predefinita (>0 min) configurata per l'area "${workArea?.name || 'sconosciuta'}".`, 'info');
         const pauseDurationInMinutes = workArea.pauseDuration;
-        
-        if (!window.confirm(`Applicare la pausa predefinita di ${pauseDurationInMinutes} minuti per te stesso? L'azione è immediata e irreversibile.`)) {
-             return;
-        }
-
+        if (!window.confirm(`Applicare la pausa predefinita di ${pauseDurationInMinutes} minuti per te stesso? L'azione è immediata e irreversibile.`)) return;
         setIsActionLoading(true);
         try {
             const applyPauseFunction = httpsCallable(getFunctions(undefined, 'europe-west1'), 'applyAutoPauseEmployee');
             const result = await applyPauseFunction({ timeEntryId: adminActiveEntry.id, durationMinutes: pauseDurationInMinutes, deviceId: 'ADMIN_MANUAL_ACTION' });
             showNotification(result.data.message, 'success'); 
-        } catch (error) { 
-            const displayMessage = error.message.includes(":") ? error.message.split(":")[1].trim() : error.message;
-            showNotification(`Errore pausa: ${displayMessage || 'Errore Server.'}`, 'error'); 
-            console.error(error); 
-        }
+        } catch (error) { const displayMessage = error.message.includes(":") ? error.message.split(":")[1].trim() : error.message; showNotification(`Errore pausa: ${displayMessage || 'Errore Server.'}`, 'error'); console.error(error); }
         finally { setIsActionLoading(false); }
     }, [adminActiveEntry, adminEmployeeProfile, allWorkAreas, showNotification]);
 
-
     const handleEmployeePauseClick = useCallback(async (employee) => {
         const timeEntryId = employee?.activeEntry?.id; 
-
         if (!timeEntryId) return showNotification("Errore: ID della timbratura attiva non trovato.", 'error');
-        
         const workArea = allWorkAreas.find(area => area.id === employee.activeEntry.workAreaId);
-        
-        if (!workArea || !workArea.pauseDuration || workArea.pauseDuration <= 0) {
-            return showNotification(`Nessuna pausa predefinita configurata per l'area "${workArea?.name || 'sconosciuta'}". Modifica l'area per aggiungerla.`, 'info');
-        }
+        if (!workArea || !workArea.pauseDuration || workArea.pauseDuration <= 0) return showNotification(`Nessuna pausa predefinita configurata per l'area "${workArea?.name || 'sconosciuta'}". Modifica l'area per aggiungerla.`, 'info');
         const pauseDurationInMinutes = workArea.pauseDuration;
-        
-        if (employee.activeEntry.hasCompletedPause) {
-             return showNotification(`La pausa predefinita di ${pauseDurationInMinutes} minuti è stata già completata per ${employee.name} in questa sessione.`, 'info');
-        }
-
-
-        if (!window.confirm(`Applicare la pausa predefinita di ${pauseDurationInMinutes} minuti a ${employee.name} ${employee.surname}? L'azione è immediata e irreversibile.`)) {
-             return;
-        }
-
+        if (employee.activeEntry.hasCompletedPause) return showNotification(`La pausa predefinita di ${pauseDurationInMinutes} minuti è stata già completata per ${employee.name} in questa sessione.`, 'info');
+        if (!window.confirm(`Applicare la pausa predefinita di ${pauseDurationInMinutes} minuti a ${employee.name} ${employee.surname}? L'azione è immediata e irreversibile.`)) return;
         setIsActionLoading(true);
         try {
             const applyPauseFunction = httpsCallable(getFunctions(undefined, 'europe-west1'), 'applyAutoPauseEmployee');
-            const result = await applyPauseFunction({ 
-                timeEntryId: timeEntryId, 
-                durationMinutes: pauseDurationInMinutes, 
-                deviceId: 'PREPOSTO_MANUAL_ACTION', 
-                employeeIdToUpdate: employee.id 
-            });
+            const result = await applyPauseFunction({ timeEntryId: timeEntryId, durationMinutes: pauseDurationInMinutes, deviceId: 'PREPOSTO_MANUAL_ACTION', employeeIdToUpdate: employee.id });
             showNotification(result.data.message, 'success');
-        } catch (error) { 
-            console.error("Errore applicazione pausa (Server):", error);
-            const displayMessage = error.message.includes(":") ? error.message.split(":")[1].trim() : error.message;
-            showNotification(`Errore applicazione pausa: ${displayMessage || 'Errore Server.'}`, 'error'); 
-        }
-        finally {
-            setIsActionLoading(false);
-        }
+        } catch (error) { console.error("Errore applicazione pausa (Server):", error); const displayMessage = error.message.includes(":") ? error.message.split(":")[1].trim() : error.message; showNotification(`Errore applicazione pausa: ${displayMessage || 'Errore Server.'}`, 'error'); }
+        finally { setIsActionLoading(false); }
     }, [allWorkAreas, showNotification]);
 
-
+    // HANDLERS AGGIORNATI CON RESET
     const openModal = useCallback((type, item = null) => {
+        // Resetta i form a pagina intera ma NON la vista, poiché il modale si sovrappone
+        setManualEntryEmployee(null); setAbsenceEmployee(null); setEmployeeToEdit(null);
+        
+        // Imposta vista di base se necessario (es. torna a 'employees' se apri un modale dipendente)
         setView(type.includes('Employee') ? 'employees' : (type.includes('Area') ? 'areas' : 'admins'));
         
         setModalType(type);
@@ -1840,280 +1780,116 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         setShowModal(true);
     }, []);
 
+    const handleOpenManualEntry = (employee) => {
+        resetAllForms();
+        setManualEntryEmployee(employee);
+        setView('manualEntryForm');
+    };
+
+    const handleOpenAbsenceEntry = (employee) => {
+        resetAllForms();
+        setAbsenceEmployee(employee);
+        setView('absenceEntryForm');
+    };
+
+    const handleOpenEditEmployee = (employee) => {
+        resetAllForms();
+        setEmployeeToEdit(employee);
+        setView('editEmployeeForm');
+    };
+
     const handleResetEmployeeDevice = useCallback(async (employee) => {
         if (!employee || !employee.id) return showNotification("Dipendente non valido.", 'error');
-        
         if (!window.confirm(`Sei sicuro di resettare il dispositivo per ${employee.name} ${employee.surname}?`)) return;
-
         setIsActionLoading(true);
         try {
             const employeeRef = doc(db, "employees", employee.id);
             await updateDoc(employeeRef, { deviceIds: [] });
             showNotification(`Dispositivo resettato per ${employee.name} ${employee.surname}.`, 'success');
             await fetchData();
-        } catch (error) {
-            console.error("Errore reset dispositivo:", error);
-            showNotification(`Errore reset dispositivo: ${error.message}`, 'error'); 
-        } finally {
-            setIsActionLoading(false);
-        }
+        } catch (error) { console.error("Errore reset dispositivo:", error); showNotification(`Errore reset dispositivo: ${error.message}`, 'error'); } finally { setIsActionLoading(false); }
     }, [fetchData, showNotification]);
     
-    // --- FUNZIONE GENERATE REPORT ---
+    // ... (generateReport, handleReviewSkipBreak, handleSaveEntryEdit, handleExportXml rimangono uguali) ...
     const generateReport = useCallback(async () => {
         if (!dateRange.start || !dateRange.end) return showNotification("Seleziona date valide.", 'info');
         setIsLoading(true);
-        
         let isMounted = true; 
-        
         try {
             const functions = getFunctions(undefined, 'europe-west1');
             const generateReportFunction = httpsCallable(functions, 'generateTimeReport');
-
-            const result = await generateReportFunction({
-                startDate: dateRange.start, 
-                endDate: dateRange.end,
-                employeeIdFilter: reportEmployeeFilter, 
-                areaIdFilter: reportAreaFilter
-            });
-
+            const result = await generateReportFunction({ startDate: dateRange.start, endDate: dateRange.end, employeeIdFilter: reportEmployeeFilter, areaIdFilter: reportAreaFilter });
             if (!isMounted) return; 
-
             const fetchedEntries = result.data.reports;
-            
             const areaHoursMap = new Map(allWorkAreas.map(area => [area.id, 0]));
-
-            const formatTime = (date, time) => {
-                const finalTime = time === 'In corso' ? '99:99' : time;
-                const formattedDate = date.replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3-$2-$1');
-                return new Date(`${formattedDate} ${finalTime}`);
-            };
-
-
+            const formatTime = (date, time) => { const finalTime = time === 'In corso' ? '99:99' : time; const formattedDate = date.replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3-$2-$1'); return new Date(`${formattedDate} ${finalTime}`); };
             const reportData = fetchedEntries.map(entry => {
-                
                 const clockIn = entry.clockInTime ? new Date(entry.clockInTime) : null;
                 const clockOut = entry.clockOutTime ? new Date(entry.clockOutTime) : null;
-                
                 if (!clockIn) return null; 
-
                 const employee = allEmployees.find(e => e.id === entry.employeeId);
                 const area = allWorkAreas.find(a => a.id === entry.workAreaId);
-                // NOTA: Se area è null (es. ferie), la gestiamo sotto. Per i dipendenti deve esistere
                 if (!employee) return null; 
-
-                let durationHours = null;
-                let pauseDurationMinutes = 0; 
-                let pauseHours = 0; 
-                let clockInFormatted = 'N/D';
-                let clockOutFormatted = 'In corso';
-
+                let durationHours = null; let pauseDurationMinutes = 0; let pauseHours = 0; let clockInFormatted = 'N/D'; let clockOutFormatted = 'In corso';
                 try {
                     clockInFormatted = new Intl.DateTimeFormat('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' }).format(clockIn);
-                    if (clockOut) {
-                        clockOutFormatted = new Intl.DateTimeFormat('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' }).format(clockOut);
-                    }
+                    if (clockOut) { clockOutFormatted = new Intl.DateTimeFormat('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' }).format(clockOut); }
                 } catch (e) { console.error("Errore formattazione ora report:", e); }
-
-                // --- GESTIONE ASSENZE (NUOVO) ---
                 if (entry.isAbsence) {
-                    return {
-                        id: entry.id,
-                        employeeName: `${employee.name} ${employee.surname}`,
-                        employeeId: entry.employeeId,
-                        areaName: "---",
-                        clockInDate: clockIn.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-                        clockInTimeFormatted: "-",
-                        clockOutTimeFormatted: "-",
-                        duration: 0,
-                        pauseHours: 0,
-                        note: entry.note || entry.absenceType,
-                        statusLabel: entry.absenceType ? entry.absenceType.toUpperCase() : "ASSENZA",
-                        isAbsence: true,
-                        workAreaId: null
-                    };
+                    return { id: entry.id, employeeName: `${employee.name} ${employee.surname}`, employeeId: entry.employeeId, areaName: "---", clockInDate: clockIn.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' }), clockInTimeFormatted: "-", clockOutTimeFormatted: "-", duration: 0, pauseHours: 0, note: entry.note || entry.absenceType, statusLabel: entry.absenceType ? entry.absenceType.toUpperCase() : "ASSENZA", isAbsence: true, workAreaId: null };
                 }
-                // ---------------------------------
-
                 if (clockOut) {
                     const totalMs = clockOut.getTime() - clockIn.getTime();
-                    
-                    const recordedPausesMs = (entry.pauses || []).reduce((acc, p) => {
-                        const pauseStart = p.start ? new Date(p.start) : null;
-                        const pauseEnd = p.end ? new Date(p.end) : null;
-                        if (pauseStart && pauseEnd) {
-                            return acc + (pauseEnd.getTime() - pauseStart.getTime());
-                        } 
-                        return acc;
-                    }, 0);
-
+                    const recordedPausesMs = (entry.pauses || []).reduce((acc, p) => { const pauseStart = p.start ? new Date(p.start) : null; const pauseEnd = p.end ? new Date(p.end) : null; if (pauseStart && pauseEnd) { return acc + (pauseEnd.getTime() - pauseStart.getTime()); } return acc; }, 0);
                     const areaPauseMs = (area?.pauseDuration || 0) * 60000;
-                    
                     let finalPauseDeductionMs = recordedPausesMs;
-
-                    if (entry.skippedBreak) {
-                        if (entry.skipBreakStatus === 'approved') {
-                            finalPauseDeductionMs = 0; 
-                        } else {
-                            finalPauseDeductionMs = areaPauseMs;
-                        }
-                    } else {
-                        if (areaPauseMs > 0 && recordedPausesMs < areaPauseMs) {
-                            finalPauseDeductionMs = areaPauseMs;
-                        }
-                    }
-                    
-                    pauseDurationMinutes = finalPauseDeductionMs / 60000;
-                    pauseHours = pauseDurationMinutes / 60; 
-
-                    let calculatedDurationMs = totalMs > 0 ? (totalMs - finalPauseDeductionMs) : 0;
-                    if (calculatedDurationMs < 0) calculatedDurationMs = 0;
-
+                    if (entry.skippedBreak) { if (entry.skipBreakStatus === 'approved') { finalPauseDeductionMs = 0; } else { finalPauseDeductionMs = areaPauseMs; } } else { if (areaPauseMs > 0 && recordedPausesMs < areaPauseMs) { finalPauseDeductionMs = areaPauseMs; } }
+                    pauseDurationMinutes = finalPauseDeductionMs / 60000; pauseHours = pauseDurationMinutes / 60; 
+                    let calculatedDurationMs = totalMs > 0 ? (totalMs - finalPauseDeductionMs) : 0; if (calculatedDurationMs < 0) calculatedDurationMs = 0;
                     durationHours = calculatedDurationMs > 0 ? (calculatedDurationMs / 3600000) : 0; 
-                    
-                    if (area) {
-                        areaHoursMap.set(area.id, (areaHoursMap.get(area.id) || 0) + durationHours);
-                    }
+                    if (area) { areaHoursMap.set(area.id, (areaHoursMap.get(area.id) || 0) + durationHours); }
                 }
-                return {
-                    id: entry.id,
-                    employeeName: `${employee.name} ${employee.surname}`,
-                    employeeId: entry.employeeId,
-                    areaName: area ? area.name : 'Sconosciuta',
-                    clockInDate: clockIn.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-                    clockInTimeFormatted: clockInFormatted, 
-                    clockOutTimeFormatted: clockOutFormatted, 
-                    duration: durationHours,
-                    pauseHours: pauseHours, 
-                    note: entry.note || '',
-                    createdBy: entry.createdBy || null,
-                    skippedBreak: entry.skippedBreak,
-                    skipBreakStatus: entry.skipBreakStatus,
-                    skippedBreakReason: entry.skippedBreakReason,
-                    workAreaId: entry.workAreaId
-                };
-            }).filter(Boolean)
-              .sort((a, b) => {
-                  const dateA = formatTime(a.clockInDate, a.clockInTimeFormatted); 
-                  const dateB = formatTime(b.clockInDate, b.clockOutTimeFormatted); 
-                  
-                  if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
-                       if (a.clockInDate !== b.clockInDate) return a.clockInDate.localeCompare(b.clockInDate);
-                       return a.employeeName.localeCompare(b.employeeName);
-                  }
-                  
-                  if (dateA < dateB) return -1;
-                  if (dateA > dateB) return 1;
-                  return a.employeeName.localeCompare(b.employeeName);
-              });
-
-            setReports(reportData);
-            setReportTitle(`Report dal ${dateRange.start} al ${dateRange.end}`);
+                return { id: entry.id, employeeName: `${employee.name} ${employee.surname}`, employeeId: entry.employeeId, areaName: area ? area.name : 'Sconosciuta', clockInDate: clockIn.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' }), clockInTimeFormatted: clockInFormatted, clockOutTimeFormatted: clockOutFormatted, duration: durationHours, pauseHours: pauseHours, note: entry.note || '', createdBy: entry.createdBy || null, skippedBreak: entry.skippedBreak, skipBreakStatus: entry.skipBreakStatus, skippedBreakReason: entry.skippedBreakReason, workAreaId: entry.workAreaId };
+            }).filter(Boolean).sort((a, b) => { const dateA = formatTime(a.clockInDate, a.clockInTimeFormatted); const dateB = formatTime(b.clockInDate, b.clockOutTimeFormatted); if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) { if (a.clockInDate !== b.clockInDate) return a.clockInDate.localeCompare(b.clockInDate); return a.employeeName.localeCompare(b.employeeName); } if (dateA < dateB) return -1; if (dateA > dateB) return 1; return a.employeeName.localeCompare(b.employeeName); });
+            setReports(reportData); setReportTitle(`Report dal ${dateRange.start} al ${dateRange.end}`);
             const updatedAreas = allWorkAreas.map(area => ({ ...area, totalHours: (areaHoursMap.get(area.id) || 0).toFixed(2) }));
             setWorkAreasWithHours(updatedAreas);
-            
             if(reportData.length > 0) setView('reports'); 
-            
-        } catch (error) { 
-            const displayMessage = error.message.includes(":") ? error.message.split(":")[1].trim() : error.message;
-            showNotification(`Errore generazione report: ${displayMessage || 'Errore Server.'}`, 'error'); 
-            console.error(error); 
-        }
-        finally {
-            if (isMounted) setIsLoading(false);
-        }
-        
-        return () => {
-             isMounted = false; 
-        };
-
+        } catch (error) { const displayMessage = error.message.includes(":") ? error.message.split(":")[1].trim() : error.message; showNotification(`Errore generazione report: ${displayMessage || 'Errore Server.'}`, 'error'); console.error(error); }
+        finally { if (isMounted) setIsLoading(false); }
+        return () => { isMounted = false; };
     }, [dateRange, reportAreaFilter, reportEmployeeFilter, allEmployees, allWorkAreas, showNotification]);
 
     const handleReviewSkipBreak = useCallback(async (entryId, decision) => {
         if (!entryId || !decision) return;
-        
-        const confirmMsg = decision === 'approved' 
-            ? "Confermi che il dipendente NON ha fatto pausa? Verranno calcolate le ore piene."
-            : "Rifiuti la richiesta? Verrà sottratta la pausa standard dell'area.";
-            
+        const confirmMsg = decision === 'approved' ? "Confermi che il dipendente NON ha fatto pausa? Verranno calcolate le ore piene." : "Rifiuti la richiesta? Verrà sottratta la pausa standard dell'area.";
         if (!window.confirm(confirmMsg)) return;
-
         setIsActionLoading(true);
         try {
             const functions = getFunctions(undefined, 'europe-west1');
             const reviewFunction = httpsCallable(functions, 'reviewSkipBreakRequest');
-            
-            await reviewFunction({ 
-                timeEntryId: entryId, 
-                decision: decision, // 'approved' | 'rejected'
-                adminId: user.uid 
-            });
-
+            await reviewFunction({ timeEntryId: entryId, decision: decision, adminId: user.uid });
             showNotification(`Richiesta ${decision === 'approved' ? 'APPROVATA' : 'RIFIUTATA'} con successo.`, 'success');
             generateReport(); 
-            
-        } catch (error) {
-            console.error("Errore revisione pausa:", error);
-            showNotification("Errore durante l'aggiornamento della richiesta.", 'error');
-        } finally {
-            setIsActionLoading(false);
-        }
+        } catch (error) { console.error("Errore revisione pausa:", error); showNotification("Errore durante l'aggiornamento della richiesta.", 'error'); } finally { setIsActionLoading(false); }
     }, [user, showNotification, generateReport]);
 
-    // === LOGICA SALVATAGGIO MODIFICA (DATA, ORA, AREA, NOTE) ===
     const handleSaveEntryEdit = async (entryId, updatedData) => {
         setIsActionLoading(true);
         try {
             const entryRef = doc(db, "time_entries", entryId);
-            
-            // 1. Costruisci le nuove date complete (Data scelta + Ora scelta)
-            // updatedData.date è formato YYYY-MM-DD
-            // updatedData.clockInTime è formato HH:mm
-            
             const newClockInDate = new Date(`${updatedData.date}T${updatedData.clockInTime}:00`);
-            
-            let updatePayload = {
-                workAreaId: updatedData.workAreaId,
-                note: updatedData.note,
-                clockInTime: Timestamp.fromDate(newClockInDate),
-                // AGGIUNTO: Salvataggio stato pausa
-                skippedBreak: updatedData.skippedBreak,
-                // Se true, lo approviamo automaticamente dato che lo sta facendo l'admin
-                skipBreakStatus: updatedData.skippedBreak ? 'approved' : 'none' 
-            };
-
-            // 2. Gestisci l'uscita
+            let updatePayload = { workAreaId: updatedData.workAreaId, note: updatedData.note, clockInTime: Timestamp.fromDate(newClockInDate), skippedBreak: updatedData.skippedBreak, skipBreakStatus: updatedData.skippedBreak ? 'approved' : 'none' };
             if (updatedData.clockOutTime) {
                 const newClockOutDate = new Date(`${updatedData.date}T${updatedData.clockOutTime}:00`);
-                
-                // Controllo validità: Uscita deve essere dopo Entrata
-                if (newClockOutDate <= newClockInDate) {
-                    throw new Error("L'ora di uscita deve essere successiva all'entrata.");
-                }
-
-                updatePayload.clockOutTime = Timestamp.fromDate(newClockOutDate);
-                updatePayload.status = 'clocked-out'; // Forza lo stato se c'è l'uscita
-            } else {
-                // Se l'admin cancella l'ora di uscita, rimettiamo null (opzionale, o lascia inalterato)
-                // updatePayload.clockOutTime = null; 
-                // updatePayload.status = 'clocked-in';
+                if (newClockOutDate <= newClockInDate) { throw new Error("L'ora di uscita deve essere successiva all'entrata."); }
+                updatePayload.clockOutTime = Timestamp.fromDate(newClockOutDate); updatePayload.status = 'clocked-out'; 
             }
-
-            // 3. Aggiungi traccia della modifica (Audit log opzionale)
-            updatePayload.lastModifiedBy = user.email;
-            updatePayload.lastModifiedAt = Timestamp.now();
-
+            updatePayload.lastModifiedBy = user.email; updatePayload.lastModifiedAt = Timestamp.now();
             await updateDoc(entryRef, updatePayload);
-
             showNotification("Timbratura (orari e stato pausa) aggiornata con successo!", "success");
-            setEntryToEdit(null); // Chiudi modale
-            generateReport(); // Ricarica il report
-        } catch (error) {
-            console.error("Errore modifica:", error);
-            showNotification("Errore: " + error.message, "error");
-        } finally {
-            setIsActionLoading(false);
-        }
+            setEntryToEdit(null); generateReport(); 
+        } catch (error) { console.error("Errore modifica:", error); showNotification("Errore: " + error.message, "error"); } finally { setIsActionLoading(false); }
     };
 
     const handleExportXml = useCallback((dataToExport) => {
@@ -2133,11 +1909,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             xmlString += `  </Timbratura>\n`;
         });
         xmlString += '</ReportTimbrature>';
-        try {
-            const blob = new Blob([xmlString], { type: "application/xml;charset=utf-8" });
-            saveAs(blob, `${(reportTitle || 'Report').replace(/ /g, '_')}.xml`); 
-            showNotification(`File XML '${(reportTitle || 'Report').replace(/ /g, '_')}.xml' generato con successo.`, 'success');
-        } catch (error) { showNotification("Errore salvataggio XML.", 'error'); console.error(error); } 
+        try { const blob = new Blob([xmlString], { type: "application/xml;charset=utf-8" }); saveAs(blob, `${(reportTitle || 'Report').replace(/ /g, '_')}.xml`); showNotification(`File XML '${(reportTitle || 'Report').replace(/ /g, '_')}.xml' generato con successo.`, 'success'); } catch (error) { showNotification("Errore salvataggio XML.", 'error'); console.error(error); } 
     }, [reportTitle, showNotification]);
     
     const requestSort = useCallback((key) => {
@@ -2148,17 +1920,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         setSortConfig({ key, direction });
     }, [sortConfig]);
     
-    const handleOpenManualEntry = (employee) => {
-        setManualEntryEmployee(employee);
-        setView('manualEntryForm');
-    };
-
-    // --- NUOVO: Gestione Apertura Form Assenza ---
-    const handleOpenAbsenceEntry = (employee) => {
-        setAbsenceEmployee(employee);
-        setView('absenceEntryForm');
-    };
-
     // --- RENDER ---
     if (isLoading || !user || !userData) {
         return <div className="min-h-screen flex items-center justify-center bg-gray-100 w-full"><p>Caricamento...</p></div>;
@@ -2218,13 +1979,13 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                  <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                      <div className="flex justify-center">
                          <div className="flex flex-wrap justify-center py-2 sm:space-x-4">
-                             <button onClick={() => setView('dashboard')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'dashboard' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Dashboard</button>
-                             <button onClick={() => setView('employees')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'employees' || view === 'newEmployeeForm' || view === 'prepostoAddEmployeeForm' || view === 'absenceEntryForm' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Dipendenti</button>
-                             <button onClick={() => setView('areas')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'areas' || view === 'newAreaForm' || view === 'editAreaPauseOnly' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Aree</button>
-                             {currentUserRole === 'admin' && <button onClick={() => setView('admins')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'admins' || view === 'newAdminForm' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Admin</button>}
+                             <button onClick={() => handleSwitchView('dashboard')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'dashboard' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Dashboard</button>
+                             <button onClick={() => handleSwitchView('employees')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'employees' || view === 'newEmployeeForm' || view === 'prepostoAddEmployeeForm' || view === 'absenceEntryForm' || view === 'editEmployeeForm' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Dipendenti</button>
+                             <button onClick={() => handleSwitchView('areas')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'areas' || view === 'newAreaForm' || view === 'editAreaPauseOnly' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Aree</button>
+                             {currentUserRole === 'admin' && <button onClick={() => handleSwitchView('admins')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'admins' || view === 'newAdminForm' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Admin</button>}
                              {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (
                                 <button 
-                                    onClick={() => setView('reports')} 
+                                    onClick={() => handleSwitchView('reports')} 
                                     className={`py-2 px-3 sm:border-b-2 text-sm font-medium flex items-center ${view === 'reports' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}
                                 >
                                     Report Presenze
@@ -2240,7 +2001,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                  </div>
             </nav>
 
-            <ActionHeader view={view} currentUserRole={currentUserRole} setView={setView} openModal={openModal} isSuperAdmin={user?.email === superAdminEmail} />
+            <ActionHeader view={view} currentUserRole={currentUserRole} handleSwitchView={handleSwitchView} openModal={openModal} isSuperAdmin={user?.email === superAdminEmail} />
 
             {view === 'reports' && (
                 <div className="max-w-7xl mx-auto w-full p-4 sm:p-6 lg:p-8">
@@ -2259,6 +2020,15 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             
             <div className="max-w-7xl mx-auto w-full p-4 sm:p-6 lg:p-8">
                 {view === 'newEmployeeForm' && <NewEmployeeForm onDataUpdate={fetchData} user={user} setView={setView} showNotification={showNotification} />}
+                
+                {/* --- NUOVO: Form Modifica Dipendente (Pagina Intera) --- */}
+                {view === 'editEmployeeForm' && <EditEmployeeForm 
+                    employee={employeeToEdit}
+                    onDataUpdate={fetchData} 
+                    setView={setView} 
+                    showNotification={showNotification} 
+                />}
+                
                 {view === 'newAreaForm' && <NewAreaForm onDataUpdate={fetchData} setView={setView} showNotification={showNotification} />}
                 {view === 'newAdminForm' && <NewAdminForm onDataUpdate={fetchData} user={user} setView={setView} showNotification={showNotification} />}
                 {view === 'prepostoAddEmployeeForm' && <PrepostoAddEmployeeForm onDataUpdate={fetchData} user={user} setView={setView} showNotification={showNotification} workAreas={allWorkAreas} allEmployees={allEmployees} userData={userData} />}
@@ -2272,7 +2042,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                     preselectedEmployee={manualEntryEmployee}
                 />}
 
-                {/* --- NUOVO: Vista Form Giustificativo --- */}
+                {/* --- Vista Form Giustificativo --- */}
                 {view === 'absenceEntryForm' && <AbsenceEntryForm 
                     onDataUpdate={fetchData} 
                     setView={setView} 
@@ -2301,7 +2071,8 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                         adminEmployeeId={adminEmployeeProfile?.id}
                         handleEmployeePauseClick={handleEmployeePauseClick} 
                         handleOpenManualEntry={handleOpenManualEntry}
-                        handleOpenAbsenceEntry={handleOpenAbsenceEntry} // <--- Passiamo la nuova funzione
+                        handleOpenAbsenceEntry={handleOpenAbsenceEntry} 
+                        handleOpenEditEmployee={handleOpenEditEmployee} 
                     />}
                     
                     {view === 'areas' && <AreaManagementView workAreas={visibleWorkAreas} openModal={openModal} currentUserRole={currentUserRole} />}
