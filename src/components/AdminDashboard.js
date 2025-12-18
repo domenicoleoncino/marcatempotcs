@@ -169,7 +169,7 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
             <div className="flex flex-col sm:flex-row justify-between items-center gap-4 border-b border-gray-200 pb-4">
                 <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-800 tracking-tight">{isMapMode ? 'Mappa in Tempo Reale' : 'Dashboard'}</h1>
                 <button onClick={() => setIsMapMode(!isMapMode)} className={`flex items-center gap-2 px-5 py-2.5 font-bold rounded-lg shadow-md transition-all transform hover:-translate-y-0.5 ${isMapMode ? 'bg-gray-700 text-white hover:bg-gray-800' : 'bg-blue-600 text-white hover:bg-blue-700'}`}>
-                    {isMapMode ? <>🔙 Torna alla Lista</> : <>🌍 Apri Mappa Presenze</>}
+                    {isMapMode ? <>🔙 Chiudi Mappa </> : <>🌍 Apri Mappa Presenze</>}
                 </button>
             </div>
             {!isMapMode && (
