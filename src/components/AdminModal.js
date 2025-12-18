@@ -341,7 +341,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
             case 'newEmployee':
                 return <>{renderFieldLocal('Nome', 'name')}{renderFieldLocal('Cognome', 'surname')}{renderFieldLocal('Email', 'email', 'email')}{renderFieldLocal('Password (min 6)', 'password', 'text')}{renderSingleCheckboxLocal('Controllo GPS', 'controlloGpsRichiesto')}</>;
             case 'newArea':
-                return <>{renderFieldLocal('Nome Area', 'name')}{renderFieldLocal('Pausa (min)', 'pauseDuration', 'number')}{renderFieldLocal('Latitudine', 'latitude', 'number')}{renderFieldLocal('Longitudine', 'longitude', 'number')}{renderFieldLocal('Raggio (metri)', 'radius', 'number')}</>;
+                return <>{renderFieldLocal('Nome Area', 'name')}{renderFieldLocal('☕Pausa (min)', 'pauseDuration', 'number')}{renderFieldLocal('Latitudine', 'latitude', 'number')}{renderFieldLocal('Longitudine', 'longitude', 'number')}{renderFieldLocal('🧭Raggio (metri)(inserire almeno 100)', 'radius', 'number')}</>;
             case 'newAdmin':
                 return <>{renderFieldLocal('Nome', 'name')}{renderFieldLocal('Cognome', 'surname')}{renderFieldLocal('Email', 'email', 'email')}{renderFieldLocal('Password', 'password')}{renderFieldLocal('Telefono (Opz)', 'phone')}{renderFieldLocal('Ruolo', 'role', 'select', roleOptions)}{renderSingleCheckboxLocal('Controllo GPS', 'controlloGpsRichiesto')}</>;
             
@@ -461,8 +461,16 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'ui-sans-serif, system-ui, sans-serif' }}>
             <div onClick={() => setShowModal(false)} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: 100000 }} />
             <div className="shadow-2xl flex flex-col mx-4" style={{ backgroundColor: '#ffffff', width: '100%', maxWidth: '500px', maxHeight: '85vh', zIndex: 100001, position: 'relative', borderRadius: '12px', overflow: 'hidden', color: '#000000' }}>
-                <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', backgroundColor: '#f9fafb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#111827' }}>{getTitle()}</h3>
+                <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', backgroundColor: '#f9fafb', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#111827' }}>{getTitle()}</h3>
+                        {/* Sezione NOME DIPENDENTE AGGIUNTA QUI */}
+                        {['assignArea', 'assignPrepostoAreas', 'assignEmployeeToPrepostoArea', 'editEmployee', 'manualEntryForm', 'absenceEntryForm'].includes(type) && item && (
+                            <div style={{ marginTop: '4px', fontSize: '13px', color: '#6b7280' }}>
+                                Dipendente: <span style={{ fontWeight: 'bold', color: '#374151' }}>{item.name} {item.surname}</span>
+                            </div>
+                        )}
+                    </div>
                     <button onClick={() => setShowModal(false)} style={{ background: 'none', border: 'none', fontSize: '24px', color: '#9ca3af', cursor: 'pointer', lineHeight: 1 }}>&times;</button>
                 </div>
                 <div style={{ padding: '24px', overflowY: 'auto' }}>

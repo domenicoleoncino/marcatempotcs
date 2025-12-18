@@ -101,10 +101,16 @@ const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) =>
             <div style={overlayStyle} onClick={onClose} />
             <div style={containerStyle}>
                 <div style={modalStyle}>
-                    {/* Header */}
-                    <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#111827' }}>✏️Modifica Timbratura</h3>
-                        <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '24px', color: '#9ca3af', cursor: 'pointer' }}>&times;</button>
+                    {/* Header MODIFICATO PER AGGIUNGERE IL NOME */}
+                    <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div>
+                            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#111827' }}>✏️Modifica Timbratura</h3>
+                            {/* Blocco aggiunto per il nome del dipendente */}
+                            <div style={{ marginTop: '4px', fontSize: '13px', color: '#6b7280' }}>
+                                Dipendente: <span style={{ fontWeight: 'bold', color: '#374151' }}>{entry.employeeName || 'N/D'}</span>
+                            </div>
+                        </div>
+                        <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '24px', color: '#9ca3af', cursor: 'pointer', lineHeight: '1' }}>&times;</button>
                     </div>
 
                     {/* Body */}
