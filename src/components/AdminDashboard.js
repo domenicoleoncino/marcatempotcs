@@ -1,6 +1,7 @@
 /* eslint-disable no-unused-vars */
 /* global __firebase_config, __initial_auth_token, __app_id */
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import ReactDOM from 'react-dom';
 import { db } from '../firebase';
 import {
     collection, getDocs, query, where,
@@ -15,32 +16,35 @@ import { utils, writeFile } from 'xlsx';
 import { saveAs } from 'file-saver';
 
 // ===========================================
-// --- SUB-COMPONENTI E FUNZIONI INIZIALI ---
+// --- 1. NOTIFICHE E VARIABILI GLOBALI ---
 // ===========================================
 
-// VARIABILE PER IL CONTROLLO SUPER ADMIN
 const SUPER_ADMIN_EMAIL = "domenico.leoncino@tcsitalia.com"; 
 
 const NotificationPopup = ({ message, type, onClose }) => {
-    const baseClasses = "fixed top-4 left-1/2 transform -translate-x-1/2 z-50 p-4 rounded-lg shadow-xl text-white transition-opacity duration-300";
+    const baseClasses = "fixed top-4 left-1/2 transform -translate-x-1/2 z-[100000] px-6 py-4 rounded-xl shadow-2xl text-white transition-all duration-300 flex items-center gap-3 min-w-[300px]";
     const typeClasses = {
-        success: "bg-green-500",
-        error: "bg-red-500",
-        info: "bg-blue-500"
+        success: "bg-gradient-to-r from-green-600 to-green-500 border border-green-400",
+        error: "bg-gradient-to-r from-red-600 to-red-500 border border-red-400",
+        info: "bg-gradient-to-r from-blue-600 to-blue-500 border border-blue-400"
     };
 
     return (
         <div className={`${baseClasses} ${typeClasses[type]}`}>
-            <p className="font-semibold">{type === 'error' ? 'ERRORE:' : 'Successo:'}</p>
-            <p className="text-sm">{message}</p>
-            <button onClick={onClose} className="absolute top-1 right-2 text-lg font-bold">&times;</button>
+            <div className="flex-1">
+                <p className="font-bold text-sm uppercase tracking-wider opacity-90">{type === 'error' ? 'Attenzione' : 'Avviso'}</p>
+                <p className="font-medium text-base">{message}</p>
+            </div>
+            <button onClick={onClose} className="text-white hover:text-gray-200 transition-colors font-bold text-xl leading-none">&times;</button>
         </div>
     );
 };
 
-// === COMPONENTE AGGIORNATO: MODALE MODIFICA TIMBRATURA ESISTENTE (CON CAMBIO DATA) ===
+// ===========================================
+// --- 2. SOTTO-COMPONENTI (MODALE & VISTE) ---
+// ===========================================
+
 const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) => {
-    
     const formatDateForInput = (dateStr) => {
         if (!dateStr) return '';
         const parts = dateStr.split('/'); 
@@ -49,7 +53,6 @@ const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) =>
     };
 
     const [skipPause, setSkipPause] = useState(!!entry.skippedBreak);
-
     const [formData, setFormData] = useState({
         workAreaId: entry.workAreaId || '',
         note: entry.note || '',
@@ -64,200 +67,154 @@ const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) =>
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        
         if (skipPause && (!formData.note || formData.note.trim() === '')) {
             alert("ATTENZIONE: Se indichi che il dipendente NON ha effettuato la pausa, è OBBLIGATORIO inserire il motivo nelle note.");
             return;
         }
-
         onSave(entry.id, { ...formData, skippedBreak: skipPause });
     };
 
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl m-4">
-                <h3 className="text-lg font-bold mb-4">Modifica Timbratura</h3>
-                
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700">Data</label>
-                        <input 
-                            type="date" 
-                            name="date" 
-                            value={formData.date} 
-                            onChange={handleChange} 
-                            required
-                            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" 
-                        />
+    // Stili in linea per forzare il layout (come in AdminModal.js)
+    const overlayStyle = {
+        position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
+        backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: 99998, backdropFilter: 'blur(4px)'
+    };
+    
+    const containerStyle = {
+        position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
+        zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        pointerEvents: 'none' // Permette il click through sull'overlay ma non sul modale
+    };
+
+    const modalStyle = {
+        backgroundColor: '#ffffff', width: '100%', maxWidth: '500px', maxHeight: '85vh',
+        borderRadius: '12px', overflow: 'hidden', pointerEvents: 'auto',
+        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+        display: 'flex', flexDirection: 'column'
+    };
+
+    const inputClasses = "block w-full px-3 py-2.5 bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm";
+    const labelClasses = "block mb-1 text-xs font-bold text-gray-500 uppercase tracking-wide";
+
+    return ReactDOM.createPortal(
+        <>
+            <div style={overlayStyle} onClick={onClose} />
+            <div style={containerStyle}>
+                <div style={modalStyle}>
+                    {/* Header */}
+                    <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#111827' }}>Modifica Timbratura</h3>
+                        <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '24px', color: '#9ca3af', cursor: 'pointer' }}>&times;</button>
                     </div>
 
-                    {!entry.isAbsence && (
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Area di Lavoro</label>
-                            <select 
-                                name="workAreaId" 
-                                value={formData.workAreaId} 
-                                onChange={handleChange}
-                                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white"
-                            >
-                                {workAreas.map(area => (
-                                    <option key={area.id} value={area.id}>{area.name}</option>
-                                ))}
-                            </select>
-                        </div>
-                    )}
-
-                    {!entry.isAbsence && (
-                        <div className="grid grid-cols-2 gap-4">
+                    {/* Body */}
+                    <div style={{ padding: '24px', overflowY: 'auto' }}>
+                        <form id="edit-entry-form" onSubmit={handleSubmit} className="space-y-5">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700">Ora Entrata</label>
-                                <input type="time" name="clockInTime" value={formData.clockInTime} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border rounded-md" required />
+                                <label className={labelClasses}>Data</label>
+                                <input type="date" name="date" value={formData.date} onChange={handleChange} required className={inputClasses} />
                             </div>
+                            {!entry.isAbsence && (
+                                <div>
+                                    <label className={labelClasses}>Area di Lavoro</label>
+                                    <select name="workAreaId" value={formData.workAreaId} onChange={handleChange} className={inputClasses}>
+                                        {workAreas.map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}
+                                    </select>
+                                </div>
+                            )}
+                            {!entry.isAbsence && (
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div><label className={labelClasses}>Ora Entrata</label><input type="time" name="clockInTime" value={formData.clockInTime} onChange={handleChange} className={inputClasses} required /></div>
+                                    <div><label className={labelClasses}>Ora Uscita</label><input type="time" name="clockOutTime" value={formData.clockOutTime} onChange={handleChange} className={inputClasses} /><p className="text-[10px] text-gray-400 mt-1 text-right italic">Lascia vuoto se in corso</p></div>
+                                </div>
+                            )}
+                            {!entry.isAbsence && (
+                                <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
+                                    <div className="flex items-center">
+                                        <input id="skipPauseCheck" type="checkbox" checked={skipPause} onChange={(e) => setSkipPause(e.target.checked)} className="h-5 w-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer" />
+                                        <label htmlFor="skipPauseCheck" className="ml-3 block text-sm font-bold text-gray-800 cursor-pointer">Non ha effettuato la pausa</label>
+                                    </div>
+                                    <p className="text-xs text-gray-600 mt-2 ml-8 leading-snug">Se selezionato, le ore verranno calcolate per intero. <strong>Motivo obbligatorio.</strong></p>
+                                </div>
+                            )}
                             <div>
-                                <label className="block text-sm font-medium text-gray-700">Ora Uscita</label>
-                                <input type="time" name="clockOutTime" value={formData.clockOutTime} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border rounded-md" />
-                                <p className="text-xs text-gray-500 mt-1">Lascia vuoto se in corso</p>
+                                <label className={labelClasses}>Note / Motivo Modifica {skipPause && <span className="text-red-600">*</span>}</label>
+                                <textarea name="note" value={formData.note} onChange={handleChange} placeholder={skipPause ? "Inserire OBBLIGATORIAMENTE il motivo..." : "Opzionale"} className={`${inputClasses} resize-y min-h-[80px] ${skipPause && !formData.note ? 'border-red-500 ring-1 ring-red-500 bg-red-50' : ''}`} ></textarea>
                             </div>
-                        </div>
-                    )}
-
-                    {!entry.isAbsence && (
-                        <div className="bg-orange-50 p-3 rounded-md border border-orange-200">
-                            <div className="flex items-center">
-                                <input
-                                    id="skipPauseCheck"
-                                    type="checkbox"
-                                    checked={skipPause}
-                                    onChange={(e) => setSkipPause(e.target.checked)}
-                                    className="h-5 w-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                                />
-                                <label htmlFor="skipPauseCheck" className="ml-3 block text-sm font-bold text-gray-800">
-                                    Non ha effettuato la pausa
-                                </label>
-                            </div>
-                            <p className="text-xs text-gray-500 mt-1 ml-8">
-                                Se selezionato, le ore verranno calcolate per intero (senza detrazione). Motivo obbligatorio.
-                            </p>
-                        </div>
-                    )}
-
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                            Note / Motivo Modifica {skipPause && <span className="text-red-500">*</span>}
-                        </label>
-                        <textarea 
-                            name="note" 
-                            value={formData.note} 
-                            onChange={handleChange} 
-                            placeholder={skipPause ? "Inserire OBBLIGATORIAMENTE il motivo..." : "Opzionale"}
-                            className={`mt-1 block w-full px-3 py-2 border rounded-md ${skipPause && !formData.note ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-300'}`} 
-                            rows="2"
-                        ></textarea>
+                        </form>
                     </div>
 
-                    <div className="flex justify-end space-x-2 pt-2">
-                        <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 text-sm">Annulla</button>
-                        <button type="submit" disabled={isLoading} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">
-                            {isLoading ? 'Salvataggio...' : 'Salva Modifiche'}
-                        </button>
+                    {/* Footer */}
+                    <div style={{ padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                        <button type="button" onClick={onClose} className="px-5 py-2.5 bg-white border border-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-50 transition-colors text-sm shadow-sm">Annulla</button>
+                        <button type="submit" form="edit-entry-form" disabled={isLoading} className="px-5 py-2.5 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-colors text-sm shadow-md disabled:opacity-70 disabled:cursor-not-allowed">{isLoading ? 'Salvataggio...' : 'Salva Modifiche'}</button>
                     </div>
-                </form>
+                </div>
             </div>
-        </div>
+        </>,
+        document.body
     );
 };
 
-// =======================================================
-
 const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, workAreas }) => {
     const [isMapMode, setIsMapMode] = useState(false);
-
     return (
-        <div className="fade-in">
-            <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-                <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">
-                    {isMapMode ? 'Mappa in Tempo Reale' : 'Dashboard'}
-                </h1>
-                
-                <button
-                    onClick={() => setIsMapMode(!isMapMode)}
-                    className={`flex items-center gap-2 px-6 py-2 font-bold rounded-lg shadow-md transition-all transform hover:scale-105 ${
-                        isMapMode 
-                        ? 'bg-gray-600 text-white hover:bg-gray-700' 
-                        : 'bg-blue-600 text-white hover:bg-blue-700' 
-                    }`}
-                >
-                    {isMapMode ? (
-                        <>🔙 Chiudi mappa</>
-                    ) : (
-                        <>🌍 Apri Mappa Presenze</>
-                    )}
+        <div className="fade-in space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-4 border-b border-gray-200 pb-4">
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-800 tracking-tight">{isMapMode ? 'Mappa in Tempo Reale' : 'Dashboard'}</h1>
+                <button onClick={() => setIsMapMode(!isMapMode)} className={`flex items-center gap-2 px-5 py-2.5 font-bold rounded-lg shadow-md transition-all transform hover:-translate-y-0.5 ${isMapMode ? 'bg-gray-700 text-white hover:bg-gray-800' : 'bg-blue-600 text-white hover:bg-blue-700'}`}>
+                    {isMapMode ? <>🔙 Torna alla Lista</> : <>🌍 Apri Mappa Presenze</>}
                 </button>
             </div>
-            
             {!isMapMode && (
                 <>
-                    <div className="flex flex-col md:grid md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-                        <div className="bg-white p-4 rounded-lg shadow-md text-center sm:text-left">
-                            <p className="text-sm text-gray-500">Dipendenti Attivi</p>
-                            <p className="text-2xl font-bold text-gray-800">{activeEmployeesDetails.length} / {totalEmployees}</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div className="bg-white p-6 rounded-xl shadow-lg border-l-4 border-blue-500 flex flex-col justify-between hover:shadow-xl transition-shadow">
+                            <div><p className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Dipendenti Attivi</p><p className="text-3xl font-bold text-gray-800 mt-2">{activeEmployeesDetails.length} <span className="text-lg text-gray-400 font-normal">/ {totalEmployees}</span></p></div>
+                            <div className="mt-4 h-1 w-full bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-blue-500" style={{ width: `${totalEmployees > 0 ? (activeEmployeesDetails.length / totalEmployees) * 100 : 0}%` }}></div></div>
                         </div>
-                        <div className="bg-white p-4 rounded-lg shadow-md text-center sm:text-left">
-                            <p className="text-sm text-gray-500">Ore Lavorate Oggi (Totali)</p>
-                            <p className="text-2xl font-bold text-gray-800">{totalDayHours}</p>
+                        <div className="bg-white p-6 rounded-xl shadow-lg border-l-4 border-green-500 flex flex-col justify-between hover:shadow-xl transition-shadow">
+                            <div><p className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Ore Lavorate Oggi</p><p className="text-3xl font-bold text-gray-800 mt-2">{totalDayHours}</p></div>
+                            <p className="text-xs text-gray-400 mt-2">Aggiornato in tempo reale</p>
                         </div>
                     </div>
-
-                    <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-3">Chi è al Lavoro Ora</h2>
-                    <div className="bg-white shadow-md rounded-lg overflow-x-auto">
-                        {activeEmployeesDetails.length > 0 ? (
-                            <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-50">
-                                    <tr>
-                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dipendente</th>
-                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Area</th>
-                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entrata</th>
-                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stato</th>
-                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pausa</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                    {activeEmployeesDetails.map(entry => (
-                                        <tr key={entry.id}>
-                                            <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.employeeName}</td>
-                                            <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.areaName}</td>
-                                            <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.clockInTimeFormatted}</td>
-                                            <td className="px-4 py-2 whitespace-nowrap">
-                                                <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${entry.status === 'In Pausa' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>{entry.status}</span>
-                                            </td>
-                                            <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
-                                                 {entry.status === 'In Pausa' ? (
-                                                     <span className="text-yellow-600 font-bold">In Corso</span>
-                                                 ) : entry.hasCompletedPause ? (
-                                                     <span className="text-green-600 font-bold">Eseguita</span>
-                                                 ) : (
-                                                     <span className="text-gray-400">-</span>
-                                                 )}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        ) : <p className="p-4 text-sm text-gray-500">Nessun dipendente è attualmente al lavoro.</p>}
+                    <div className="mt-8">
+                        <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-4 px-1">Chi è al Lavoro Ora</h2>
+                        <div className="bg-white shadow-lg rounded-xl overflow-hidden border border-gray-100">
+                            <div className="overflow-x-auto">
+                                {activeEmployeesDetails.length > 0 ? (
+                                    <table className="min-w-full divide-y divide-gray-200">
+                                        <thead className="bg-blue-50">
+                                            <tr>
+                                                <th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Dipendente</th>
+                                                <th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Area</th>
+                                                <th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Entrata</th>
+                                                <th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Stato</th>
+                                                <th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Pausa</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="bg-white divide-y divide-gray-200">
+                                            {activeEmployeesDetails.map(entry => (
+                                                <tr key={entry.id} className="hover:bg-blue-50/50 transition-colors">
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{entry.employeeName}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{entry.areaName}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-mono">{entry.clockInTimeFormatted}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap"><span className={`px-3 py-1 inline-flex text-xs leading-5 font-bold rounded-full shadow-sm ${entry.status === 'In Pausa' ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' : 'bg-green-100 text-green-800 border border-green-200'}`}>{entry.status}</span></td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">{entry.status === 'In Pausa' ? (<span className="text-yellow-600 font-bold flex items-center gap-1">● In Corso</span>) : entry.hasCompletedPause ? (<span className="text-green-600 font-bold flex items-center gap-1">✓ Eseguita</span>) : (<span className="text-gray-400">-</span>)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                ) : <div className="p-8 text-center text-gray-500"><p className="text-lg font-medium">Nessuno al lavoro</p><p className="text-sm">Nessun dipendente (tra quelli che gestisci) è attualmente attivo.</p></div>}
+                            </div>
+                        </div>
                     </div>
                 </>
             )}
-
             {isMapMode && (
-                <div className="bg-white p-2 rounded-lg shadow-lg h-[600px] flex flex-col animate-fade-in">
-                    <p className="text-sm text-gray-500 mb-2 px-2">
-                        Visualizzazione live dei cantieri attivi. Clicca sui pin per i dettagli.
-                    </p>
-                    <div style={{ flex: 1, minHeight: '500px' }}>
-                        <MappaPresenze 
-                            aree={workAreas} 
-                            presenzeAttive={activeEmployeesDetails} 
-                        />
+                <div className="bg-white p-3 rounded-xl shadow-lg h-[600px] flex flex-col animate-fade-in border border-gray-200">
+                    <div style={{ flex: 1, minHeight: '500px' }} className="rounded-lg overflow-hidden border border-gray-300">
+                        <MappaPresenze aree={workAreas} presenzeAttive={activeEmployeesDetails} />
                     </div>
                 </div>
             )}
@@ -271,255 +228,130 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
         return sortConfig.direction === 'ascending' ? ' ▲' : ' ▼';
     };
     return (
-        <div>
-            <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
-                <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Gestione Dipendenti</h1>
+        <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-gray-200 pb-4">
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-800 tracking-tight">Gestione Dipendenti</h1>
             </div>
-            <div className="mb-4">
-                <input
-                    type="text"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Cerca dipendente per nome o cognome..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                />
+            <div className="max-w-md">
+                <div className="relative">
+                    <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Cerca dipendente..." className="w-full pl-3 pr-3 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" />
+                </div>
             </div>
-            <div className="bg-white shadow-md rounded-lg overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                        <tr>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onClick={() => requestSort('name')}>Nome{getSortIndicator('name')}</th>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stato</th>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aree Assegnate</th>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Azioni</th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                        {employees.map(emp => {
-                            const isSelfClockIn = emp.id === adminEmployeeId;
-                            const clockInType = isSelfClockIn ? 'manualClockIn' : 'adminClockIn'; 
-                            const clockOutType = isSelfClockIn ? 'manualClockOut' : 'adminClockOut'; 
-
-                            return ( 
-                                <tr key={emp.id}>
-                                    <td className="px-4 py-2 whitespace-nowrap">
-                                        <div className="text-sm font-medium text-gray-900">{emp.name} {emp.surname}</div>
-                                        <div className="text-xs text-gray-500 break-all">{emp.email}</div>
-                                    </td>
-                                    <td className="px-4 py-2 whitespace-nowrap">
-                                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${emp.activeEntry ? (emp.activeEntry.status === 'In Pausa' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800') : 'bg-red-100 text-red-800'}`}>
-                                            {emp.activeEntry ? emp.activeEntry.status : 'Non al Lavoro'}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{emp.workAreaNames?.join(', ') || 'Nessuna'}</td>
-                                    <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
-                                        <div className="flex flex-col items-start gap-1">
-                                            {emp.activeEntry ? (
-                                                <>
-                                                    <button
-                                                        onClick={() => openModal(clockOutType, emp)}
-                                                        disabled={emp.activeEntry.status === 'In Pausa'}
-                                                        className={`px-2 py-1 text-xs text-white rounded-md w-full text-center ${
-                                                            emp.activeEntry.status === 'In Pausa'
-                                                            ? 'bg-gray-400 cursor-not-allowed'
-                                                            : 'bg-yellow-500 hover:bg-yellow-600'
-                                                        }`}
-                                                    >
-                                                        Timbra Uscita
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleEmployeePauseClick(emp)} 
-                                                        disabled={!emp.activeEntry || emp.activeEntry.status === 'In Pausa' || emp.activeEntry.pauses?.some(p => p.start && p.end)}
-                                                        className={`px-2 py-1 text-xs text-white rounded-md w-full text-center mt-1 ${
-                                                            !emp.activeEntry || emp.activeEntry.status === 'In Pausa' || emp.activeEntry.pauses?.some(p => p.start && p.end)
-                                                            ? 'bg-gray-400 cursor-not-allowed'
-                                                            : 'bg-orange-500 hover:bg-orange-600'
-                                                        }`}
-                                                    >
-                                                        Applica Pausa
-                                                    </button>
-                                                </>
-                                            ) : (
-                                                <button onClick={() => openModal(clockInType, emp)} className="px-2 py-1 text-xs bg-blue-500 text-white rounded-md hover:bg-blue-600 w-full text-center">Timbra Entrata</button>
-                                            )}
-                                            
-                                            <div className="flex flex-col sm:flex-row gap-2 w-full justify-start mt-1 items-start sm:items-center">
-                                                {currentUserRole === 'admin' && (
-                                                    <>
-                                                        <button onClick={() => openModal('assignArea', emp)} className="text-xs text-indigo-600 hover:text-indigo-900 whitespace-nowrap">Assegna Aree (Tutte)</button>
-                                                        <button onClick={() => openModal('editEmployee', emp)} className="text-xs text-green-600 hover:text-green-900">Modifica</button>
-                                                        <button onClick={() => openModal('deleteEmployee', emp)} className="text-xs text-red-600 hover:text-red-900">Elimina</button>
-                                                    </>
-                                                )}
-                                                
-                                                <div className="flex gap-2">
-                                                    {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (
-                                                        <button onClick={() => openModal('resetDevice', emp)} disabled={emp.deviceIds?.length === 0} className="text-xs px-2 py-1 bg-yellow-500 text-gray-800 rounded-md hover:bg-yellow-600 whitespace-nowrap disabled:bg-gray-400 disabled:cursor-not-allowed">
-                                                            Reset Device
-                                                        </button>
-                                                    )}
-                                                </div>
-                                                
-                                                {currentUserRole === 'preposto' && (
-                                                    <button onClick={() => openModal('assignEmployeeToPrepostoArea', emp)} className="text-xs text-blue-600 hover:text-blue-900 whitespace-nowrap">Gestisci Mie Aree</button>
-                                                )}
-
-                                                {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (
-                                                    <div className="flex flex-col gap-1 mt-1">
-                                                        <button 
-                                                            onClick={() => openModal('manualEntryForm', emp)} 
-                                                            className="text-xs px-2 py-1 bg-purple-500 text-white rounded-md hover:bg-purple-600 whitespace-nowrap"
-                                                            title="Inserisci manualmente una timbratura dimenticata (es. ieri)"
-                                                        >
-                                                            ➕ Agg. Ore
-                                                        </button>
-                                                        <button 
-                                                            onClick={() => openModal('absenceEntryForm', emp)} 
-                                                            className="text-xs px-2 py-1 bg-teal-600 text-white rounded-md hover:bg-teal-700 whitespace-nowrap"
-                                                            title="Inserisci Ferie, Malattia, Permessi..."
-                                                        >
-                                                            🤒 Giustifica
-                                                        </button>
+            <div className="bg-white shadow-lg rounded-xl overflow-hidden border border-gray-100">
+                <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-blue-50">
+                            <tr>
+                                <th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider cursor-pointer hover:bg-blue-100 transition-colors" onClick={() => requestSort('name')}>Nome{getSortIndicator('name')}</th>
+                                <th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Stato</th>
+                                <th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Aree Assegnate</th>
+                                <th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Azioni</th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                            {employees.map(emp => {
+                                const isSelfClockIn = emp.id === adminEmployeeId;
+                                const clockInType = isSelfClockIn ? 'manualClockIn' : 'adminClockIn'; 
+                                const clockOutType = isSelfClockIn ? 'manualClockOut' : 'adminClockOut'; 
+                                return ( 
+                                    <tr key={emp.id} className="hover:bg-blue-50/30 transition-colors">
+                                        <td className="px-6 py-4 whitespace-nowrap"><div className="text-sm font-bold text-gray-900">{emp.name} {emp.surname}</div><div className="text-xs text-gray-500 break-all">{emp.email}</div></td>
+                                        <td className="px-6 py-4 whitespace-nowrap"><span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-bold rounded-full border ${emp.activeEntry ? (emp.activeEntry.status === 'In Pausa' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' : 'bg-green-50 text-green-700 border-green-200') : 'bg-gray-100 text-gray-600 border-gray-200'}`}>{emp.activeEntry ? emp.activeEntry.status : 'Non al Lavoro'}</span></td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 max-w-xs truncate" title={emp.workAreaNames?.join(', ')}>{emp.workAreaNames?.join(', ') || 'Nessuna'}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                            <div className="flex flex-col items-start gap-2">
+                                                {emp.activeEntry ? (
+                                                    <div className="flex gap-1 w-full">
+                                                        <button onClick={() => openModal(clockOutType, emp)} disabled={emp.activeEntry.status === 'In Pausa'} className={`flex-1 px-3 py-1.5 text-xs text-white rounded-md shadow-sm transition-colors ${emp.activeEntry.status === 'In Pausa' ? 'bg-gray-400 cursor-not-allowed' : 'bg-yellow-500 hover:bg-yellow-600'}`}>Uscita</button>
+                                                        <button onClick={() => handleEmployeePauseClick(emp)} disabled={!emp.activeEntry || emp.activeEntry.status === 'In Pausa' || emp.activeEntry.pauses?.some(p => p.start && p.end)} className={`flex-1 px-3 py-1.5 text-xs text-white rounded-md shadow-sm transition-colors ${!emp.activeEntry || emp.activeEntry.status === 'In Pausa' || emp.activeEntry.pauses?.some(p => p.start && p.end) ? 'bg-gray-400 cursor-not-allowed' : 'bg-orange-500 hover:bg-orange-600'}`}>Pausa</button>
                                                     </div>
+                                                ) : (
+                                                    <button onClick={() => openModal(clockInType, emp)} className="w-full px-3 py-1.5 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 shadow-sm transition-colors">Timbra Entrata</button>
                                                 )}
+                                                <div className="flex flex-wrap gap-2 w-full mt-1">
+                                                    {currentUserRole === 'admin' && (<><button onClick={() => openModal('assignArea', emp)} className="text-xs text-blue-600 hover:text-blue-800 font-semibold underline decoration-blue-200 hover:decoration-blue-800">Aree</button><button onClick={() => openModal('editEmployee', emp)} className="text-xs text-green-600 hover:text-green-800 font-semibold underline decoration-green-200 hover:decoration-green-800">Modifica</button><button onClick={() => openModal('deleteEmployee', emp)} className="text-xs text-red-600 hover:text-red-800 font-semibold underline decoration-red-200 hover:decoration-red-800">Elimina</button></>)}
+                                                    {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (<button onClick={() => openModal('resetDevice', emp)} disabled={emp.deviceIds?.length === 0} className="text-xs text-yellow-600 hover:text-yellow-800 font-semibold disabled:text-gray-400 underline decoration-yellow-200 hover:decoration-yellow-800">Reset Device</button>)}
+                                                    {currentUserRole === 'preposto' && (<button onClick={() => openModal('assignEmployeeToPrepostoArea', emp)} className="text-xs text-blue-600 hover:text-blue-800 font-semibold underline">Gestisci Aree</button>)}
+                                                </div>
+                                                {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (<div className="flex gap-2 mt-1 w-full pt-2 border-t border-gray-100"><button onClick={() => openModal('manualEntryForm', emp)} className="flex-1 text-xs px-2 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded hover:bg-indigo-100 transition-colors">+ Ore</button><button onClick={() => openModal('absenceEntryForm', emp)} className="flex-1 text-xs px-2 py-1 bg-teal-50 text-teal-700 border border-teal-200 rounded hover:bg-teal-100 transition-colors">+ Giust.</button></div>)}
                                             </div>
-                                        </div>
-                                    </td>
-                                </tr>
-                            );
-                        })}
-                    </tbody>
-                </table>
-                 {employees.length === 0 && searchTerm === '' && currentUserRole === 'preposto' && (
-                     <p className="p-4 text-sm text-gray-500">Nessun dipendente attualmente assegnato alle tue aree di gestione. Usa il pulsante "Aggiungi Dipendente..." per assegnarne.</p>
-                 )}
-                 {employees.length === 0 && searchTerm !== '' && (
-                     <p className="p-4 text-sm text-gray-500">Nessun dipendente trovato per "{searchTerm}".</p>
-                 )}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                     {employees.length === 0 && (
+                         <div className="p-8 text-center text-gray-500">Nessun risultato.</div>
+                     )}
+                </div>
             </div>
         </div>
     );
 };
 
 const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
-    <div>
-        <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Gestione Aree di Lavoro</h1>
+    <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-gray-200 pb-4">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-800 tracking-tight">Gestione Aree di Lavoro</h1>
         </div>
-        <div className="bg-white shadow-md rounded-lg overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                    <tr>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome Area</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ore Totali (nel report)</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pausa (min)</th>
-                        {currentUserRole === 'admin' && (
-                            <>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lat</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lon</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Raggio (m)</th>
-                            </>
-                        )}
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Azioni</th>
-                    </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                    {workAreas.map(area => (
-                        <tr key={area.id}>
-                            <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{area.name}</td>
-                            <td className="px-4 py-2 whitespace-nowrap text-sm font-bold">{area.totalHours ? `${area.totalHours}h` : 'N/D'}</td>
-                            <td className="px-4 py-2 whitespace-nowrap text-sm font-bold text-gray-700">{area.pauseDuration || 0}</td>
-                            {currentUserRole === 'admin' && (
-                                <>
-                                    <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-500">{area.latitude?.toFixed(4) || 'N/D'}</td>
-                                    <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-500">{area.longitude?.toFixed(4) || 'N/D'}</td>
-                                    <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-500">{area.radius || 'N/D'}</td>
-                                </>
-                            )}
-                            <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
-                                <div className="flex items-center gap-4">
-                                    {currentUserRole === 'admin' ? (
-                                        <button onClick={() => openModal('editArea', area)} className="text-green-600 hover:text-green-900">Modifica</button>
-                                    ) : currentUserRole === 'preposto' ? (
-                                        <button onClick={() => openModal('editAreaPauseOnly', area)} className="text-green-600 hover:text-green-900">Modifica Pausa</button>
-                                    ) : null}
-                                    
-                                    {currentUserRole === 'admin' && <button onClick={() => openModal('deleteArea', area)} className="text-red-600 hover:text-red-900">Elimina</button>}
-                                </div>
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-        </div>
-    </div>
-);
-
-const AdminManagementView = ({ admins, openModal, user, superAdminEmail, currentUserRole, onDataUpdate }) => {
-    
-    if (currentUserRole !== 'admin') {
-         return <div className="p-4 text-sm text-red-600 font-medium">Accesso negato. Solo gli amministratori hanno accesso a questa sezione.</div>;
-    }
-
-    const filteredAdmins = admins.filter(admin => admin.email !== superAdminEmail);
-
-    return (
-        <div>
-            <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
-                <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Gestione Utenti Admin/Preposti</h1>
-            </div>
-            
-            <p className="text-sm text-gray-500 mb-4">
-                In questa lista sono inclusi tutti gli utenti con ruolo "admin" e "preposto".
-            </p>
-
-            <div className="bg-white shadow-md rounded-lg overflow-x-auto">
+        <div className="bg-white shadow-lg rounded-xl overflow-hidden border border-gray-100">
+            <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
+                    <thead className="bg-blue-50">
                         <tr>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Utente</th>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ruolo</th>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aree Gestite</th>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Azioni</th>
+                            <th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Nome Area</th>
+                            <th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Ore Totali</th>
+                            <th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Pausa (min)</th>
+                            {currentUserRole === 'admin' && (<><th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Coordinate</th><th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Raggio</th></>)}
+                            <th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Azioni</th>
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                        {filteredAdmins.map(admin => ( 
-                            <tr key={admin.id}>
-                                <td className="px-4 py-2 whitespace-nowrap">
-                                    <div className="text-sm font-medium text-gray-900">{admin.name} {admin.surname}</div>
-                                    <div className="text-xs text-gray-500 break-all">{admin.email}</div>
-                                </td>
-                                <td className="px-4 py-2 whitespace-nowrap text-sm font-semibold text-gray-700 capitalize">{admin.role}</td>
-                                <td className="px-4 py-2 whitespace-normal text-sm text-gray-500">{admin.managedAreaNames?.join(', ') || 'Nessuna Area'}</td>
-                                <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
-                                    <div className="flex items-center gap-2">
-                                        {currentUserRole === 'admin' && (
-                                            <button 
-                                                onClick={() => openModal('deleteAdmin', admin)} 
-                                                className="px-2 py-1 text-xs text-white bg-red-500 rounded-md hover:bg-red-600 disabled:opacity-50"
-                                                disabled={admin.email === user?.email} 
-                                            >
-                                                Elimina
-                                            </button>
-                                        )}
-                                        {admin.role === 'preposto' && (
-                                            <button 
-                                                onClick={() => openModal('assignPrepostoAreas', admin)} 
-                                                className="px-2 py-1 text-xs text-white bg-blue-500 rounded-md hover:bg-blue-600"
-                                            >
-                                                Assegna Aree
-                                            </button>
-                                        )}
+                        {workAreas.map(area => (
+                            <tr key={area.id} className="hover:bg-blue-50/30 transition-colors">
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">{area.name}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 bg-gray-50 font-mono">{area.totalHours ? `${area.totalHours}h` : '0h'}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{area.pauseDuration || 0} min</td>
+                                {currentUserRole === 'admin' && (<><td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500 font-mono">{area.latitude?.toFixed(4)}, {area.longitude?.toFixed(4)}</td><td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500">{area.radius || 0} m</td></>)}
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                    <div className="flex items-center gap-3">
+                                        {currentUserRole === 'admin' ? (<button onClick={() => openModal('editArea', area)} className="text-green-600 hover:text-green-800 font-semibold hover:underline">Modifica</button>) : currentUserRole === 'preposto' ? (<button onClick={() => openModal('editAreaPauseOnly', area)} className="text-green-600 hover:text-green-800 font-semibold hover:underline">Modifica Pausa</button>) : null}
+                                        {currentUserRole === 'admin' && <button onClick={() => openModal('deleteArea', area)} className="text-red-600 hover:text-red-800 font-semibold hover:underline">Elimina</button>}
                                     </div>
                                 </td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
-                {filteredAdmins.length === 0 && (
-                    <p className="p-4 text-sm text-gray-500">Nessun utente Admin/Preposto trovato (eccetto l'utente Super Admin corrente).</p>
-                )}
+            </div>
+        </div>
+    </div>
+);
+
+const AdminManagementView = ({ admins, openModal, user, superAdminEmail, currentUserRole, onDataUpdate }) => {
+    if (currentUserRole !== 'admin') { return <div className="p-4 text-sm text-red-600 font-medium bg-red-50 rounded border border-red-200">Accesso negato.</div>; }
+    const filteredAdmins = admins.filter(admin => admin.email !== superAdminEmail);
+    return (
+        <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-gray-200 pb-4"><h1 className="text-2xl sm:text-3xl font-extrabold text-gray-800 tracking-tight">Gestione Utenti Admin</h1></div>
+            <div className="bg-white shadow-lg rounded-xl overflow-hidden border border-gray-100">
+                <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-blue-50"><tr><th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Utente</th><th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Ruolo</th><th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Aree Gestite</th><th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Azioni</th></tr></thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                            {filteredAdmins.map(admin => ( 
+                                <tr key={admin.id} className="hover:bg-blue-50/30 transition-colors">
+                                    <td className="px-6 py-4 whitespace-nowrap"><div className="text-sm font-bold text-gray-900">{admin.name} {admin.surname}</div><div className="text-xs text-gray-500">{admin.email}</div></td>
+                                    <td className="px-6 py-4 whitespace-nowrap"><span className={`px-2 py-1 text-xs font-bold uppercase rounded-md ${admin.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}`}>{admin.role}</span></td>
+                                    <td className="px-6 py-4 whitespace-normal text-sm text-gray-500 max-w-xs">{admin.managedAreaNames?.join(', ') || '-'}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium"><div className="flex items-center gap-2">{currentUserRole === 'admin' && (<button onClick={() => openModal('deleteAdmin', admin)} className="px-3 py-1.5 text-xs text-white bg-red-500 rounded-md hover:bg-red-600 disabled:opacity-50 transition-colors shadow-sm" disabled={admin.email === user?.email}>Elimina</button>)}{admin.role === 'preposto' && (<button onClick={() => openModal('assignPrepostoAreas', admin)} className="px-3 py-1.5 text-xs text-white bg-blue-500 rounded-md hover:bg-blue-600 transition-colors shadow-sm">Assegna Aree</button>)}</div></td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                    {filteredAdmins.length === 0 && (<div className="p-8 text-center text-gray-500">Nessun altro admin trovato.</div>)}
+                </div>
             </div>
         </div>
     );
@@ -528,15 +360,12 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
 const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, allEmployees, currentUserRole, userData, setDateRange, setReportAreaFilter, reportAreaFilter, reportEmployeeFilter, setReportEmployeeFilter, generateReport, isLoading, isActionLoading, managedEmployees, showNotification, handleReviewSkipBreak, onEditEntry }) => {
     
     const handleExportExcel = () => {
-        if (typeof utils === 'undefined' || typeof writeFile === 'undefined') {
-            showNotification("Libreria esportazione non caricata.", 'error'); return;
-        }
-        if (!reports || reports.length === 0) {
-            showNotification("Nessun dato da esportare.", 'info'); return;
-        }
-        
+        if (typeof utils === 'undefined' || typeof writeFile === 'undefined') { showNotification("Libreria esportazione non caricata.", 'error'); return; }
+        if (!reports || reports.length === 0) { showNotification("Nessun dato da esportare.", 'info'); return; }
         const dataToExport = reports.map(entry => ({
+            'ID Dipendente': entry.employeeId, 
             'Dipendente': entry.employeeName, 
+            'ID Area': entry.workAreaId || 'N/A', 
             'Area': entry.areaName, 
             'Data': entry.clockInDate,
             'Entrata': entry.clockInTimeFormatted, 
@@ -546,146 +375,76 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
             'Stato Pausa': entry.skippedBreak ? (entry.skipBreakStatus === 'approved' ? 'No Pausa (Approvato)' : 'Pausa Scalata (Default)') : 'Standard',
             'Motivo/Nota': entry.note
         }));
-        
         const ws = utils.json_to_sheet(dataToExport);
         const wb = utils.book_new();
         utils.book_append_sheet(wb, ws, "Report Ore");
-        
-        ws['!cols'] = [
-            { wch: 20 }, { wch: 15 }, { wch: 10 }, { wch: 8 }, { wch: 8 }, 
-            { wch: 20 },
-            { wch: 20 }, 
-            { wch: 30 }
-        ];
-        
+        ws['!cols'] = [{ wch: 25 }, { wch: 20 }, { wch: 25 }, { wch: 15 }, { wch: 10 }, { wch: 8 }, { wch: 8 }, { wch: 20 }, { wch: 20 }, { wch: 30 }];
         writeFile(wb, `${(title || 'Report').replace(/ /g, '_')}.xlsx`);
-        showNotification(`File Excel '${(title || 'Report').replace(/ /g, '_')}.xlsx' generato con successo.`, 'success');
+        showNotification(`File Excel generato con successo.`, 'success');
     };
 
     return (
-        <div>
-            <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 flex-wrap gap-4">
-                <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">{title || 'Report Risultati'}</h1>
+        <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-gray-200 pb-4">
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-800 tracking-tight">{title || 'Report Risultati'}</h1>
                 <div className="flex items-center space-x-2">
-                    <button onClick={handleExportExcel} disabled={!reports || reports.length === 0} className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 text-sm">Esporta Excel</button>
-                    <button onClick={() => handleExportXml(reports)} disabled={!reports || reports.length === 0} className="px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:bg-gray-400 text-sm">Esporta XML</button>
+                    <button onClick={handleExportExcel} disabled={!reports || reports.length === 0} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed shadow-sm transition-colors text-sm font-semibold">Esporta Excel</button>
+                    <button onClick={() => handleExportXml(reports)} disabled={!reports || reports.length === 0} className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:bg-gray-400 disabled:cursor-not-allowed shadow-sm transition-colors text-sm font-semibold">Esporta XML</button>
                 </div>
             </div>
-            
-            <div className="bg-white shadow-md rounded-lg overflow-x-auto">
-                {!reports || reports.length === 0 ? <p className="p-4 text-sm text-gray-500">Nessun dato per il periodo selezionato.</p> : (
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                            <tr>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dipendente</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Area</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entrata</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Uscita</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ore</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stato Pausa</th> 
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Azioni / Note</th> 
-                            </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                            {reports.map((entry) => (
-                                <tr key={entry.id} className={entry.isAbsence ? "bg-red-50" : ""}>
-                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.employeeName}{entry.createdBy && entry.employeeId && entry.createdBy !== entry.employeeId ? <span className="text-red-500 ml-1 font-bold">*</span> : ''}</td>
-                                    
-                                    {entry.isAbsence ? (
-                                        <>
-                                            <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-400 italic">N/A</td>
-                                            <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.clockInDate}</td>
-                                            <td className="px-4 py-2 whitespace-nowrap text-sm text-center" colSpan="2">
-                                                <span className="px-2 py-1 inline-flex text-xs leading-5 font-bold rounded-full bg-teal-100 text-teal-800">
-                                                    {entry.statusLabel}
-                                                </span>
-                                            </td>
-                                            <td className="px-4 py-2 whitespace-nowrap text-sm font-bold text-gray-400">0.00</td>
-                                            <td className="px-4 py-2 whitespace-nowrap text-sm">-</td>
-                                            <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-700 font-medium">
-                                                <div className="flex flex-col gap-2">
-                                                    <button 
-                                                        onClick={() => onEditEntry(entry)} 
-                                                        className="flex items-center text-blue-600 hover:text-blue-900 font-medium"
-                                                        title="Modifica Giustificativo"
-                                                    >
-                                                        ✏️ Modifica
-                                                    </button>
-                                                    {entry.note}
-                                                </div>
-                                            </td>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.areaName}</td>
-                                            <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.clockInDate}</td>
-                                            <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.clockInTimeFormatted}</td> 
-                                            <td className="px-4 py-2 whitespace-nowrap text-sm">{entry.clockOutTimeFormatted}</td> 
-                                            <td className="px-4 py-2 whitespace-nowrap text-sm font-bold text-gray-800">{entry.duration !== null ? entry.duration.toFixed(2) : '...'}</td>
-                                            
-                                            <td className="px-4 py-2 whitespace-nowrap text-sm">
-                                                {entry.skippedBreak ? (
-                                                    entry.skipBreakStatus === 'pending' ? (
-                                                        <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800 animate-pulse">
-                                                            ⚠️ In Attesa Verifica
-                                                        </span>
-                                                    ) : entry.skipBreakStatus === 'approved' ? (
-                                                        <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                                                            ✅ No Pausa (Approvato)
-                                                        </span>
-                                                    ) : (
-                                                        <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
-                                                            ❌ Pausa Scalata
-                                                        </span>
-                                                    )
-                                                ) : (
-                                                    <span className="text-gray-500 text-xs">Standard ({entry.pauseHours !== null ? entry.pauseHours.toFixed(2) : '0.00'}h)</span>
-                                                )}
-                                            </td>
-
-                                            <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
-                                                <div className="flex flex-col gap-2">
-                                                    <button 
-                                                        onClick={() => onEditEntry(entry)}
-                                                        className="flex items-center text-blue-600 hover:text-blue-900 font-medium"
-                                                        title="Correggi timbratura (Area, Orari, Note)"
-                                                    >
-                                                        ✏️ Modifica
-                                                    </button>
-
-                                                    {entry.skippedBreak && entry.skipBreakStatus === 'pending' ? (
-                                                        <div className="flex flex-col gap-1">
-                                                            <span className="text-xs italic text-gray-600">"{entry.note}"</span>
-                                                            <div className="flex gap-2 mt-1">
-                                                                <button 
-                                                                    onClick={() => handleReviewSkipBreak(entry.id, 'approved')}
-                                                                    disabled={isActionLoading}
-                                                                    className="bg-green-500 hover:bg-green-600 text-white text-xs px-2 py-1 rounded"
-                                                                >
-                                                                    Approva
-                                                                </button>
-                                                                <button 
-                                                                    onClick={() => handleReviewSkipBreak(entry.id, 'rejected')}
-                                                                    disabled={isActionLoading}
-                                                                    className="bg-red-500 hover:bg-red-600 text-white text-xs px-2 py-1 rounded"
-                                                                >
-                                                                    Rifiuta
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    ) : (
-                                                        <span>{entry.note}</span>
-                                                    )}
-                                                </div>
-                                            </td>
-                                        </>
-                                    )}
+            <div className="bg-white shadow-lg rounded-xl overflow-hidden border border-gray-100">
+                <div className="overflow-x-auto">
+                    {!reports || reports.length === 0 ? <div className="p-8 text-center text-gray-500">Nessun dato per il periodo selezionato.</div> : (
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-blue-50">
+                                <tr>
+                                    {/* Colonne ID rimosse dalla vista ma presenti nei dati per l'export */}
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Dipendente</th>
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Area</th>
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Data</th>
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Orari</th>
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Ore Nette</th>
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Stato Pausa</th> 
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Note / Azioni</th> 
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                )}
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                                {reports.map((entry) => (
+                                    <tr key={entry.id} className={`${entry.isAbsence ? "bg-red-50/50" : "hover:bg-blue-50/30"} transition-colors`}>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{entry.employeeName}{entry.createdBy && entry.employeeId && entry.createdBy !== entry.employeeId ? <span className="text-red-500 ml-1 font-bold" title="Inserito da Admin">*</span> : ''}</td>
+                                        
+                                        {entry.isAbsence ? (
+                                            <>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400 italic">N/A</td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm">{entry.clockInDate}</td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-center"><span className="px-2 py-1 inline-flex text-xs leading-5 font-bold rounded-full bg-teal-100 text-teal-800 border border-teal-200">{entry.statusLabel}</span></td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-400">0.00</td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm">-</td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 font-medium"><div className="flex flex-col gap-1"><button onClick={() => onEditEntry(entry)} className="flex items-center text-blue-600 hover:text-blue-900 font-semibold text-xs" title="Modifica Giustificativo">✏️ Modifica</button><span className="text-xs">{entry.note}</span></div></td>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{entry.areaName}</td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{entry.clockInDate}</td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-mono">{entry.clockInTimeFormatted} - {entry.clockOutTimeFormatted}</td> 
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900 bg-gray-50">{entry.duration !== null ? entry.duration.toFixed(2) : '...'}</td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                                    {entry.skippedBreak ? (entry.skipBreakStatus === 'pending' ? <span className="px-2 py-1 inline-flex text-xs leading-5 font-bold rounded-full bg-orange-100 text-orange-800 border border-orange-200 animate-pulse">⚠️ Verifica</span> : entry.skipBreakStatus === 'approved' ? <span className="px-2 py-1 inline-flex text-xs leading-5 font-bold rounded-full bg-green-100 text-green-800 border border-green-200">✅ No Pausa</span> : <span className="px-2 py-1 inline-flex text-xs leading-5 font-bold rounded-full bg-red-100 text-red-800 border border-red-200">❌ Scalata</span>) : (<span className="text-gray-500 text-xs">Standard ({entry.pauseHours !== null ? entry.pauseHours.toFixed(2) : '0.00'}h)</span>)}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                    <div className="flex flex-col gap-2">
+                                                        <button onClick={() => onEditEntry(entry)} className="text-left text-blue-600 hover:text-blue-900 font-semibold text-xs hover:underline" title="Correggi timbratura">✏️ Modifica</button>
+                                                        {entry.skippedBreak && entry.skipBreakStatus === 'pending' ? (<div className="flex flex-col gap-1 p-2 bg-orange-50 rounded border border-orange-100"><span className="text-xs italic text-gray-700">"{entry.note}"</span><div className="flex gap-2 mt-1"><button onClick={() => handleReviewSkipBreak(entry.id, 'approved')} disabled={isActionLoading} className="bg-green-500 hover:bg-green-600 text-white text-xs px-2 py-1 rounded shadow-sm">Approva</button><button onClick={() => handleReviewSkipBreak(entry.id, 'rejected')} disabled={isActionLoading} className="bg-red-500 hover:bg-red-600 text-white text-xs px-2 py-1 rounded shadow-sm">Rifiuta</button></div></div>) : <span className="text-xs max-w-xs truncate" title={entry.note}>{entry.note}</span>}
+                                                    </div>
+                                                </td>
+                                            </>
+                                        )}
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
             </div>
         </div>
     );
@@ -693,65 +452,21 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
 
 const ActionHeader = ({ view, currentUserRole, openModal }) => { 
     if (currentUserRole !== 'admin' && currentUserRole !== 'preposto') return null;
-
     let button = null;
     let text = null;
-    
-    // Logica per determinare quale bottone mostrare basandosi sulla vista
-    if (view === 'employees' && currentUserRole === 'admin') {
-        text = 'Crea Nuovo Dipendente';
-        button = (
-            <button onClick={() => openModal('newEmployee')} 
-                className={`px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg w-full sm:w-auto text-sm`}
-            >
-                {text}
-            </button>
-        );
-    } 
-    else if (view === 'areas' && currentUserRole === 'admin') {
-        text = 'Aggiungi Area';
-        button = (
-            <button onClick={() => openModal('newArea')} 
-                className={`px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg w-full sm:w-auto text-sm`}
-            >
-                {text}
-            </button>
-        );
-    }
-    else if (view === 'admins' && currentUserRole === 'admin') { 
-        text = 'Crea Nuovo Admin/Preposto';
-        button = (
-            <button onClick={() => openModal('newAdmin')} 
-                className={`px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg w-full sm:w-auto text-sm`}
-            >
-                {text}
-            </button>
-        );
-    }
-    else if (view === 'employees' && currentUserRole === 'preposto') {
-         text = 'Aggiungi Dipendente alle Mie Aree';
-         button = (
-            <button
-                onClick={() => openModal('prepostoAddEmployeeToAreas')} 
-                className={`px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg w-full sm:w-auto text-sm`}
-            >
-                {text}
-            </button>
-        );
-    }
-
+    const btnClass = "px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition-all transform hover:-translate-y-0.5 w-full sm:w-auto text-sm";
+    if (view === 'employees' && currentUserRole === 'admin') { text = '+ Crea Nuovo Dipendente'; button = <button onClick={() => openModal('newEmployee')} className={btnClass}>{text}</button>; } 
+    else if (view === 'areas' && currentUserRole === 'admin') { text = '+ Aggiungi Area'; button = <button onClick={() => openModal('newArea')} className={btnClass}>{text}</button>; }
+    else if (view === 'admins' && currentUserRole === 'admin') { text = '+ Crea Nuovo Admin'; button = <button onClick={() => openModal('newAdmin')} className={btnClass}>{text}</button>; }
+    else if (view === 'employees' && currentUserRole === 'preposto') { text = '+ Aggiungi Dipendente alle Mie Aree'; button = <button onClick={() => openModal('prepostoAddEmployeeToAreas')} className={btnClass}>{text}</button>; }
     if (!button) return null;
-
-    return (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-4 bg-gray-100">
-            <div className="flex justify-end">
-                {button}
-            </div>
-        </div>
-    );
+    return (<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4"><div className="flex justify-end">{button}</div></div>);
 };
 
-// --- COMPONENTE PRINCIPALE ---
+// ===========================================
+// --- 3. COMPONENTE PRINCIPALE (LOGICA) ---
+// ===========================================
+
 const AdminDashboard = ({ user, handleLogout, userData }) => {
 
     const [view, setView] = useState('dashboard');
@@ -867,13 +582,12 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         if (user && userData) fetchData();
     }, [user, userData, fetchData]); 
 
-    // ... (Il resto delle funzioni di calcolo e listener rimane invariato) ...
     const sortedAndFilteredEmployees = useMemo(() => {
         const employeesWithDetails = managedEmployees.map(emp => ({
             ...emp,
             workAreaNames: (emp.workAreaIds || []).map(id => {
                 const area = allWorkAreas.find(a => a.id === id);
-                return area ? area.name : `ID Mancante: ${id.substring(0, 5)}...`; 
+                return area ? area.name : `ID Mancante`; 
             }).filter(Boolean),
             activeEntry: activeEmployeesDetails.find(detail => detail.employeeId === emp.id) || null,
         }));
@@ -1152,7 +866,9 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         let xmlString = '<?xml version="1.0" encoding="UTF-8"?>\n<ReportTimbrature>\n';
         dataToExport.forEach(entry => {
             xmlString += `  <Timbratura>\n`;
+            xmlString += `    <IdDipendente>${entry.employeeId}</IdDipendente>\n`;
             xmlString += `    <Dipendente><![CDATA[${entry.employeeName || ''}]]></Dipendente>\n`;
+            xmlString += `    <IdArea>${entry.workAreaId}</IdArea>\n`;
             xmlString += `    <Area><![CDATA[${entry.areaName || ''}]]></Area>\n`;
             xmlString += `    <Data>${entry.clockInDate || ''}</Data>\n`;
             xmlString += `    <Entrata>${entry.clockInTimeFormatted}</Entrata>\n`; 
@@ -1184,7 +900,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     }
 
     return (
-        <div className="min-h-screen bg-gray-100 w-full">
+        <div className="min-h-screen bg-gray-100 w-full font-sans text-gray-800">
             {notification && <NotificationPopup message={notification.message} type={notification.type} onClose={() => setNotification(null)} />}
             
             {/* Header */}
@@ -1192,7 +908,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                  <div className="max-w-7xl mx-auto py-3 px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                      <CompanyLogo />
                      {adminEmployeeProfile && (
-                         <div className="bg-gray-50 p-2 rounded-lg border border-gray-200 text-center">
+                         <div className="bg-gray-50 p-2 rounded-lg border border-gray-200 text-center shadow-inner">
                              {adminActiveEntry ? (
                                  <div className="space-y-2">
                                      <div>
@@ -1221,16 +937,16 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                      )}
                      <div className="flex items-center space-x-4">
                          <span className="text-sm text-gray-600 text-right">
-                             {currentUserRole === 'admin' ? 'Admin' : 'Preposto'}:<br/>
+                             {currentUserRole === 'admin' ? 'Amministratore' : 'Preposto'}:<br/>
                              <span className="font-medium">{userData?.name && userData?.surname ? `${userData.name} ${userData.surname}` : user?.email}</span>
                          </span>
-                         <button onClick={handleLogout} className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 text-sm">Logout</button>
+                         <button onClick={handleLogout} className="px-4 py-2 bg-white border border-gray-300 text-gray-700 text-xs font-bold rounded shadow-sm hover:bg-gray-50 transition-colors">Logout</button>
                      </div>
                  </div>
             </header>
 
             {/* Navigazione */}
-            <nav className="bg-white border-b border-gray-200">
+            <nav className="bg-white border-b border-gray-200 shadow-sm">
                  <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                      <div className="flex justify-center">
                          <div className="flex flex-wrap justify-center py-2 sm:space-x-4">
@@ -1258,23 +974,8 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
             <ActionHeader view={view} currentUserRole={currentUserRole} openModal={openModal} />
 
-            {view === 'reports' && (
-                <div className="max-w-7xl mx-auto w-full p-4 sm:p-6 lg:p-8">
-                    <div className="bg-white shadow-md rounded-lg p-4 mb-6">
-                        <h3 className="text-lg font-medium text-gray-900 mb-4 text-center sm:text-left">Genera Report Personalizzato</h3>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
-                            <div className="lg:col-span-1"><label htmlFor="startDate" className="block text-sm font-medium text-gray-700 mb-1">Da:</label><input type="date" id="startDate" value={dateRange.start} onChange={e => setDateRange({ ...dateRange, start: e.target.value })} className="p-2 border border-gray-300 rounded-md w-full text-sm" /></div>
-                            <div className="lg:col-span-1"><label htmlFor="endDate" className="block text-sm font-medium text-gray-700 mb-1">A:</label><input type="date" id="endDate" value={dateRange.end} onChange={e => setDateRange({ ...dateRange, end: e.target.value })} className="p-2 border border-gray-300 rounded-md w-full text-sm" /></div>
-                            <div className="lg:col-span-1"><label htmlFor="areaFilter" className="block text-sm font-medium text-gray-700 mb-1">Area:</label><select id="areaFilter" value={reportAreaFilter} onChange={e => setReportAreaFilter(e.target.value)} className="p-2 border border-gray-300 rounded-md w-full text-sm bg-white"><option value="all">Tutte le Aree</option>{(currentUserRole === 'admin' ? allWorkAreas : allWorkAreas.filter(a => userData?.managedAreaIds?.includes(a.id))).sort((a,b) => a.name.localeCompare(b.name)).map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}</select></div>
-                            <div className="lg:col-span-1"><label htmlFor="employeeFilter" className="block text-sm font-medium text-gray-700 mb-1">Dipendente:</label><select id="employeeFilter" value={reportEmployeeFilter} onChange={e => setReportEmployeeFilter(e.target.value)} className="p-2 border border-gray-300 rounded-md w-full text-sm bg-white"><option value="all">Tutti i Dipendenti</option>{(currentUserRole === 'admin' ? allEmployees : managedEmployees).sort((a,b) => `${a.name} ${a.surname}`.localeCompare(`${b.name} ${b.surname}`)).map(emp => (<option key={emp.id} value={emp.id}>{emp.name} {emp.surname}</option>))}</select></div>
-                            <div className="lg:col-span-1"><button onClick={generateReport} disabled={isLoading || isActionLoading} className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm w-full disabled:opacity-50">Genera Report</button></div>
-                        </div>
-                    </div>
-                </div>
-            )}
-            
+            {/* CONTENUTO PRINCIPALE */}
             <div className="max-w-7xl mx-auto w-full p-4 sm:p-6 lg:p-8">
-                
                 <main>
                     {view === 'dashboard' && <DashboardView 
                         totalEmployees={managedEmployees.length} 
@@ -1292,7 +993,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                         searchTerm={searchTerm} 
                         setSearchTerm={setSearchTerm} 
                         handleResetEmployeeDevice={handleResetEmployeeDevice} 
-                        adminEmployeeId={adminEmployeeProfile?.id}
+                        adminEmployeeId={adminEmployeeProfile?.id} 
                         handleEmployeePauseClick={handleEmployeePauseClick} 
                     />}
                     
@@ -1300,37 +1001,51 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                     
                     {view === 'admins' && currentUserRole === 'admin' && <AdminManagementView admins={admins} openModal={openModal} user={user} superAdminEmail={superAdminEmail} currentUserRole={currentUserRole} onDataUpdate={fetchData} />}
                     
-                    {view === 'reports' && <ReportView 
-                         reports={reports} 
-                         title={reportTitle} 
-                         handleExportXml={handleExportXml} 
-                         dateRange={dateRange}
-                         allWorkAreas={allWorkAreas}
-                         allEmployees={allEmployees}
-                         currentUserRole={currentUserRole}
-                         userData={userData}
-                         setDateRange={setDateRange}
-                         setReportAreaFilter={setReportAreaFilter}
-                         reportAreaFilter={reportAreaFilter}
-                         reportEmployeeFilter={reportEmployeeFilter}
-                         setReportEmployeeFilter={setReportEmployeeFilter}
-                         generateReport={generateReport}
-                         isLoading={isLoading}
-                         isActionLoading={isActionLoading}
-                         managedEmployees={managedEmployees}
-                         showNotification={showNotification}
-                         handleReviewSkipBreak={handleReviewSkipBreak} 
-                         onEditEntry={(entry) => setEntryToEdit(entry)} 
-                    />}
+                    {view === 'reports' && (
+                        <>
+                            <div className="bg-white shadow-lg rounded-xl p-6 mb-6 border border-gray-100">
+                                <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Genera Report Personalizzato</h3>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+                                    <div className="lg:col-span-1"><label htmlFor="startDate" className="block text-xs font-bold text-gray-500 uppercase mb-1">Da</label><input type="date" id="startDate" value={dateRange.start} onChange={e => setDateRange({ ...dateRange, start: e.target.value })} className="p-2.5 border border-gray-300 rounded-lg w-full text-sm focus:ring-2 focus:ring-blue-500 outline-none" /></div>
+                                    <div className="lg:col-span-1"><label htmlFor="endDate" className="block text-xs font-bold text-gray-500 uppercase mb-1">A</label><input type="date" id="endDate" value={dateRange.end} onChange={e => setDateRange({ ...dateRange, end: e.target.value })} className="p-2.5 border border-gray-300 rounded-lg w-full text-sm focus:ring-2 focus:ring-blue-500 outline-none" /></div>
+                                    <div className="lg:col-span-1"><label htmlFor="areaFilter" className="block text-xs font-bold text-gray-500 uppercase mb-1">Area</label><select id="areaFilter" value={reportAreaFilter} onChange={e => setReportAreaFilter(e.target.value)} className="p-2.5 border border-gray-300 rounded-lg w-full text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none"><option value="all">Tutte le Aree</option>{(currentUserRole === 'admin' ? allWorkAreas : allWorkAreas.filter(a => userData?.managedAreaIds?.includes(a.id))).sort((a,b) => a.name.localeCompare(b.name)).map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}</select></div>
+                                    <div className="lg:col-span-1"><label htmlFor="employeeFilter" className="block text-xs font-bold text-gray-500 uppercase mb-1">Dipendente</label><select id="employeeFilter" value={reportEmployeeFilter} onChange={e => setReportEmployeeFilter(e.target.value)} className="p-2.5 border border-gray-300 rounded-lg w-full text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none"><option value="all">Tutti i Dipendenti</option>{(currentUserRole === 'admin' ? allEmployees : managedEmployees).sort((a,b) => `${a.name} ${a.surname}`.localeCompare(`${b.name} ${b.surname}`)).map(emp => (<option key={emp.id} value={emp.id}>{emp.name} {emp.surname}</option>))}</select></div>
+                                    <div className="lg:col-span-1"><button onClick={generateReport} disabled={isLoading || isActionLoading} className="px-4 py-2.5 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-600 text-sm w-full disabled:opacity-50">Genera Report</button></div>
+                                </div>
+                            </div>
+                            <ReportView 
+                                reports={reports} 
+                                title={reportTitle} 
+                                handleExportXml={handleExportXml} 
+                                dateRange={dateRange} 
+                                allWorkAreas={allWorkAreas} 
+                                allEmployees={allEmployees} 
+                                currentUserRole={currentUserRole} 
+                                userData={userData} 
+                                setDateRange={setDateRange} 
+                                setReportAreaFilter={setReportAreaFilter} 
+                                reportAreaFilter={reportAreaFilter} 
+                                reportEmployeeFilter={reportEmployeeFilter} 
+                                setReportEmployeeFilter={setReportEmployeeFilter} 
+                                generateReport={generateReport} 
+                                isLoading={isLoading} 
+                                isActionLoading={isActionLoading} 
+                                managedEmployees={managedEmployees} 
+                                showNotification={showNotification} 
+                                handleReviewSkipBreak={handleReviewSkipBreak} 
+                                onEditEntry={(entry) => setEntryToEdit(entry)} 
+                                handleSaveEntryEdit={handleSaveEntryEdit}
+                            />
+                        </>
+                    )}
                 </main>
             </div>
             
-            <footer className="w-full bg-white border-t border-gray-200 py-3 mt-8">
-                <p className="text-center text-xs text-gray-500">
+            <footer className="w-full bg-white border-t border-gray-200 py-6 mt-8">
+                <p className="text-center text-xs font-semibold text-gray-400 uppercase tracking-wide">
                      &copy; {new Date().getFullYear()} TCS Italia S.r.l. Tutti i diritti riservati.
                 </p>
             </footer>
-
 
             {/* Modale Modifica Timbratura */}
             {entryToEdit && (
