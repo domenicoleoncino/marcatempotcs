@@ -115,7 +115,7 @@ const LoginScreen = () => {
                                 className="text-sm text-indigo-600 hover:underline focus:outline-none bg-transparent p-0 disabled:text-gray-400"
                                 disabled={isLoading}
                             >
-                                Password dimenticata?
+                                ❓Password dimenticata?
                             </button>
                         </div>
 
