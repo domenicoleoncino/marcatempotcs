@@ -103,7 +103,7 @@ const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) =>
                 <div style={modalStyle}>
                     {/* Header */}
                     <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#111827' }}>Modifica Timbratura</h3>
+                        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#111827' }}>✏️Modifica Timbratura</h3>
                         <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '24px', color: '#9ca3af', cursor: 'pointer' }}>&times;</button>
                     </div>
 
@@ -212,7 +212,7 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
                 </>
             )}
             {isMapMode && (
-                <div className="bg-white p-3 rounded-xl shadow-lg h-[600px] flex flex-col animate-fade-in border border-gray-200">
+                <div className="bg-white p-3 rounded-xl shadow-lg h-[450px] flex flex-col animate-fade-in border border-gray-200">
                     <div style={{ flex: 1, minHeight: '500px' }} className="rounded-lg overflow-hidden border border-gray-300">
                         <MappaPresenze aree={workAreas} presenzeAttive={activeEmployeesDetails} />
                     </div>
@@ -266,12 +266,12 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                                         <button onClick={() => handleEmployeePauseClick(emp)} disabled={!emp.activeEntry || emp.activeEntry.status === 'In Pausa' || emp.activeEntry.pauses?.some(p => p.start && p.end)} className={`flex-1 px-3 py-1.5 text-xs text-white rounded-md shadow-sm transition-colors ${!emp.activeEntry || emp.activeEntry.status === 'In Pausa' || emp.activeEntry.pauses?.some(p => p.start && p.end) ? 'bg-gray-400 cursor-not-allowed' : 'bg-orange-500 hover:bg-orange-600'}`}>Pausa</button>
                                                     </div>
                                                 ) : (
-                                                    <button onClick={() => openModal(clockInType, emp)} className="w-full px-3 py-1.5 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 shadow-sm transition-colors">Timbra Entrata</button>
+                                                    <button onClick={() => openModal(clockInType, emp)} className="w-full px-3 py-1.5 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 shadow-sm transition-colors">▶️Timbra Entrata</button>
                                                 )}
                                                 <div className="flex flex-wrap gap-2 w-full mt-1">
-                                                    {currentUserRole === 'admin' && (<><button onClick={() => openModal('assignArea', emp)} className="text-xs text-blue-600 hover:text-blue-800 font-semibold underline decoration-blue-200 hover:decoration-blue-800">Aree</button><button onClick={() => openModal('editEmployee', emp)} className="text-xs text-green-600 hover:text-green-800 font-semibold underline decoration-green-200 hover:decoration-green-800">Modifica</button><button onClick={() => openModal('deleteEmployee', emp)} className="text-xs text-red-600 hover:text-red-800 font-semibold underline decoration-red-200 hover:decoration-red-800">Elimina</button></>)}
-                                                    {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (<button onClick={() => openModal('resetDevice', emp)} disabled={emp.deviceIds?.length === 0} className="text-xs text-yellow-600 hover:text-yellow-800 font-semibold disabled:text-gray-400 underline decoration-yellow-200 hover:decoration-yellow-800">Reset Device</button>)}
-                                                    {currentUserRole === 'preposto' && (<button onClick={() => openModal('assignEmployeeToPrepostoArea', emp)} className="text-xs text-blue-600 hover:text-blue-800 font-semibold underline">Gestisci Aree</button>)}
+                                                    {currentUserRole === 'admin' && (<><button onClick={() => openModal('assignArea', emp)} className="text-xs text-blue-600 hover:text-blue-800 font-semibold underline decoration-blue-200 hover:decoration-blue-800">🌍Aree</button><button onClick={() => openModal('editEmployee', emp)} className="text-xs text-green-600 hover:text-green-800 font-semibold underline decoration-green-200 hover:decoration-green-800">✏️Modifica</button><button onClick={() => openModal('deleteEmployee', emp)} className="text-xs text-red-600 hover:text-red-800 font-semibold underline decoration-red-200 hover:decoration-red-800">🗑️Elimina</button></>)}
+                                                    {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (<button onClick={() => openModal('resetDevice', emp)} disabled={emp.deviceIds?.length === 0} className="text-xs text-yellow-600 hover:text-yellow-800 font-semibold disabled:text-gray-400 underline decoration-yellow-200 hover:decoration-yellow-800">📱Reset Device</button>)}
+                                                    {currentUserRole === 'preposto' && (<button onClick={() => openModal('assignEmployeeToPrepostoArea', emp)} className="text-xs text-blue-600 hover:text-blue-800 font-semibold underline">🌍Gestisci Aree</button>)}
                                                 </div>
                                                 {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (<div className="flex gap-2 mt-1 w-full pt-2 border-t border-gray-100"><button onClick={() => openModal('manualEntryForm', emp)} className="flex-1 text-xs px-2 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded hover:bg-indigo-100 transition-colors">+ 🕒 Ore</button><button onClick={() => openModal('absenceEntryForm', emp)} className="flex-1 text-xs px-2 py-1 bg-teal-50 text-teal-700 border border-teal-200 rounded hover:bg-teal-100 transition-colors">+ 👀 Giust.</button></div>)}
                                             </div>
@@ -310,14 +310,14 @@ const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
                     <tbody className="bg-white divide-y divide-gray-200">
                         {workAreas.map(area => (
                             <tr key={area.id} className="hover:bg-blue-50/30 transition-colors">
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">{area.name}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">📍{area.name}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 bg-gray-50 font-mono">{area.totalHours ? `${area.totalHours}h` : '0h'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{area.pauseDuration || 0} min</td>
                                 {currentUserRole === 'admin' && (<><td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500 font-mono">{area.latitude?.toFixed(4)}, {area.longitude?.toFixed(4)}</td><td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500">{area.radius || 0} m</td></>)}
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                     <div className="flex items-center gap-3">
-                                        {currentUserRole === 'admin' ? (<button onClick={() => openModal('editArea', area)} className="text-green-600 hover:text-green-800 font-semibold hover:underline">Modifica</button>) : currentUserRole === 'preposto' ? (<button onClick={() => openModal('editAreaPauseOnly', area)} className="text-green-600 hover:text-green-800 font-semibold hover:underline">Modifica Pausa</button>) : null}
-                                        {currentUserRole === 'admin' && <button onClick={() => openModal('deleteArea', area)} className="text-red-600 hover:text-red-800 font-semibold hover:underline">Elimina</button>}
+                                        {currentUserRole === 'admin' ? (<button onClick={() => openModal('editArea', area)} className="text-green-600 hover:text-green-800 font-semibold hover:underline">✏️Modifica</button>) : currentUserRole === 'preposto' ? (<button onClick={() => openModal('editAreaPauseOnly', area)} className="text-green-600 hover:text-green-800 font-semibold hover:underline">✏️Modifica Pausa</button>) : null}
+                                        {currentUserRole === 'admin' && <button onClick={() => openModal('deleteArea', area)} className="text-red-600 hover:text-red-800 font-semibold hover:underline">🗑️Elimina</button>}
                                     </div>
                                 </td>
                             </tr>
@@ -345,7 +345,7 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
                                     <td className="px-6 py-4 whitespace-nowrap"><div className="text-sm font-bold text-gray-900">{admin.name} {admin.surname}</div><div className="text-xs text-gray-500">{admin.email}</div></td>
                                     <td className="px-6 py-4 whitespace-nowrap"><span className={`px-2 py-1 text-xs font-bold uppercase rounded-md ${admin.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}`}>{admin.role}</span></td>
                                     <td className="px-6 py-4 whitespace-normal text-sm text-gray-500 max-w-xs">{admin.managedAreaNames?.join(', ') || '-'}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium"><div className="flex items-center gap-2">{currentUserRole === 'admin' && (<button onClick={() => openModal('deleteAdmin', admin)} className="px-3 py-1.5 text-xs text-white bg-red-500 rounded-md hover:bg-red-600 disabled:opacity-50 transition-colors shadow-sm" disabled={admin.email === user?.email}>Elimina</button>)}{admin.role === 'preposto' && (<button onClick={() => openModal('assignPrepostoAreas', admin)} className="px-3 py-1.5 text-xs text-white bg-blue-500 rounded-md hover:bg-blue-600 transition-colors shadow-sm">Assegna Aree</button>)}</div></td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium"><div className="flex items-center gap-2">{currentUserRole === 'admin' && (<button onClick={() => openModal('deleteAdmin', admin)} className="px-3 py-1.5 text-xs text-white bg-red-500 rounded-md hover:bg-red-600 disabled:opacity-50 transition-colors shadow-sm" disabled={admin.email === user?.email}>🗑️Elimina</button>)}{admin.role === 'preposto' && (<button onClick={() => openModal('assignPrepostoAreas', admin)} className="px-3 py-1.5 text-xs text-white bg-blue-500 rounded-md hover:bg-blue-600 transition-colors shadow-sm">🌍Assegna Aree</button>)}</div></td>
                                 </tr>
                             ))}
                         </tbody>
@@ -420,7 +420,7 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-center"><span className="px-2 py-1 inline-flex text-xs leading-5 font-bold rounded-full bg-teal-100 text-teal-800 border border-teal-200">{entry.statusLabel}</span></td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-400">0.00</td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm">-</td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 font-medium"><div className="flex flex-col gap-1"><button onClick={() => onEditEntry(entry)} className="flex items-center text-blue-600 hover:text-blue-900 font-semibold text-xs" title="Modifica Giustificativo">📝 Modifica</button><span className="text-xs">{entry.note}</span></div></td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 font-medium"><div className="flex flex-col gap-1"><button onClick={() => onEditEntry(entry)} className="flex items-center text-blue-600 hover:text-blue-900 font-semibold text-xs" title="✏️Modifica Giustificativo">📝 Modifica</button><span className="text-xs">{entry.note}</span></div></td>
                                             </>
                                         ) : (
                                             <>
@@ -455,10 +455,10 @@ const ActionHeader = ({ view, currentUserRole, openModal }) => {
     let button = null;
     let text = null;
     const btnClass = "px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition-all transform hover:-translate-y-0.5 w-full sm:w-auto text-sm";
-    if (view === 'employees' && currentUserRole === 'admin') { text = '+ Crea Nuovo Dipendente'; button = <button onClick={() => openModal('newEmployee')} className={btnClass}>{text}</button>; } 
-    else if (view === 'areas' && currentUserRole === 'admin') { text = '+ Aggiungi Area'; button = <button onClick={() => openModal('newArea')} className={btnClass}>{text}</button>; }
-    else if (view === 'admins' && currentUserRole === 'admin') { text = '+ Crea Nuovo Admin'; button = <button onClick={() => openModal('newAdmin')} className={btnClass}>{text}</button>; }
-    else if (view === 'employees' && currentUserRole === 'preposto') { text = '+ Aggiungi Dipendente alle Mie Aree'; button = <button onClick={() => openModal('prepostoAddEmployeeToAreas')} className={btnClass}>{text}</button>; }
+    if (view === 'employees' && currentUserRole === 'admin') { text = '+👤 Crea Nuovo Dipendente'; button = <button onClick={() => openModal('newEmployee')} className={btnClass}>{text}</button>; } 
+    else if (view === 'areas' && currentUserRole === 'admin') { text = '+🌍 Aggiungi Area'; button = <button onClick={() => openModal('newArea')} className={btnClass}>{text}</button>; }
+    else if (view === 'admins' && currentUserRole === 'admin') { text = '+👮Crea Nuovo Admin'; button = <button onClick={() => openModal('newAdmin')} className={btnClass}>{text}</button>; }
+    else if (view === 'employees' && currentUserRole === 'preposto') { text = '+👤 Aggiungi Dipendente alle Mie Aree'; button = <button onClick={() => openModal('prepostoAddEmployeeToAreas')} className={btnClass}>{text}</button>; }
     if (!button) return null;
     return (<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4"><div className="flex justify-end">{button}</div></div>);
 };
@@ -920,17 +920,17 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                                             disabled={isActionLoading || (!adminActiveEntry.isOnBreak && adminActiveEntry.hasCompletedPause)} 
                                             className={`text-xs px-3 py-1 text-white rounded ${adminActiveEntry.isOnBreak ? 'bg-green-500 hover:bg-green-600' : 'bg-yellow-500 hover:bg-yellow-600'} disabled:opacity-50`}
                                          >
-                                              {adminActiveEntry.isOnBreak ? 'Termina Pausa' : 'Inizia Pausa'}
+                                              {adminActiveEntry.isOnBreak ? 'Termina Pausa' : '☕Inizia Pausa'}
                                          </button>
                                          <button onClick={() => openModal('manualClockOut', adminEmployeeProfile)} disabled={adminActiveEntry.isOnBreak || isActionLoading} className="text-xs px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 disabled:bg-gray-400 disabled:opacity-50">
-                                              Timbra Uscita
+                                              ⏹️Timbra Uscita
                                          </button>
                                      </div>
                                  </div>
                              ) : (
                                  <div>
                                      <p className="text-sm font-semibold text-red-600">Non sei al lavoro</p>
-                                     <button onClick={() => openModal('manualClockIn', adminEmployeeProfile)} disabled={isActionLoading} className="mt-1 text-xs px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50">Timbra Entrata</button>
+                                     <button onClick={() => openModal('manualClockIn', adminEmployeeProfile)} disabled={isActionLoading} className="mt-1 text-xs px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50">▶️Timbra Entrata</button>
                                  </div>
                              )}
                          </div>
