@@ -129,7 +129,7 @@ const LoginScreen = () => {
                                 disabled={isLoading} 
                                 className="w-full py-3 px-4 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
                             >
-                                {isLoading ? 'Accesso in corso...' : 'Accedi'}
+                                {isLoading ? 'Accesso in corso...' : '👉Accedi'}
                             </button>
                         </div>
                     </form>
