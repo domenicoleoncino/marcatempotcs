@@ -138,7 +138,7 @@ const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) =>
                                 </div>
                             )}
                             <div>
-                                <label className={labelClasses}>Note / Motivo Modifica {skipPause && <span className="text-red-600">*</span>}</label>
+                                <label className={labelClasses}>Note / Motivo  {skipPause && <span className="text-red-600">*</span>}</label>
                                 <textarea name="note" value={formData.note} onChange={handleChange} placeholder={skipPause ? "Inserire OBBLIGATORIAMENTE il motivo..." : "Opzionale"} className={`${inputClasses} resize-y min-h-[80px] ${skipPause && !formData.note ? 'border-red-500 ring-1 ring-red-500 bg-red-50' : ''}`} ></textarea>
                             </div>
                         </form>
@@ -230,7 +230,7 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
     return (
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-gray-200 pb-4">
-                <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-800 tracking-tight">Gestione Dipendenti</h1>
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-800 tracking-tight">👥 Gestione Dipendenti</h1>
             </div>
             <div className="max-w-md">
                 <div className="relative">
@@ -273,7 +273,7 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                                     {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (<button onClick={() => openModal('resetDevice', emp)} disabled={emp.deviceIds?.length === 0} className="text-xs text-yellow-600 hover:text-yellow-800 font-semibold disabled:text-gray-400 underline decoration-yellow-200 hover:decoration-yellow-800">Reset Device</button>)}
                                                     {currentUserRole === 'preposto' && (<button onClick={() => openModal('assignEmployeeToPrepostoArea', emp)} className="text-xs text-blue-600 hover:text-blue-800 font-semibold underline">Gestisci Aree</button>)}
                                                 </div>
-                                                {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (<div className="flex gap-2 mt-1 w-full pt-2 border-t border-gray-100"><button onClick={() => openModal('manualEntryForm', emp)} className="flex-1 text-xs px-2 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded hover:bg-indigo-100 transition-colors">+ Ore</button><button onClick={() => openModal('absenceEntryForm', emp)} className="flex-1 text-xs px-2 py-1 bg-teal-50 text-teal-700 border border-teal-200 rounded hover:bg-teal-100 transition-colors">+ Giust.</button></div>)}
+                                                {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (<div className="flex gap-2 mt-1 w-full pt-2 border-t border-gray-100"><button onClick={() => openModal('manualEntryForm', emp)} className="flex-1 text-xs px-2 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded hover:bg-indigo-100 transition-colors">+ 🕒 Ore</button><button onClick={() => openModal('absenceEntryForm', emp)} className="flex-1 text-xs px-2 py-1 bg-teal-50 text-teal-700 border border-teal-200 rounded hover:bg-teal-100 transition-colors">+ 👀 Giust.</button></div>)}
                                             </div>
                                         </td>
                                     </tr>
@@ -388,8 +388,8 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-gray-200 pb-4">
                 <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-800 tracking-tight">{title || 'Report Risultati'}</h1>
                 <div className="flex items-center space-x-2">
-                    <button onClick={handleExportExcel} disabled={!reports || reports.length === 0} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed shadow-sm transition-colors text-sm font-semibold">Esporta Excel</button>
-                    <button onClick={() => handleExportXml(reports)} disabled={!reports || reports.length === 0} className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:bg-gray-400 disabled:cursor-not-allowed shadow-sm transition-colors text-sm font-semibold">Esporta XML</button>
+                    <button onClick={handleExportExcel} disabled={!reports || reports.length === 0} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed shadow-sm transition-colors text-sm font-semibold">📥Esporta Excel</button>
+                    <button onClick={() => handleExportXml(reports)} disabled={!reports || reports.length === 0} className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:bg-gray-400 disabled:cursor-not-allowed shadow-sm transition-colors text-sm font-semibold">📥Esporta XML</button>
                 </div>
             </div>
             <div className="bg-white shadow-lg rounded-xl overflow-hidden border border-gray-100">
@@ -420,7 +420,7 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-center"><span className="px-2 py-1 inline-flex text-xs leading-5 font-bold rounded-full bg-teal-100 text-teal-800 border border-teal-200">{entry.statusLabel}</span></td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-400">0.00</td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm">-</td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 font-medium"><div className="flex flex-col gap-1"><button onClick={() => onEditEntry(entry)} className="flex items-center text-blue-600 hover:text-blue-900 font-semibold text-xs" title="Modifica Giustificativo">✏️ Modifica</button><span className="text-xs">{entry.note}</span></div></td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 font-medium"><div className="flex flex-col gap-1"><button onClick={() => onEditEntry(entry)} className="flex items-center text-blue-600 hover:text-blue-900 font-semibold text-xs" title="Modifica Giustificativo">📝 Modifica</button><span className="text-xs">{entry.note}</span></div></td>
                                             </>
                                         ) : (
                                             <>
@@ -940,7 +940,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                              {currentUserRole === 'admin' ? 'Amministratore' : 'Preposto'}:<br/>
                              <span className="font-medium">{userData?.name && userData?.surname ? `${userData.name} ${userData.surname}` : user?.email}</span>
                          </span>
-                         <button onClick={handleLogout} className="px-4 py-2 bg-white border border-gray-300 text-gray-700 text-xs font-bold rounded shadow-sm hover:bg-gray-50 transition-colors">Logout</button>
+                         <button onClick={handleLogout} className="px-4 py-2 bg-white border border-gray-300 text-gray-700 text-xs font-bold rounded shadow-sm hover:bg-gray-50 transition-colors">🚪Logout</button>
                      </div>
                  </div>
             </header>
@@ -950,16 +950,16 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                  <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                      <div className="flex justify-center">
                          <div className="flex flex-wrap justify-center py-2 sm:space-x-4">
-                             <button onClick={() => handleSwitchView('dashboard')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'dashboard' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Dashboard</button>
-                             <button onClick={() => handleSwitchView('employees')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'employees' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Dipendenti</button>
-                             <button onClick={() => handleSwitchView('areas')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'areas' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Aree</button>
-                             {currentUserRole === 'admin' && <button onClick={() => handleSwitchView('admins')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'admins' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>Gestione Admin</button>}
+                             <button onClick={() => handleSwitchView('dashboard')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'dashboard' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>🏠Dashboard</button>
+                             <button onClick={() => handleSwitchView('employees')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'employees' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>👥Gestione Dipendenti</button>
+                             <button onClick={() => handleSwitchView('areas')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'areas' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>📍Gestione Aree</button>
+                             {currentUserRole === 'admin' && <button onClick={() => handleSwitchView('admins')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'admins' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>👮Gestione Admin</button>}
                              {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (
                                 <button 
                                     onClick={() => handleSwitchView('reports')} 
                                     className={`py-2 px-3 sm:border-b-2 text-sm font-medium flex items-center ${view === 'reports' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}
                                 >
-                                    Report Presenze
+                                    📋Report Presenze
                                     {pendingRequestsCount > 0 && (
                                         <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
                                             ⚠️ {pendingRequestsCount}
@@ -1010,7 +1010,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                                     <div className="lg:col-span-1"><label htmlFor="endDate" className="block text-xs font-bold text-gray-500 uppercase mb-1">A</label><input type="date" id="endDate" value={dateRange.end} onChange={e => setDateRange({ ...dateRange, end: e.target.value })} className="p-2.5 border border-gray-300 rounded-lg w-full text-sm focus:ring-2 focus:ring-blue-500 outline-none" /></div>
                                     <div className="lg:col-span-1"><label htmlFor="areaFilter" className="block text-xs font-bold text-gray-500 uppercase mb-1">Area</label><select id="areaFilter" value={reportAreaFilter} onChange={e => setReportAreaFilter(e.target.value)} className="p-2.5 border border-gray-300 rounded-lg w-full text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none"><option value="all">Tutte le Aree</option>{(currentUserRole === 'admin' ? allWorkAreas : allWorkAreas.filter(a => userData?.managedAreaIds?.includes(a.id))).sort((a,b) => a.name.localeCompare(b.name)).map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}</select></div>
                                     <div className="lg:col-span-1"><label htmlFor="employeeFilter" className="block text-xs font-bold text-gray-500 uppercase mb-1">Dipendente</label><select id="employeeFilter" value={reportEmployeeFilter} onChange={e => setReportEmployeeFilter(e.target.value)} className="p-2.5 border border-gray-300 rounded-lg w-full text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none"><option value="all">Tutti i Dipendenti</option>{(currentUserRole === 'admin' ? allEmployees : managedEmployees).sort((a,b) => `${a.name} ${a.surname}`.localeCompare(`${b.name} ${b.surname}`)).map(emp => (<option key={emp.id} value={emp.id}>{emp.name} {emp.surname}</option>))}</select></div>
-                                    <div className="lg:col-span-1"><button onClick={generateReport} disabled={isLoading || isActionLoading} className="px-4 py-2.5 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-600 text-sm w-full disabled:opacity-50">Genera Report</button></div>
+                                    <div className="lg:col-span-1"><button onClick={generateReport} disabled={isLoading || isActionLoading} className="px-4 py-2.5 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-600 text-sm w-full disabled:opacity-50">📄Genera Report</button></div>
                                 </div>
                             </div>
                             <ReportView 
