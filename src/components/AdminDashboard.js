@@ -6,13 +6,14 @@ import { db } from '../firebase';
 import {
     collection, getDocs, query, where,
     Timestamp, onSnapshot, updateDoc, doc, limit,
-    addDoc, writeBatch
+    addDoc, writeBatch, deleteDoc
 } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import CompanyLogo from './CompanyLogo';
 import AdminModal from './AdminModal'; 
 import MappaPresenze from './MappaPresenze'; 
-import { utils, writeFile } from 'xlsx';
+// IMPORT IMPORTANTE: Libreria che supporta stili e colori
+import { utils, writeFile } from 'xlsx-js-style'; 
 import { saveAs } from 'file-saver';
 
 // ===========================================
@@ -20,6 +21,20 @@ import { saveAs } from 'file-saver';
 // ===========================================
 
 const SUPER_ADMIN_EMAIL = "domenico.leoncino@tcsitalia.com"; 
+
+// Palette colori per Excel (Aree)
+const AREA_COLORS = [
+    "FFCCCC", // Rosso chiaro
+    "CCFFCC", // Verde chiaro
+    "CCCCFF", // Blu chiaro
+    "FFFFCC", // Giallo chiaro
+    "FFCCFF", // Viola chiaro
+    "CCFFFF", // Ciano chiaro
+    "FFD9CC", // Arancio chiaro
+    "E5CCFF", // Lavanda
+    "D9FFCC", // Lime chiaro
+    "FFE5CC"  // Pesca
+];
 
 const NotificationPopup = ({ message, type, onClose }) => {
     const baseClasses = "fixed top-4 left-1/2 transform -translate-x-1/2 z-[100000] px-6 py-4 rounded-xl shadow-2xl text-white transition-all duration-300 flex items-center gap-3 min-w-[300px]";
@@ -74,25 +89,11 @@ const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) =>
         onSave(entry.id, { ...formData, skippedBreak: skipPause });
     };
 
-    // Stili in linea per forzare il layout (come in AdminModal.js)
-    const overlayStyle = {
-        position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
-        backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: 99998, backdropFilter: 'blur(4px)'
-    };
+    // Stili Standard per Modali
+    const overlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: 99998, backdropFilter: 'blur(4px)' };
+    const containerStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' };
+    const modalStyle = { backgroundColor: '#ffffff', width: '100%', maxWidth: '500px', maxHeight: '85vh', borderRadius: '12px', overflow: 'hidden', pointerEvents: 'auto', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column' };
     
-    const containerStyle = {
-        position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
-        zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        pointerEvents: 'none' // Permette il click through sull'overlay ma non sul modale
-    };
-
-    const modalStyle = {
-        backgroundColor: '#ffffff', width: '100%', maxWidth: '500px', maxHeight: '85vh',
-        borderRadius: '12px', overflow: 'hidden', pointerEvents: 'auto',
-        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-        display: 'flex', flexDirection: 'column'
-    };
-
     const inputClasses = "block w-full px-3 py-2.5 bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm";
     const labelClasses = "block mb-1 text-xs font-bold text-gray-500 uppercase tracking-wide";
 
@@ -101,32 +102,20 @@ const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) =>
             <div style={overlayStyle} onClick={onClose} />
             <div style={containerStyle}>
                 <div style={modalStyle}>
-                    {/* Header MODIFICATO PER AGGIUNGERE IL NOME */}
                     <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <div>
                             <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#111827' }}>✏️Modifica Timbratura</h3>
-                            {/* Blocco aggiunto per il nome del dipendente */}
                             <div style={{ marginTop: '4px', fontSize: '13px', color: '#6b7280' }}>
                                 Dipendente: <span style={{ fontWeight: 'bold', color: '#374151' }}>{entry.employeeName || 'N/D'}</span>
                             </div>
                         </div>
                         <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '24px', color: '#9ca3af', cursor: 'pointer', lineHeight: '1' }}>&times;</button>
                     </div>
-
-                    {/* Body */}
                     <div style={{ padding: '24px', overflowY: 'auto' }}>
                         <form id="edit-entry-form" onSubmit={handleSubmit} className="space-y-5">
-                            <div>
-                                <label className={labelClasses}>Data</label>
-                                <input type="date" name="date" value={formData.date} onChange={handleChange} required className={inputClasses} />
-                            </div>
+                            <div><label className={labelClasses}>Data</label><input type="date" name="date" value={formData.date} onChange={handleChange} required className={inputClasses} /></div>
                             {!entry.isAbsence && (
-                                <div>
-                                    <label className={labelClasses}>Area di Lavoro</label>
-                                    <select name="workAreaId" value={formData.workAreaId} onChange={handleChange} className={inputClasses}>
-                                        {workAreas.map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}
-                                    </select>
-                                </div>
+                                <div><label className={labelClasses}>Area di Lavoro</label><select name="workAreaId" value={formData.workAreaId} onChange={handleChange} className={inputClasses}>{workAreas.map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}</select></div>
                             )}
                             {!entry.isAbsence && (
                                 <div className="grid grid-cols-2 gap-4">
@@ -136,16 +125,100 @@ const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) =>
                             )}
                             {!entry.isAbsence && (
                                 <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
-                                    <div className="flex items-center">
-                                        <input id="skipPauseCheck" type="checkbox" checked={skipPause} onChange={(e) => setSkipPause(e.target.checked)} className="h-5 w-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer" />
-                                        <label htmlFor="skipPauseCheck" className="ml-3 block text-sm font-bold text-gray-800 cursor-pointer">Non ha effettuato la pausa</label>
-                                    </div>
+                                    <div className="flex items-center"><input id="skipPauseCheck" type="checkbox" checked={skipPause} onChange={(e) => setSkipPause(e.target.checked)} className="h-5 w-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer" /><label htmlFor="skipPauseCheck" className="ml-3 block text-sm font-bold text-gray-800 cursor-pointer">Non ha effettuato la pausa</label></div>
                                     <p className="text-xs text-gray-600 mt-2 ml-8 leading-snug">Se selezionato, le ore verranno calcolate per intero. <strong>Motivo obbligatorio.</strong></p>
                                 </div>
                             )}
+                            <div><label className={labelClasses}>Note / Motivo  {skipPause && <span className="text-red-600">*</span>}</label><textarea name="note" value={formData.note} onChange={handleChange} placeholder={skipPause ? "Inserire OBBLIGATORIAMENTE il motivo..." : "Opzionale"} className={`${inputClasses} resize-y min-h-[80px] ${skipPause && !formData.note ? 'border-red-500 ring-1 ring-red-500 bg-red-50' : ''}`} ></textarea></div>
+                        </form>
+                    </div>
+                    <div style={{ padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                        <button type="button" onClick={onClose} className="px-5 py-2.5 bg-white border border-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-50 transition-colors text-sm shadow-sm">Annulla</button>
+                        <button type="submit" form="edit-entry-form" disabled={isLoading} className="px-5 py-2.5 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-colors text-sm shadow-md disabled:opacity-70 disabled:cursor-not-allowed">{isLoading ? 'Salvataggio...' : 'Salva Modifiche'}</button>
+                    </div>
+                </div>
+            </div>
+        </>,
+        document.body
+    );
+};
+
+// === COMPONENTE DEDICATO PER AGGIUNGERE FORMS (STILE IDENTICO) ===
+const AddFormModal = ({ show, onClose, workAreas, user, onDataUpdate, currentUserRole, userData, showNotification }) => {
+    // 1. Hooks (sempre in cima)
+    const [formTitle, setFormTitle] = useState('');
+    const [formUrl, setFormUrl] = useState('');
+    const [formAreaId, setFormAreaId] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
+
+    const availableAreas = useMemo(() => {
+        if (currentUserRole === 'admin') return workAreas;
+        if (currentUserRole === 'preposto' && userData?.managedAreaIds) {
+            return workAreas.filter(a => userData.managedAreaIds.includes(a.id));
+        }
+        return [];
+    }, [currentUserRole, userData, workAreas]);
+
+    // 2. Return condizionale (dopo gli hooks)
+    if (!show) return null;
+
+    const handleSaveForm = async (e) => {
+        e.preventDefault();
+        if (!formTitle || !formUrl || !formAreaId) { alert("Tutti i campi sono obbligatori."); return; }
+        setIsSaving(true);
+        try {
+            await addDoc(collection(db, "area_forms"), {
+                title: formTitle,
+                url: formUrl,
+                workAreaId: formAreaId,
+                createdBy: user.email,
+                createdAt: Timestamp.now()
+            });
+            showNotification("Modulo creato e assegnato con successo!", "success");
+            onDataUpdate();
+            onClose();
+            setFormTitle(''); setFormUrl(''); setFormAreaId('');
+        } catch (error) {
+            console.error("Errore salvataggio modulo:", error);
+            showNotification("Errore salvataggio modulo.", "error");
+        } finally { setIsSaving(false); }
+    };
+
+    // Stili
+    const overlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: 99998, backdropFilter: 'blur(4px)' };
+    const containerStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' };
+    const modalStyle = { backgroundColor: '#ffffff', width: '100%', maxWidth: '500px', maxHeight: '85vh', borderRadius: '12px', overflow: 'hidden', pointerEvents: 'auto', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column' };
+    const inputClasses = "block w-full px-3 py-2.5 bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm";
+    const labelClasses = "block mb-1 text-xs font-bold text-gray-500 uppercase tracking-wide";
+
+    return ReactDOM.createPortal(
+        <>
+            <div style={overlayStyle} onClick={onClose} />
+            <div style={containerStyle}>
+                <div style={modalStyle}>
+                    {/* Header */}
+                    <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#111827' }}>🔗 Aggiungi Modulo Forms</h3>
+                        <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '24px', color: '#9ca3af', cursor: 'pointer', lineHeight: '1' }}>&times;</button>
+                    </div>
+
+                    {/* Body */}
+                    <div style={{ padding: '24px', overflowY: 'auto' }}>
+                        <form id="add-form-submit" onSubmit={handleSaveForm} className="space-y-5">
                             <div>
-                                <label className={labelClasses}>Note / Motivo  {skipPause && <span className="text-red-600">*</span>}</label>
-                                <textarea name="note" value={formData.note} onChange={handleChange} placeholder={skipPause ? "Inserire OBBLIGATORIAMENTE il motivo..." : "Opzionale"} className={`${inputClasses} resize-y min-h-[80px] ${skipPause && !formData.note ? 'border-red-500 ring-1 ring-red-500 bg-red-50' : ''}`} ></textarea>
+                                <label className={labelClasses}>Titolo Modulo</label>
+                                <input type="text" value={formTitle} onChange={e => setFormTitle(e.target.value)} placeholder="Es. Checklist Sicurezza" className={inputClasses} required />
+                            </div>
+                            <div>
+                                <label className={labelClasses}>Link Microsoft Forms (URL)</label>
+                                <input type="url" value={formUrl} onChange={e => setFormUrl(e.target.value)} placeholder="https://forms.office.com/..." className={inputClasses} required />
+                            </div>
+                            <div>
+                                <label className={labelClasses}>Assegna all'Area</label>
+                                <select value={formAreaId} onChange={e => setFormAreaId(e.target.value)} className={inputClasses} required>
+                                    <option value="">-- Seleziona Area --</option>
+                                    {availableAreas.map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}
+                                </select>
                             </div>
                         </form>
                     </div>
@@ -153,7 +226,7 @@ const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) =>
                     {/* Footer */}
                     <div style={{ padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
                         <button type="button" onClick={onClose} className="px-5 py-2.5 bg-white border border-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-50 transition-colors text-sm shadow-sm">Annulla</button>
-                        <button type="submit" form="edit-entry-form" disabled={isLoading} className="px-5 py-2.5 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-colors text-sm shadow-md disabled:opacity-70 disabled:cursor-not-allowed">{isLoading ? 'Salvataggio...' : 'Salva Modifiche'}</button>
+                        <button type="submit" form="add-form-submit" disabled={isSaving} className="px-5 py-2.5 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 transition-colors text-sm shadow-md disabled:opacity-70 disabled:cursor-not-allowed">{isSaving ? 'Salvataggio...' : 'Crea Modulo'}</button>
                     </div>
                 </div>
             </div>
@@ -211,7 +284,11 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
                                             ))}
                                         </tbody>
                                     </table>
-                                ) : <div className="p-8 text-center text-gray-500"><p className="text-lg font-medium">Nessuno al lavoro</p><p className="text-sm">Nessun dipendente (tra quelli che gestisci) è attualmente attivo.</p></div>}
+                                ) : (
+                                    <div className="p-8 text-center text-gray-500">
+                                        <p className="text-lg font-medium">Nessun dipendente attivo al momento.</p>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -335,6 +412,52 @@ const AreaManagementView = ({ workAreas, openModal, currentUserRole }) => (
     </div>
 );
 
+const FormsManagementView = ({ forms, workAreas, openModal, onDeleteForm }) => {
+    return (
+        <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-gray-200 pb-4">
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-800 tracking-tight">📋 Gestione Moduli & Questionari</h1>
+            </div>
+            <div className="bg-white shadow-lg rounded-xl overflow-hidden border border-gray-100">
+                <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-indigo-50">
+                            <tr>
+                                <th className="px-6 py-3 text-left text-xs font-bold text-indigo-800 uppercase tracking-wider">Titolo Modulo</th>
+                                <th className="px-6 py-3 text-left text-xs font-bold text-indigo-800 uppercase tracking-wider">Area Assegnata</th>
+                                <th className="px-6 py-3 text-left text-xs font-bold text-indigo-800 uppercase tracking-wider">Link</th>
+                                <th className="px-6 py-3 text-left text-xs font-bold text-indigo-800 uppercase tracking-wider">Azioni</th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                            {forms.map(form => {
+                                const areaName = workAreas.find(a => a.id === form.workAreaId)?.name || 'Area eliminata';
+                                return (
+                                    <tr key={form.id} className="hover:bg-indigo-50/30 transition-colors">
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">{form.title}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{areaName}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-600 underline max-w-xs truncate">
+                                            <a href={form.url} target="_blank" rel="noreferrer">Apri Modulo ↗️</a>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                            <button onClick={() => onDeleteForm(form.id)} className="text-red-600 hover:text-red-900 font-bold hover:underline">🗑️ Elimina</button>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                    {forms.length === 0 && (
+                        <div className="p-8 text-center text-gray-500">
+                            Nessun modulo presente. Clicca su "Aggiungi Modulo Forms" per iniziare.
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const AdminManagementView = ({ admins, openModal, user, superAdminEmail, currentUserRole, onDataUpdate }) => {
     if (currentUserRole !== 'admin') { return <div className="p-4 text-sm text-red-600 font-medium bg-red-50 rounded border border-red-200">Accesso negato.</div>; }
     const filteredAdmins = admins.filter(admin => admin.email !== superAdminEmail);
@@ -365,6 +488,172 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
 
 const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, allEmployees, currentUserRole, userData, setDateRange, setReportAreaFilter, reportAreaFilter, reportEmployeeFilter, setReportEmployeeFilter, generateReport, isLoading, isActionLoading, managedEmployees, showNotification, handleReviewSkipBreak, onEditEntry }) => {
     
+    // --- FUNZIONE EXPORT EXCEL PAGHE (Centrata + Colori + Mese/Anno) ---
+    const handleExportPayrollExcel = () => {
+        // Controllo libreria
+        if (typeof utils === 'undefined' || typeof writeFile === 'undefined') { 
+            showNotification("Libreria esportazione non caricata o errata.", 'error'); 
+            return; 
+        }
+        if (!reports || reports.length === 0) { 
+            showNotification("Nessun dato da esportare per il report paghe.", 'info'); 
+            return; 
+        }
+
+        // DEFINIZIONE STILE CENTRALE COMUNE
+        const centerStyle = { vertical: 'center', horizontal: 'center' };
+        
+        // 1. Mappa dei colori
+        const areaColorMap = {};
+        allWorkAreas.forEach((area, index) => {
+            areaColorMap[area.id] = AREA_COLORS[index % AREA_COLORS.length];
+        });
+
+        // 2. Generazione date
+        const start = new Date(dateRange.start);
+        const end = new Date(dateRange.end);
+        const dateArray = [];
+        let current = new Date(start);
+        while (current <= end) {
+            dateArray.push(new Date(current));
+            current.setDate(current.getDate() + 1);
+        }
+
+        // 3. Aggregazione Dati
+        const empData = {};
+        const areaStats = {}; 
+
+        reports.forEach(r => {
+            if (r.isAbsence) return; 
+
+            if (!empData[r.employeeId]) {
+                empData[r.employeeId] = {
+                    name: r.employeeName,
+                    dailyData: {},
+                    total: 0
+                };
+            }
+
+            const hours = parseFloat(r.duration || 0);
+            const parts = r.clockInDate.split('/');
+            const isoDate = `${parts[2]}-${parts[1]}-${parts[0]}`; 
+
+            if (!empData[r.employeeId].dailyData[isoDate]) {
+                empData[r.employeeId].dailyData[isoDate] = { hours: 0, areaId: null };
+            }
+            
+            const currentDayData = empData[r.employeeId].dailyData[isoDate];
+            currentDayData.hours += hours;
+            currentDayData.areaId = r.workAreaId; 
+
+            empData[r.employeeId].total += hours;
+
+            const areaName = r.areaName || "Sconosciuta";
+            if (!areaStats[areaName]) areaStats[areaName] = 0;
+            areaStats[areaName] += hours;
+        });
+
+        // --- Calcolo Etichetta Mese Anno ---
+        const startObj = new Date(dateRange.start);
+        const monthName = startObj.toLocaleString('it-IT', { month: 'long' });
+        const headerLabel = `${monthName.charAt(0).toUpperCase() + monthName.slice(1)} ${startObj.getFullYear().toString().slice(-2)}`;
+
+        // 4. Creazione Matrice Dati
+        
+        // RIGA 1: Intestazione Mese (Centrato e Grassetto)
+        const headerRow1 = [{ v: headerLabel, t: 's', s: { font: { bold: true }, alignment: centerStyle } }]; 
+        
+        // RIGA 2: Intestazione "DIPENDENTE" (Centrato)
+        const headerRow2 = [{ v: "DIPENDENTE", t: 's', s: { alignment: centerStyle } }]; 
+        
+        const daysOfWeek = ['D', 'L', 'M', 'M', 'G', 'V', 'S'];
+
+        // Loop per le colonne dei giorni (Numeri e Lettere)
+        dateArray.forEach(d => {
+            // Riga 1: Numeri (1, 2, 3...) - Centrati
+            headerRow1.push({ v: d.getDate(), t: 'n', s: { alignment: centerStyle } });
+            // Riga 2: Lettere (L, M, M...) - Centrati
+            headerRow2.push({ v: daysOfWeek[d.getDay()], t: 's', s: { alignment: centerStyle } });
+        });
+        
+        // Colonna TOTALE (Centrato)
+        headerRow1.push({ v: "TOTALE", t: 's', s: { font: { bold: true }, alignment: centerStyle } });
+        headerRow2.push({ v: "", t: 's', s: { alignment: centerStyle } });
+
+        const sheetData = [headerRow1, headerRow2]; 
+
+        const sortedEmployees = Object.values(empData).sort((a,b) => a.name.localeCompare(b.name));
+        
+        sortedEmployees.forEach(emp => {
+            // Nome Dipendente (Centrato)
+            const row = [{ v: emp.name, t: 's', s: { alignment: centerStyle } }];
+            
+            dateArray.forEach(d => {
+                const iso = d.toISOString().split('T')[0];
+                const dayData = emp.dailyData[iso];
+                if (dayData && dayData.hours > 0) {
+                    const cell = {
+                        v: Number(dayData.hours.toFixed(2)),
+                        t: 'n',
+                        s: {
+                            fill: { fgColor: { rgb: areaColorMap[dayData.areaId] || "FFFFFF" } },
+                            alignment: centerStyle // AGGIUNTO ALLINEAMENTO QUI
+                        }
+                    };
+                    row.push(cell); 
+                } else {
+                    // Cella vuota ma con stile (opzionale, per mantenere allineamento se necessario)
+                    row.push({ v: "", t: 's', s: { alignment: centerStyle } });
+                }
+            });
+            // Totale Riga (Centrato)
+            row.push({ v: Number(emp.total.toFixed(2)), t: 'n', s: { alignment: centerStyle, font: { bold: true } } });
+            sheetData.push(row);
+        });
+
+        // Spaziatura
+        sheetData.push([]);
+        sheetData.push([]);
+
+        // Riepilogo Aree (Intestazioni Centrate)
+        sheetData.push([
+            { v: "RIEPILOGO PER AREA", t: 's', s: { font: { bold: true }, alignment: centerStyle } },
+            { v: "TOT", t: 's', s: { font: { bold: true }, alignment: centerStyle } }
+        ]);
+
+        Object.keys(areaStats).sort().forEach(areaName => {
+            const areaObj = allWorkAreas.find(a => a.name === areaName);
+            const color = areaObj ? (areaColorMap[areaObj.id] || "FFFFFF") : "FFFFFF";
+            
+            // Nome Area (Centrato con sfondo colorato)
+            const cellName = {
+                v: areaName,
+                t: 's',
+                s: { fill: { fgColor: { rgb: color } }, font: { bold: true }, alignment: centerStyle }
+            };
+            // Valore Ore (Centrato)
+            const cellVal = {
+                v: Number(areaStats[areaName].toFixed(2)),
+                t: 'n',
+                s: { alignment: centerStyle }
+            };
+            sheetData.push([cellName, cellVal]);
+        });
+        
+        const ws = utils.aoa_to_sheet(sheetData);
+        
+        // Larghezza colonne (Aumentiamo leggermente la colonna nomi per farli stare comodi)
+        const wscols = [{wch: 30}]; 
+        dateArray.forEach(() => wscols.push({wch: 5})); // Leggermente più larghe per i numeri centrati
+        wscols.push({wch: 12}); 
+        ws['!cols'] = wscols;
+
+        const wb = utils.book_new();
+        utils.book_append_sheet(wb, ws, "Foglio Presenze");
+        writeFile(wb, `Report_Paghe_${dateRange.start}_${dateRange.end}.xlsx`);
+        showNotification("Excel Paghe generato con successo!", 'success');
+    };
+
     const handleExportExcel = () => {
         if (typeof utils === 'undefined' || typeof writeFile === 'undefined') { showNotification("Libreria esportazione non caricata.", 'error'); return; }
         if (!reports || reports.length === 0) { showNotification("Nessun dato da esportare.", 'info'); return; }
@@ -394,7 +683,8 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-gray-200 pb-4">
                 <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-800 tracking-tight">{title || 'Report Risultati'}</h1>
                 <div className="flex items-center space-x-2">
-                    <button onClick={handleExportExcel} disabled={!reports || reports.length === 0} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed shadow-sm transition-colors text-sm font-semibold">📥Esporta Excel</button>
+                    <button onClick={handleExportExcel} disabled={!reports || reports.length === 0} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed shadow-sm transition-colors text-sm font-semibold">📥Esporta Excel (Dettagli)</button>
+                    <button onClick={handleExportPayrollExcel} disabled={!reports || reports.length === 0} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed shadow-sm transition-colors text-sm font-semibold">📥Excel Paghe (Griglia)</button>
                     <button onClick={() => handleExportXml(reports)} disabled={!reports || reports.length === 0} className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:bg-gray-400 disabled:cursor-not-allowed shadow-sm transition-colors text-sm font-semibold">📥Esporta XML</button>
                 </div>
             </div>
@@ -404,7 +694,6 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
                         <table className="min-w-full divide-y divide-gray-200">
                             <thead className="bg-blue-50">
                                 <tr>
-                                    {/* Colonne ID rimosse dalla vista ma presenti nei dati per l'export */}
                                     <th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Dipendente</th>
                                     <th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Area</th>
                                     <th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Data</th>
@@ -461,10 +750,16 @@ const ActionHeader = ({ view, currentUserRole, openModal }) => {
     let button = null;
     let text = null;
     const btnClass = "px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition-all transform hover:-translate-y-0.5 w-full sm:w-auto text-sm";
+    
+    // Logica Bottoni Esistente
     if (view === 'employees' && currentUserRole === 'admin') { text = '+👤 Crea Nuovo Dipendente'; button = <button onClick={() => openModal('newEmployee')} className={btnClass}>{text}</button>; } 
     else if (view === 'areas' && currentUserRole === 'admin') { text = '+🌍 Aggiungi Area'; button = <button onClick={() => openModal('newArea')} className={btnClass}>{text}</button>; }
     else if (view === 'admins' && currentUserRole === 'admin') { text = '+👮Crea Nuovo Admin'; button = <button onClick={() => openModal('newAdmin')} className={btnClass}>{text}</button>; }
     else if (view === 'employees' && currentUserRole === 'preposto') { text = '+👤 Aggiungi Dipendente alle Mie Aree'; button = <button onClick={() => openModal('prepostoAddEmployeeToAreas')} className={btnClass}>{text}</button>; }
+    
+    // NUOVO BOTTONE PER VISTA FORMS
+    else if (view === 'forms') { text = '+🔗 Aggiungi Modulo Forms'; button = <button onClick={() => openModal('newForm')} className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-md transition-all transform hover:-translate-y-0.5 w-full sm:w-auto text-sm">{text}</button>; }
+
     if (!button) return null;
     return (<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4"><div className="flex justify-end">{button}</div></div>);
 };
@@ -481,7 +776,8 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const [admins, setAdmins] = useState([]);
     const [activeEmployeesDetails, setActiveEmployeesDetails] = useState([]);
     const [reports, setReports] = useState([]);
-    const [reportTitle, setReportTitle] = useState('');
+    const [forms, setForms] = useState([]); // NUOVO STATO FORMS
+    
     const [showModal, setShowModal] = useState(false);
     const [modalType, setModalType] = useState('');
     const [selectedItem, setSelectedItem] = useState(null);
@@ -489,21 +785,20 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const [isActionLoading, setIsActionLoading] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'ascending' });
-    const [dateRange, setDateRange] = useState({
-        start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
-        end: new Date().toISOString().split('T')[0]
-    });
+    const [dateRange, setDateRange] = useState({ start: new Date().toISOString().split('T')[0], end: new Date().toISOString().split('T')[0] });
     const [reportAreaFilter, setReportAreaFilter] = useState('all');
     const [reportEmployeeFilter, setReportEmployeeFilter] = useState('all');
+    const [reportTitle, setReportTitle] = useState('');
     const [adminEmployeeProfile, setAdminEmployeeProfile] = useState(null);
     const [adminActiveEntry, setAdminActiveEntry] = useState(null);
     const [totalDayHours, setTotalDayHours] = useState('0.00');
     const [workAreasWithHours, setWorkAreasWithHours] = useState([]);
-    
-    // === STATO NOTIFICHE PENDING ===
     const [pendingRequestsCount, setPendingRequestsCount] = useState(0); 
     const [notification, setNotification] = useState(null); 
     const [entryToEdit, setEntryToEdit] = useState(null);
+
+    // STATO PER MODALE FORMS DEDICATO
+    const [showAddFormModal, setShowAddFormModal] = useState(false);
 
     const currentUserRole = userData?.role;
     const superAdminEmail = SUPER_ADMIN_EMAIL; 
@@ -537,19 +832,29 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         setIsLoading(true);
         
         try {
-            const [areasSnap, empsSnap] = await Promise.all([
+            // RECUPERO DATI BASE + FORMS
+            const [areasSnap, empsSnap, formsSnap] = await Promise.all([
                 getDocs(collection(db, "work_areas")),
-                getDocs(collection(db, "employees")) 
+                getDocs(collection(db, "employees")),
+                getDocs(collection(db, "area_forms")) // NUOVA QUERY
             ]);
             
             if (!isMounted) return;
 
             const allAreasList = areasSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             const allEmployeesList = empsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            
+            // FILTRO FORMS PER PREPOSTO (vede solo quelli delle sue aree o tutti se admin)
+            let allFormsList = formsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            if (role === 'preposto') {
+                const managedIds = userData?.managedAreaIds || [];
+                allFormsList = allFormsList.filter(f => managedIds.includes(f.workAreaId));
+            }
 
             setAllWorkAreas(allAreasList);
             setWorkAreasWithHours(allAreasList.map(a => ({...a, totalHours: 'N/D'})));
             setAllEmployees(allEmployeesList); 
+            setForms(allFormsList); // SETTO STATO FORMS
 
             if (role === 'preposto' || (role === 'admin' && user.email !== superAdminEmail)) {
                  const q = query(collection(db, "employees"), where("userId", "==", user.uid));
@@ -574,9 +879,10 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             } else {
                 setAdmins([]); 
             }
+
         } catch (error) {
             console.error("Errore caricamento dati statici:", error);
-            if (isMounted) showNotification("Errore caricamento dati iniziali. Controlla console.", 'error');
+            if (isMounted) showNotification("Errore caricamento dati iniziali.", 'error');
         } finally {
             if (isMounted) setIsLoading(false);
         }
@@ -766,11 +1072,28 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         finally { setIsActionLoading(false); }
     }, [allWorkAreas, showNotification]);
 
+    // NUOVA FUNZIONE: ELIMINA MODULO
+    const handleDeleteForm = async (formId) => {
+        if (!window.confirm("Sei sicuro di voler eliminare questo modulo?")) return;
+        try {
+            await deleteDoc(doc(db, "area_forms", formId));
+            showNotification("Modulo eliminato.", "success");
+            fetchData(); 
+        } catch (error) {
+            console.error("Errore eliminazione:", error);
+            showNotification("Errore eliminazione modulo.", "error");
+        }
+    };
+
     // HANDLERS MODALI
     const openModal = useCallback((type, item = null) => {
-        setModalType(type);
-        setSelectedItem(item);
-        setShowModal(true);
+        if (type === 'newForm') {
+            setShowAddFormModal(true); 
+        } else {
+            setModalType(type);
+            setSelectedItem(item);
+            setShowModal(true);
+        }
     }, []);
 
     const handleResetEmployeeDevice = useCallback(async (employee) => {
@@ -926,7 +1249,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                                             disabled={isActionLoading || (!adminActiveEntry.isOnBreak && adminActiveEntry.hasCompletedPause)} 
                                             className={`text-xs px-3 py-1 text-white rounded ${adminActiveEntry.isOnBreak ? 'bg-green-500 hover:bg-green-600' : 'bg-yellow-500 hover:bg-yellow-600'} disabled:opacity-50`}
                                          >
-                                              {adminActiveEntry.isOnBreak ? 'Termina Pausa' : '☕Inizia Pausa'}
+                                               {adminActiveEntry.isOnBreak ? 'Termina Pausa' : '☕Inizia Pausa'}
                                          </button>
                                          <button onClick={() => openModal('manualClockOut', adminEmployeeProfile)} disabled={adminActiveEntry.isOnBreak || isActionLoading} className="text-xs px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 disabled:bg-gray-400 disabled:opacity-50">
                                               ⏹️Timbra Uscita
@@ -939,7 +1262,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                                      <button onClick={() => openModal('manualClockIn', adminEmployeeProfile)} disabled={isActionLoading} className="mt-1 text-xs px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50">▶️Timbra Entrata</button>
                                  </div>
                              )}
-                         </div>
+                          </div>
                      )}
                      <div className="flex items-center space-x-4">
                          <span className="text-sm text-gray-600 text-right">
@@ -957,15 +1280,16 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                      <div className="flex justify-center">
                          <div className="flex flex-wrap justify-center py-2 sm:space-x-4">
                              <button onClick={() => handleSwitchView('dashboard')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'dashboard' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>🏠Dashboard</button>
-                             <button onClick={() => handleSwitchView('employees')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'employees' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>👥Gestione Dipendenti</button>
-                             <button onClick={() => handleSwitchView('areas')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'areas' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>📍Gestione Aree</button>
-                             {currentUserRole === 'admin' && <button onClick={() => handleSwitchView('admins')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'admins' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>👮Gestione Admin</button>}
+                             <button onClick={() => handleSwitchView('employees')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'employees' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>👥Dipendenti</button>
+                             <button onClick={() => handleSwitchView('areas')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'areas' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>📍Aree</button>
+                             <button onClick={() => handleSwitchView('forms')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'forms' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>📋Moduli Forms</button>
+                             {currentUserRole === 'admin' && <button onClick={() => handleSwitchView('admins')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'admins' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>👮Admin</button>}
                              {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (
                                 <button 
                                     onClick={() => handleSwitchView('reports')} 
                                     className={`py-2 px-3 sm:border-b-2 text-sm font-medium flex items-center ${view === 'reports' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}
                                 >
-                                    📋Report Presenze
+                                    📋Report
                                     {pendingRequestsCount > 0 && (
                                         <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
                                             ⚠️ {pendingRequestsCount}
@@ -1005,6 +1329,9 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                     
                     {view === 'areas' && <AreaManagementView workAreas={visibleWorkAreas} openModal={openModal} currentUserRole={currentUserRole} />}
                     
+                    {/* NUOVA VISTA FORMS */}
+                    {view === 'forms' && <FormsManagementView forms={forms} workAreas={allWorkAreas} openModal={openModal} onDeleteForm={handleDeleteForm} />}
+
                     {view === 'admins' && currentUserRole === 'admin' && <AdminManagementView admins={admins} openModal={openModal} user={user} superAdminEmail={superAdminEmail} currentUserRole={currentUserRole} onDataUpdate={fetchData} />}
                     
                     {view === 'reports' && (
@@ -1080,6 +1407,18 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                      showNotification={showNotification} 
                  />
              )}
+
+            {/* Modale Aggiunta Forms (Separato per sicurezza) */}
+            <AddFormModal 
+                show={showAddFormModal}
+                onClose={() => setShowAddFormModal(false)}
+                workAreas={allWorkAreas}
+                user={user}
+                onDataUpdate={fetchData}
+                currentUserRole={currentUserRole}
+                userData={userData}
+                showNotification={showNotification}
+            />
         </div>
     );
 };

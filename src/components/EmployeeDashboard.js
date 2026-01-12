@@ -7,7 +7,7 @@ import { collection, query, where, onSnapshot, orderBy, getDocs, Timestamp, limi
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import CompanyLogo from './CompanyLogo';
 
-// === MODIFICA: IMPORTAZIONI PER PDF INVECE DI EXCEL ===
+// === IMPORTAZIONI PER PDF ===
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -46,7 +46,7 @@ const PAUSE_REASONS = [
 ];
 
 const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) => {
-    // Stati
+    // Stati Generali
     const [currentTime, setCurrentTime] = useState(new Date());
     const [activeEntry, setActiveEntry] = useState(null);
     const [todaysEntries, setTodaysEntries] = useState([]);
@@ -63,7 +63,13 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     // Stati per report PDF
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-    const [isGenerating, setIsGenerating] = useState(false); // Stato caricamento PDF
+    const [isGenerating, setIsGenerating] = useState(false);
+
+    // === GESTIONE MODULI MS FORMS (STATI) ===
+    const [showFormsModal, setShowFormsModal] = useState(false);
+    const [availableForms, setAvailableForms] = useState([]);
+    const [isLoadingForms, setIsLoadingForms] = useState(false);
+    const [selectedAreaForForms, setSelectedAreaForForms] = useState('');
 
     // Funzioni Cloud Firebase
     const functions = getFunctions(undefined, 'europe-west1');
@@ -288,7 +294,6 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                         throw new Error("Seleziona un'area di lavoro per la timbratura manuale.");
                     }
 
-                    // --- MODIFICA: RIMOSSA LOGICA FITTIZIA, ORA SI USA L'AREA REALE ---
                     const selectedArea = employeeWorkAreas.find(a => a.id === areaIdToClockIn);
                     note = `Entrata Manuale su Area: ${selectedArea ? selectedArea.name : 'Sconosciuta'}`;
                 }
@@ -364,7 +369,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
 
                 result = await clockOut({ 
                     note: finalNoteText, 
-                    pauseSkipReason: finalReasonCode, // Invia il codice del motivo
+                    pauseSkipReason: finalReasonCode, 
                     deviceId: deviceId,
                     isGpsRequired: isGpsRequiredCheck, 
                     currentLat: currentLat, 
@@ -373,7 +378,6 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 
                 if (result.data.success) {
                     playSound('clock_out'); 
-                    // Messaggio di successo condizionale (Logica Prudente)
                     let successMessage = result.data.message || 'Timbratura di uscita registrata.';
                     if (finalReasonCode) {
                         successMessage += '\n\n⚠️ NOTA IMPORTANTE: Hai dichiarato di non aver fatto pausa. La richiesta è IN ATTESA DI APPROVAZIONE dal tuo responsabile.\nFino all\'approvazione, le ore di pausa verranno scalate cautelativamente.';
@@ -413,7 +417,6 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             }
 
             if ((action === 'clockPause' || action === 'clockOut') && result?.data?.message) {
-                // Se c'è un messaggio ma l'operazione non è un successo pieno (gestito sopra)
                 if (!result.data.success) alert(result.data.message);
             }
 
@@ -428,7 +431,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
 
 
     // ========================================================
-    // --- 2. FUNZIONE GENERAZIONE PDF (NUOVA) ---
+    // --- 2. FUNZIONE GENERAZIONE PDF ---
     // ========================================================
     const handleExportPDF = async () => {
         setIsGenerating(true);
@@ -559,6 +562,64 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
         }
     };
 
+    // ========================================================
+    // --- 3. GESTIONE MODULI MS FORMS ---
+    // ========================================================
+    
+    // Funzione per caricare i moduli da Firestore
+    const fetchAreaForms = async (areaIdToFetch) => {
+        if (!areaIdToFetch) {
+            setAvailableForms([]);
+            return;
+        }
+        setIsLoadingForms(true);
+        try {
+            // Presupponiamo una collezione 'area_forms' dove ogni documento ha un campo 'workAreaId'
+            const q = query(collection(db, "area_forms"), where("workAreaId", "==", areaIdToFetch));
+            const snapshot = await getDocs(q);
+            const forms = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setAvailableForms(forms);
+        } catch (error) {
+            console.error("Errore caricamento moduli:", error);
+            alert("Errore caricamento moduli/questionari.");
+        } finally {
+            setIsLoadingForms(false);
+        }
+    };
+
+    // Apre il modale. Se c'è una timbratura attiva, carica subito i moduli di quell'area.
+    const handleOpenFormsModal = () => {
+        let defaultAreaId = '';
+        if (activeEntry && activeEntry.workAreaId) {
+            defaultAreaId = activeEntry.workAreaId;
+        } else if (employeeWorkAreas.length === 1) {
+            defaultAreaId = employeeWorkAreas[0].id;
+        }
+
+        setSelectedAreaForForms(defaultAreaId);
+        
+        if (defaultAreaId) {
+            fetchAreaForms(defaultAreaId);
+        } else {
+            setAvailableForms([]); // Resetta se non c'è area
+        }
+
+        setShowFormsModal(true);
+    };
+
+    // Gestisce il cambio area nel dropdown dentro il modale
+    const handleAreaChangeForForms = (e) => {
+        const newAreaId = e.target.value;
+        setSelectedAreaForForms(newAreaId);
+        fetchAreaForms(newAreaId);
+    };
+
+    // STILI MODALE (Ripresi da AdminModal per uniformità)
+    const overlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: 99998, backdropFilter: 'blur(4px)' };
+    const containerStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' };
+    const modalStyle = { backgroundColor: '#ffffff', width: '100%', maxWidth: '500px', maxHeight: '85vh', borderRadius: '12px', overflow: 'hidden', pointerEvents: 'auto', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column' };
+    const inputClasses = "block w-full px-3 py-2.5 bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm";
+
 
     // Render iniziale
     if (!employeeData) return <div className="min-h-screen flex items-center justify-center">Caricamento dipendente...</div>;
@@ -612,7 +673,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 ) : (
                     <>
                         {employeeWorkAreas.length > 0 ? (
-                            <p className="text-base text-blue-600 font-semibold mt-2 text-center">GPS non richiesto.<br/>Area predefinita: <strong>{employeeWorkAreas[0].name}</strong></p>
+                            <p className="text-base text-blue-600 font-semibold mt-2 text-center">GPS non richiesto.</p>
                         ) : <p className="text-sm text-red-500 font-semibold mt-2 text-center">❌ Non sei assegnato a nessuna area.</p>}
                     </>
                 )}
@@ -639,7 +700,6 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                     <div>
                         <p className="text-center text-green-600 font-semibold text-lg mb-4">Timbratura ATTIVA su: <span className="font-bold">{workAreaName}</span></p>
                         
-                        {/* --- LAYOUT SEMAFORO ORIGINALE (GRID-COLS-3) --- */}
                         <div className="grid grid-cols-3 gap-3">
 
                             {/* 1. PAUSA */}
@@ -679,7 +739,6 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                                 <label htmlFor="manualArea" className="block text-sm font-medium text-gray-700 mb-1">Seleziona Area di Lavoro:</label>
                                 <select id="manualArea" value={manualAreaId} onChange={(e) => setManualAreaId(e.target.value)} className="p-2 border border-gray-300 rounded-md w-full text-sm bg-white">
                                     <option value="">-- Seleziona un'area --</option>
-                                    {/* RIMOSSA L'OPZIONE FITTIZIA "MANUTENZIONE" */}
                                     {employeeWorkAreas.map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}
                                 </select>
                             </div>
@@ -701,6 +760,18 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                     </div>
                 )}
             </div>
+
+            {/* === NUOVA SEZIONE: MODULI MS FORMS === */}
+            <div className="bg-white p-4 rounded-lg shadow-md mb-6">
+                 <h2 className="text-xl font-bold mb-3 text-center">Modulistica</h2>
+                 <p className="text-sm text-gray-500 mb-4 text-center">Accedi ai questionari se caposquadra per la tua area.</p>
+                 <button 
+                    onClick={handleOpenFormsModal}
+                    className="w-full py-3 px-4 bg-indigo-600 text-white font-bold rounded-lg shadow hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2"
+                 >
+                    📋 Moduli e Questionari
+                 </button>
+            </div>
             
             <div className="bg-white p-4 rounded-lg shadow-md mb-6">
                 <h2 className="text-xl font-bold mb-3 text-center">Timbrature di Oggi</h2>
@@ -716,7 +787,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 </div>
             </div>
 
-            {/* === BOX REPORT PDF (SOSTITUISCE QUELLO EXCEL) === */}
+            {/* === BOX REPORT PDF === */}
             <div className="bg-white p-4 rounded-lg shadow-md mb-6">
                 <h2 className="text-xl font-bold mb-3 text-center">Report Mensile PDF</h2>
                 <div className="grid grid-cols-2 gap-4 mb-4">
@@ -743,6 +814,91 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             </div>
 
             <button onClick={handleLogout} className="w-full mt-auto px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600">Logout</button>
+
+            {/* === MODALE LISTA MODULI MS FORMS (Style Corretto con Portal e Stili Inline) === */}
+            {showFormsModal && (
+                <>
+                    {/* Poiché React Portal potrebbe complicare lo stile se non c'è un nodo root, uso un approccio fixed diretto che copre tutto, identico agli altri modali */}
+                    <div style={overlayStyle} onClick={() => setShowFormsModal(false)} />
+                    <div style={containerStyle}>
+                        <div style={modalStyle}>
+                            {/* Header */}
+                            <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', backgroundColor: '#f9fafb' }}>
+                                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#111827' }}>📋 Moduli e Questionari</h3>
+                                <button onClick={() => setShowFormsModal(false)} style={{ background: 'none', border: 'none', fontSize: '24px', color: '#9ca3af', cursor: 'pointer', lineHeight: '1' }}>&times;</button>
+                            </div>
+
+                            {/* Body */}
+                            <div style={{ padding: '24px', overflowY: 'auto' }}>
+                                {/* Selezione Area */}
+                                <div style={{ marginBottom: '20px' }}>
+                                    <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', fontWeight: 'bold', color: '#6b7280', textTransform: 'uppercase' }}>Area di Lavoro:</label>
+                                    {activeEntry ? (
+                                        <div style={{ padding: '10px 12px', backgroundColor: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: '6px', color: '#374151', fontWeight: '600' }}>
+                                            📍 {allWorkAreas.find(a => a.id === activeEntry.workAreaId)?.name || 'Area Attuale'}
+                                        </div>
+                                    ) : (
+                                        <select 
+                                            value={selectedAreaForForms} 
+                                            onChange={handleAreaChangeForForms}
+                                            className={inputClasses}
+                                        >
+                                            <option value="">-- Seleziona Area --</option>
+                                            {employeeWorkAreas.map(area => (
+                                                <option key={area.id} value={area.id}>{area.name}</option>
+                                            ))}
+                                        </select>
+                                    )}
+                                </div>
+
+                                {/* Lista Link */}
+                                {isLoadingForms ? (
+                                    <p style={{ textAlign: 'center', color: '#6b7280' }}>Caricamento moduli...</p>
+                                ) : (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                        {availableForms.length > 0 ? (
+                                            availableForms.map(form => (
+                                                <a 
+                                                    key={form.id} 
+                                                    href={form.url} 
+                                                    target="_blank" 
+                                                    rel="noopener noreferrer"
+                                                    style={{ display: 'block', padding: '16px', backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px', textDecoration: 'none', boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)', transition: 'background-color 0.2s' }}
+                                                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f9fafb'}
+                                                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#fff'}
+                                                >
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                        <div>
+                                                            <h4 style={{ margin: 0, fontWeight: 'bold', color: '#1f2937', fontSize: '15px' }}>{form.title}</h4>
+                                                            {form.description && <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#6b7280' }}>{form.description}</p>}
+                                                        </div>
+                                                        <span style={{ fontSize: '18px', color: '#4f46e5' }}>↗️</span>
+                                                    </div>
+                                                </a>
+                                            ))
+                                        ) : (
+                                            selectedAreaForForms ? 
+                                                <p style={{ textAlign: 'center', color: '#6b7280', fontStyle: 'italic', padding: '16px', backgroundColor: '#f9fafb', borderRadius: '6px' }}>Nessun modulo disponibile per questa area.</p>
+                                                : 
+                                                <p style={{ textAlign: 'center', color: '#9ca3af', fontStyle: 'italic' }}>Seleziona un'area per vedere i moduli.</p>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                            
+                            {/* Footer */}
+                            <div style={{ padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end' }}>
+                                <button 
+                                    onClick={() => setShowFormsModal(false)}
+                                    style={{ padding: '10px 20px', backgroundColor: '#fff', border: '1px solid #d1d5db', borderRadius: '6px', color: '#374151', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer' }}
+                                >
+                                    Chiudi
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </>
+            )}
         </div>
     );
 };
