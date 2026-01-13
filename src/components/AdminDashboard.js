@@ -6,13 +6,12 @@ import { db } from '../firebase';
 import {
     collection, getDocs, query, where,
     Timestamp, onSnapshot, updateDoc, doc, limit,
-    addDoc, writeBatch, deleteDoc
+    addDoc, writeBatch, deleteDoc, arrayUnion // AGGIUNTO arrayUnion
 } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import CompanyLogo from './CompanyLogo';
 import AdminModal from './AdminModal'; 
 import MappaPresenze from './MappaPresenze'; 
-// IMPORT IMPORTANTE: Libreria che supporta stili e colori
 import { utils, writeFile } from 'xlsx-js-style'; 
 import { saveAs } from 'file-saver';
 
@@ -23,7 +22,7 @@ import { saveAs } from 'file-saver';
 const SUPER_ADMIN_EMAIL = "domenico.leoncino@tcsitalia.com"; 
 
 // --- CONFIGURAZIONE LIMITI ---
-const MAX_DEVICE_LIMIT = 2; // Imposta qui il numero massimo di dispositivi consentiti per dipendente
+const MAX_DEVICE_LIMIT = 2; 
 
 // Palette colori per Excel (Aree)
 const AREA_COLORS = [
@@ -92,7 +91,6 @@ const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) =>
         onSave(entry.id, { ...formData, skippedBreak: skipPause });
     };
 
-    // Stili Standard per Modali
     const overlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: 99998, backdropFilter: 'blur(4px)' };
     const containerStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' };
     const modalStyle = { backgroundColor: '#ffffff', width: '100%', maxWidth: '500px', maxHeight: '85vh', borderRadius: '12px', overflow: 'hidden', pointerEvents: 'auto', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column' };
@@ -146,9 +144,7 @@ const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) =>
     );
 };
 
-// === COMPONENTE DEDICATO PER AGGIUNGERE FORMS (STILE IDENTICO) ===
 const AddFormModal = ({ show, onClose, workAreas, user, onDataUpdate, currentUserRole, userData, showNotification }) => {
-    // 1. Hooks (sempre in cima)
     const [formTitle, setFormTitle] = useState('');
     const [formUrl, setFormUrl] = useState('');
     const [formAreaId, setFormAreaId] = useState('');
@@ -162,7 +158,6 @@ const AddFormModal = ({ show, onClose, workAreas, user, onDataUpdate, currentUse
         return [];
     }, [currentUserRole, userData, workAreas]);
 
-    // 2. Return condizionale (dopo gli hooks)
     if (!show) return null;
 
     const handleSaveForm = async (e) => {
@@ -187,7 +182,6 @@ const AddFormModal = ({ show, onClose, workAreas, user, onDataUpdate, currentUse
         } finally { setIsSaving(false); }
     };
 
-    // Stili
     const overlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: 99998, backdropFilter: 'blur(4px)' };
     const containerStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' };
     const modalStyle = { backgroundColor: '#ffffff', width: '100%', maxWidth: '500px', maxHeight: '85vh', borderRadius: '12px', overflow: 'hidden', pointerEvents: 'auto', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column' };
@@ -199,34 +193,17 @@ const AddFormModal = ({ show, onClose, workAreas, user, onDataUpdate, currentUse
             <div style={overlayStyle} onClick={onClose} />
             <div style={containerStyle}>
                 <div style={modalStyle}>
-                    {/* Header */}
                     <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#111827' }}>🔗 Aggiungi Modulo Forms</h3>
                         <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '24px', color: '#9ca3af', cursor: 'pointer', lineHeight: '1' }}>&times;</button>
                     </div>
-
-                    {/* Body */}
                     <div style={{ padding: '24px', overflowY: 'auto' }}>
                         <form id="add-form-submit" onSubmit={handleSaveForm} className="space-y-5">
-                            <div>
-                                <label className={labelClasses}>Titolo Modulo</label>
-                                <input type="text" value={formTitle} onChange={e => setFormTitle(e.target.value)} placeholder="Es. Checklist Sicurezza" className={inputClasses} required />
-                            </div>
-                            <div>
-                                <label className={labelClasses}>Link Microsoft Forms (URL)</label>
-                                <input type="url" value={formUrl} onChange={e => setFormUrl(e.target.value)} placeholder="https://forms.office.com/..." className={inputClasses} required />
-                            </div>
-                            <div>
-                                <label className={labelClasses}>Assegna all'Area</label>
-                                <select value={formAreaId} onChange={e => setFormAreaId(e.target.value)} className={inputClasses} required>
-                                    <option value="">-- Seleziona Area --</option>
-                                    {availableAreas.map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}
-                                </select>
-                            </div>
+                            <div><label className={labelClasses}>Titolo Modulo</label><input type="text" value={formTitle} onChange={e => setFormTitle(e.target.value)} placeholder="Es. Checklist Sicurezza" className={inputClasses} required /></div>
+                            <div><label className={labelClasses}>Link Microsoft Forms (URL)</label><input type="url" value={formUrl} onChange={e => setFormUrl(e.target.value)} placeholder="https://forms.office.com/..." className={inputClasses} required /></div>
+                            <div><label className={labelClasses}>Assegna all'Area</label><select value={formAreaId} onChange={e => setFormAreaId(e.target.value)} className={inputClasses} required><option value="">-- Seleziona Area --</option>{availableAreas.map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}</select></div>
                         </form>
                     </div>
-
-                    {/* Footer */}
                     <div style={{ padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
                         <button type="button" onClick={onClose} className="px-5 py-2.5 bg-white border border-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-50 transition-colors text-sm shadow-sm">Annulla</button>
                         <button type="submit" form="add-form-submit" disabled={isSaving} className="px-5 py-2.5 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 transition-colors text-sm shadow-md disabled:opacity-70 disabled:cursor-not-allowed">{isSaving ? 'Salvataggio...' : 'Crea Modulo'}</button>
@@ -505,7 +482,7 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
 
 const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, allEmployees, currentUserRole, userData, setDateRange, setReportAreaFilter, reportAreaFilter, reportEmployeeFilter, setReportEmployeeFilter, generateReport, isLoading, isActionLoading, managedEmployees, showNotification, handleReviewSkipBreak, onEditEntry }) => {
     
-    // --- FUNZIONE EXPORT EXCEL PAGHE (Centrata + Colori + Mese/Anno) ---
+    // --- FUNZIONE EXPORT EXCEL PAGHE (AGGIORNATA: SIGLE ASSENZE + LEGENDA) ---
     const handleExportPayrollExcel = () => {
         // Controllo libreria
         if (typeof utils === 'undefined' || typeof writeFile === 'undefined') { 
@@ -526,6 +503,19 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
             areaColorMap[area.id] = AREA_COLORS[index % AREA_COLORS.length];
         });
 
+        // Helper per le sigle (Aggiornato con tutte le voci del menu)
+        const getAbsenceCode = (type) => {
+            const t = type ? type.toUpperCase() : '';
+            if (t.includes('FERIE')) return 'F';
+            if (t.includes('MALATTIA')) return 'M';
+            if (t.includes('PERMESSO')) return 'P';
+            if (t.includes('LEGGE 104')) return 'L104'; 
+            if (t.includes('INFORTUNIO')) return 'I';
+            if (t.includes('INGIUSTIFICATA')) return 'AI';
+            if (t.includes('ALTRO')) return 'A';
+            return 'A'; // Default
+        };
+
         // 2. Generazione date
         const start = new Date(dateRange.start);
         const end = new Date(dateRange.end);
@@ -541,8 +531,6 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
         const areaStats = {}; 
 
         reports.forEach(r => {
-            if (r.isAbsence) return; 
-
             if (!empData[r.employeeId]) {
                 empData[r.employeeId] = {
                     name: r.employeeName,
@@ -551,14 +539,21 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
                 };
             }
 
-            const hours = parseFloat(r.duration || 0);
             const parts = r.clockInDate.split('/');
             const isoDate = `${parts[2]}-${parts[1]}-${parts[0]}`; 
 
             if (!empData[r.employeeId].dailyData[isoDate]) {
-                empData[r.employeeId].dailyData[isoDate] = { hours: 0, areaId: null };
+                empData[r.employeeId].dailyData[isoDate] = { hours: 0, areaId: null, absenceCode: null };
             }
             
+            // GESTIONE ASSENZE (Nuova logica)
+            if (r.isAbsence) {
+                empData[r.employeeId].dailyData[isoDate].absenceCode = getAbsenceCode(r.statusLabel);
+                return; // Se è assenza, non sommiamo ore e passiamo al prossimo
+            }
+
+            // GESTIONE ORE
+            const hours = parseFloat(r.duration || 0);
             const currentDayData = empData[r.employeeId].dailyData[isoDate];
             currentDayData.hours += hours;
             currentDayData.areaId = r.workAreaId; 
@@ -577,23 +572,21 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
 
         // 4. Creazione Matrice Dati
         
-        // RIGA 1: Intestazione Mese (Centrato e Grassetto)
+        // RIGA 1: Intestazione Mese
         const headerRow1 = [{ v: headerLabel, t: 's', s: { font: { bold: true }, alignment: centerStyle } }]; 
         
-        // RIGA 2: Intestazione "DIPENDENTE" (Centrato)
+        // RIGA 2: Intestazione "DIPENDENTE"
         const headerRow2 = [{ v: "DIPENDENTE", t: 's', s: { alignment: centerStyle } }]; 
         
         const daysOfWeek = ['D', 'L', 'M', 'M', 'G', 'V', 'S'];
 
-        // Loop per le colonne dei giorni (Numeri e Lettere)
+        // Loop per le colonne dei giorni
         dateArray.forEach(d => {
-            // Riga 1: Numeri (1, 2, 3...) - Centrati
             headerRow1.push({ v: d.getDate(), t: 'n', s: { alignment: centerStyle } });
-            // Riga 2: Lettere (L, M, M...) - Centrati
             headerRow2.push({ v: daysOfWeek[d.getDay()], t: 's', s: { alignment: centerStyle } });
         });
         
-        // Colonna TOTALE (Centrato)
+        // Colonna TOTALE
         headerRow1.push({ v: "TOTALE", t: 's', s: { font: { bold: true }, alignment: centerStyle } });
         headerRow2.push({ v: "", t: 's', s: { alignment: centerStyle } });
 
@@ -602,28 +595,40 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
         const sortedEmployees = Object.values(empData).sort((a,b) => a.name.localeCompare(b.name));
         
         sortedEmployees.forEach(emp => {
-            // Nome Dipendente (Centrato)
             const row = [{ v: emp.name, t: 's', s: { alignment: centerStyle } }];
             
             dateArray.forEach(d => {
                 const iso = d.toISOString().split('T')[0];
                 const dayData = emp.dailyData[iso];
+                
                 if (dayData && dayData.hours > 0) {
+                    // Cella con ORE LAVORATE (Colorata)
                     const cell = {
                         v: Number(dayData.hours.toFixed(2)),
                         t: 'n',
                         s: {
                             fill: { fgColor: { rgb: areaColorMap[dayData.areaId] || "FFFFFF" } },
-                            alignment: centerStyle // AGGIUNTO ALLINEAMENTO QUI
+                            alignment: centerStyle
                         }
                     };
                     row.push(cell); 
+                } else if (dayData && dayData.absenceCode) {
+                    // Cella con SIGLA ASSENZA (F, M, P...) - Grassetto
+                    const cell = {
+                        v: dayData.absenceCode,
+                        t: 's',
+                        s: { 
+                            alignment: centerStyle,
+                            font: { bold: true } 
+                        }
+                    };
+                    row.push(cell);
                 } else {
-                    // Cella vuota ma con stile (opzionale, per mantenere allineamento se necessario)
+                    // Cella vuota
                     row.push({ v: "", t: 's', s: { alignment: centerStyle } });
                 }
             });
-            // Totale Riga (Centrato)
+            // Totale Riga
             row.push({ v: Number(emp.total.toFixed(2)), t: 'n', s: { alignment: centerStyle, font: { bold: true } } });
             sheetData.push(row);
         });
@@ -632,23 +637,21 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
         sheetData.push([]);
         sheetData.push([]);
 
-        // Riepilogo Aree (Intestazioni Centrate)
+        // Riepilogo Aree
         sheetData.push([
             { v: "RIEPILOGO PER AREA", t: 's', s: { font: { bold: true }, alignment: centerStyle } },
-            { v: "ORE TOTALI", t: 's', s: { font: { bold: true }, alignment: centerStyle } }
+            { v: "TOT", t: 's', s: { font: { bold: true }, alignment: centerStyle } }
         ]);
 
         Object.keys(areaStats).sort().forEach(areaName => {
             const areaObj = allWorkAreas.find(a => a.name === areaName);
             const color = areaObj ? (areaColorMap[areaObj.id] || "FFFFFF") : "FFFFFF";
             
-            // Nome Area (Centrato con sfondo colorato)
             const cellName = {
                 v: areaName,
                 t: 's',
                 s: { fill: { fgColor: { rgb: color } }, font: { bold: true }, alignment: centerStyle }
             };
-            // Valore Ore (Centrato)
             const cellVal = {
                 v: Number(areaStats[areaName].toFixed(2)),
                 t: 'n',
@@ -656,12 +659,33 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
             };
             sheetData.push([cellName, cellVal]);
         });
+
+        // NUOVA SEZIONE: LEGENDA SIGLE ASSENZE
+        sheetData.push([]); // Riga vuota spaziatrice
+        sheetData.push([{ v: "LEGENDA SIGLE ASSENZE", t: 's', s: { font: { bold: true, underline: true } } }]);
+        
+        const legendItems = [
+            { code: 'F', desc: 'Ferie' },
+            { code: 'M', desc: 'Malattia' },
+            { code: 'P', desc: 'Permesso' },
+            { code: 'L104', desc: 'Legge 104' },
+            { code: 'I', desc: 'Infortunio' },
+            { code: 'AI', desc: 'Assenza Ingiustificata' },
+            { code: 'A', desc: 'Altro' }
+        ];
+
+        legendItems.forEach(item => {
+             sheetData.push([
+                 { v: item.code, t: 's', s: { font: { bold: true }, alignment: centerStyle } },
+                 { v: item.desc, t: 's', s: { alignment: { vertical: 'center', horizontal: 'left' } } }
+             ]);
+        });
         
         const ws = utils.aoa_to_sheet(sheetData);
         
-        // Larghezza colonne (Aumentiamo leggermente la colonna nomi per farli stare comodi)
+        // Larghezza colonne
         const wscols = [{wch: 30}]; 
-        dateArray.forEach(() => wscols.push({wch: 5})); // Leggermente più larghe per i numeri centrati
+        dateArray.forEach(() => wscols.push({wch: 5})); 
         wscols.push({wch: 12}); 
         ws['!cols'] = wscols;
 
@@ -1087,19 +1111,43 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const handleEmployeePauseClick = useCallback(async (employee) => {
         const timeEntryId = employee?.activeEntry?.id; 
         if (!timeEntryId) return showNotification("Errore: ID della timbratura attiva non trovato.", 'error');
+        
         const workArea = allWorkAreas.find(area => area.id === employee.activeEntry.workAreaId);
-        if (!workArea || !workArea.pauseDuration || workArea.pauseDuration <= 0) return showNotification(`Nessuna pausa predefinita configurata per l'area "${workArea?.name || 'sconosciuta'}". Modifica l'area per aggiungerla.`, 'info');
+        if (!workArea || !workArea.pauseDuration || workArea.pauseDuration <= 0) 
+            return showNotification(`Nessuna pausa predefinita configurata per l'area "${workArea?.name || 'sconosciuta'}". Modifica l'area per aggiungerla.`, 'info');
+        
         const pauseDurationInMinutes = workArea.pauseDuration;
-        if (employee.activeEntry.hasCompletedPause) return showNotification(`La pausa predefinita di ${pauseDurationInMinutes} minuti è stata già completata per ${employee.name} in questa sessione.`, 'info');
-        if (!window.confirm(`Applicare la pausa predefinita di ${pauseDurationInMinutes} minuti a ${employee.name} ${employee.surname}? L'azione è immediata e irreversibile.`)) return;
+        
+        if (employee.activeEntry.hasCompletedPause) 
+            return showNotification(`La pausa predefinita di ${pauseDurationInMinutes} minuti è stata già completata per ${employee.name} in questa sessione.`, 'info');
+        
+        if (!window.confirm(`Applicare la pausa predefinita di ${pauseDurationInMinutes} minuti a ${employee.name} ${employee.surname}?`)) return;
+        
         setIsActionLoading(true);
         try {
-            const applyPauseFunction = httpsCallable(getFunctions(undefined, 'europe-west1'), 'applyAutoPauseEmployee');
-            const result = await applyPauseFunction({ timeEntryId: timeEntryId, durationMinutes: pauseDurationInMinutes, deviceId: 'PREPOSTO_MANUAL_ACTION', employeeIdToUpdate: employee.id });
-            showNotification(result.data.message, 'success');
-        } catch (error) { console.error("Errore applicazione pausa (Server):", error); const displayMessage = error.message.includes(":") ? error.message.split(":")[1].trim() : error.message; showNotification(`Errore applicazione pausa: ${displayMessage || 'Errore Server.'}`, 'error'); }
-        finally { setIsActionLoading(false); }
-    }, [allWorkAreas, showNotification]);
+            // FIX: Inserimento pausa diretto da Client (senza Cloud Function) per affidabilità
+            const now = new Date();
+            const startPause = new Date(now.getTime() - (pauseDurationInMinutes * 60000));
+            
+            const entryRef = doc(db, "time_entries", timeEntryId);
+            
+            await updateDoc(entryRef, {
+                pauses: arrayUnion({
+                    start: Timestamp.fromDate(startPause),
+                    end: Timestamp.fromDate(now),
+                    type: 'manual_forced',
+                    addedBy: user.email || 'admin'
+                })
+            });
+
+            showNotification("Pausa inserita con successo!", 'success');
+        } catch (error) { 
+            console.error("Errore inserimento pausa:", error); 
+            showNotification(`Errore: ${error.message}`, 'error'); 
+        } finally { 
+            setIsActionLoading(false); 
+        }
+    }, [allWorkAreas, user, showNotification]);
 
     // NUOVA FUNZIONE: ELIMINA MODULO
     const handleDeleteForm = async (formId) => {
