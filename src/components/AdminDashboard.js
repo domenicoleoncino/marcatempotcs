@@ -12,7 +12,6 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import CompanyLogo from './CompanyLogo';
 import AdminModal from './AdminModal'; 
 import MappaPresenze from './MappaPresenze'; 
-// IMPORT IMPORTANTE: Libreria che supporta stili e colori
 import { utils, writeFile } from 'xlsx-js-style'; 
 import { saveAs } from 'file-saver';
 
@@ -92,7 +91,6 @@ const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) =>
         onSave(entry.id, { ...formData, skippedBreak: skipPause });
     };
 
-    // Stili Standard per Modali
     const overlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: 99998, backdropFilter: 'blur(4px)' };
     const containerStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' };
     const modalStyle = { backgroundColor: '#ffffff', width: '100%', maxWidth: '500px', maxHeight: '85vh', borderRadius: '12px', overflow: 'hidden', pointerEvents: 'auto', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column' };
@@ -146,9 +144,7 @@ const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) =>
     );
 };
 
-// === COMPONENTE DEDICATO PER AGGIUNGERE FORMS (STILE IDENTICO) ===
 const AddFormModal = ({ show, onClose, workAreas, user, onDataUpdate, currentUserRole, userData, showNotification }) => {
-    // 1. Hooks (sempre in cima)
     const [formTitle, setFormTitle] = useState('');
     const [formUrl, setFormUrl] = useState('');
     const [formAreaId, setFormAreaId] = useState('');
@@ -162,7 +158,6 @@ const AddFormModal = ({ show, onClose, workAreas, user, onDataUpdate, currentUse
         return [];
     }, [currentUserRole, userData, workAreas]);
 
-    // 2. Return condizionale (dopo gli hooks)
     if (!show) return null;
 
     const handleSaveForm = async (e) => {
@@ -187,7 +182,6 @@ const AddFormModal = ({ show, onClose, workAreas, user, onDataUpdate, currentUse
         } finally { setIsSaving(false); }
     };
 
-    // Stili
     const overlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: 99998, backdropFilter: 'blur(4px)' };
     const containerStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' };
     const modalStyle = { backgroundColor: '#ffffff', width: '100%', maxWidth: '500px', maxHeight: '85vh', borderRadius: '12px', overflow: 'hidden', pointerEvents: 'auto', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column' };
@@ -199,34 +193,17 @@ const AddFormModal = ({ show, onClose, workAreas, user, onDataUpdate, currentUse
             <div style={overlayStyle} onClick={onClose} />
             <div style={containerStyle}>
                 <div style={modalStyle}>
-                    {/* Header */}
                     <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#111827' }}>🔗 Aggiungi Modulo Forms</h3>
                         <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '24px', color: '#9ca3af', cursor: 'pointer', lineHeight: '1' }}>&times;</button>
                     </div>
-
-                    {/* Body */}
                     <div style={{ padding: '24px', overflowY: 'auto' }}>
                         <form id="add-form-submit" onSubmit={handleSaveForm} className="space-y-5">
-                            <div>
-                                <label className={labelClasses}>Titolo Modulo</label>
-                                <input type="text" value={formTitle} onChange={e => setFormTitle(e.target.value)} placeholder="Es. Checklist Sicurezza" className={inputClasses} required />
-                            </div>
-                            <div>
-                                <label className={labelClasses}>Link Microsoft Forms (URL)</label>
-                                <input type="url" value={formUrl} onChange={e => setFormUrl(e.target.value)} placeholder="https://forms.office.com/..." className={inputClasses} required />
-                            </div>
-                            <div>
-                                <label className={labelClasses}>Assegna all'Area</label>
-                                <select value={formAreaId} onChange={e => setFormAreaId(e.target.value)} className={inputClasses} required>
-                                    <option value="">-- Seleziona Area --</option>
-                                    {availableAreas.map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}
-                                </select>
-                            </div>
+                            <div><label className={labelClasses}>Titolo Modulo</label><input type="text" value={formTitle} onChange={e => setFormTitle(e.target.value)} placeholder="Es. Checklist Sicurezza" className={inputClasses} required /></div>
+                            <div><label className={labelClasses}>Link Microsoft Forms (URL)</label><input type="url" value={formUrl} onChange={e => setFormUrl(e.target.value)} placeholder="https://forms.office.com/..." className={inputClasses} required /></div>
+                            <div><label className={labelClasses}>Assegna all'Area</label><select value={formAreaId} onChange={e => setFormAreaId(e.target.value)} className={inputClasses} required><option value="">-- Seleziona Area --</option>{availableAreas.map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}</select></div>
                         </form>
                     </div>
-
-                    {/* Footer */}
                     <div style={{ padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
                         <button type="button" onClick={onClose} className="px-5 py-2.5 bg-white border border-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-50 transition-colors text-sm shadow-sm">Annulla</button>
                         <button type="submit" form="add-form-submit" disabled={isSaving} className="px-5 py-2.5 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 transition-colors text-sm shadow-md disabled:opacity-70 disabled:cursor-not-allowed">{isSaving ? 'Salvataggio...' : 'Crea Modulo'}</button>
@@ -505,7 +482,7 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
 
 const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, allEmployees, currentUserRole, userData, setDateRange, setReportAreaFilter, reportAreaFilter, reportEmployeeFilter, setReportEmployeeFilter, generateReport, isLoading, isActionLoading, managedEmployees, showNotification, handleReviewSkipBreak, onEditEntry }) => {
     
-    // --- FUNZIONE EXPORT EXCEL PAGHE (AGGIORNATA: SIGLE ASSENZE + LEGENDA) ---
+    // --- FUNZIONE EXPORT EXCEL PAGHE (Centrata + Colori + Mese/Anno) ---
     const handleExportPayrollExcel = () => {
         // Controllo libreria
         if (typeof utils === 'undefined' || typeof writeFile === 'undefined') { 
@@ -526,19 +503,6 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
             areaColorMap[area.id] = AREA_COLORS[index % AREA_COLORS.length];
         });
 
-        // Helper per le sigle (Aggiornato con tutte le voci del menu)
-        const getAbsenceCode = (type) => {
-            const t = type ? type.toUpperCase() : '';
-            if (t.includes('FERIE')) return 'F';
-            if (t.includes('MALATTIA')) return 'M';
-            if (t.includes('PERMESSO')) return 'P';
-            if (t.includes('LEGGE 104')) return '104'; 
-            if (t.includes('INFORTUNIO')) return 'I';
-            if (t.includes('INGIUSTIFICATA')) return 'AI';
-            if (t.includes('ALTRO')) return 'A';
-            return 'A'; // Default
-        };
-
         // 2. Generazione date
         const start = new Date(dateRange.start);
         const end = new Date(dateRange.end);
@@ -554,6 +518,8 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
         const areaStats = {}; 
 
         reports.forEach(r => {
+            if (r.isAbsence) return; 
+
             if (!empData[r.employeeId]) {
                 empData[r.employeeId] = {
                     name: r.employeeName,
@@ -562,21 +528,14 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
                 };
             }
 
+            const hours = parseFloat(r.duration || 0);
             const parts = r.clockInDate.split('/');
             const isoDate = `${parts[2]}-${parts[1]}-${parts[0]}`; 
 
             if (!empData[r.employeeId].dailyData[isoDate]) {
-                empData[r.employeeId].dailyData[isoDate] = { hours: 0, areaId: null, absenceCode: null };
+                empData[r.employeeId].dailyData[isoDate] = { hours: 0, areaId: null };
             }
             
-            // GESTIONE ASSENZE (Nuova logica)
-            if (r.isAbsence) {
-                empData[r.employeeId].dailyData[isoDate].absenceCode = getAbsenceCode(r.statusLabel);
-                return; // Se è assenza, non sommiamo ore e passiamo al prossimo
-            }
-
-            // GESTIONE ORE
-            const hours = parseFloat(r.duration || 0);
             const currentDayData = empData[r.employeeId].dailyData[isoDate];
             currentDayData.hours += hours;
             currentDayData.areaId = r.workAreaId; 
@@ -595,21 +554,23 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
 
         // 4. Creazione Matrice Dati
         
-        // RIGA 1: Intestazione Mese
+        // RIGA 1: Intestazione Mese (Centrato e Grassetto)
         const headerRow1 = [{ v: headerLabel, t: 's', s: { font: { bold: true }, alignment: centerStyle } }]; 
         
-        // RIGA 2: Intestazione "DIPENDENTE"
+        // RIGA 2: Intestazione "DIPENDENTE" (Centrato)
         const headerRow2 = [{ v: "DIPENDENTE", t: 's', s: { alignment: centerStyle } }]; 
         
         const daysOfWeek = ['D', 'L', 'M', 'M', 'G', 'V', 'S'];
 
-        // Loop per le colonne dei giorni
+        // Loop per le colonne dei giorni (Numeri e Lettere)
         dateArray.forEach(d => {
+            // Riga 1: Numeri (1, 2, 3...) - Centrati
             headerRow1.push({ v: d.getDate(), t: 'n', s: { alignment: centerStyle } });
+            // Riga 2: Lettere (L, M, M...) - Centrati
             headerRow2.push({ v: daysOfWeek[d.getDay()], t: 's', s: { alignment: centerStyle } });
         });
         
-        // Colonna TOTALE
+        // Colonna TOTALE (Centrato)
         headerRow1.push({ v: "TOTALE", t: 's', s: { font: { bold: true }, alignment: centerStyle } });
         headerRow2.push({ v: "", t: 's', s: { alignment: centerStyle } });
 
@@ -618,40 +579,28 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
         const sortedEmployees = Object.values(empData).sort((a,b) => a.name.localeCompare(b.name));
         
         sortedEmployees.forEach(emp => {
+            // Nome Dipendente (Centrato)
             const row = [{ v: emp.name, t: 's', s: { alignment: centerStyle } }];
             
             dateArray.forEach(d => {
                 const iso = d.toISOString().split('T')[0];
                 const dayData = emp.dailyData[iso];
-                
                 if (dayData && dayData.hours > 0) {
-                    // Cella con ORE LAVORATE (Colorata)
                     const cell = {
                         v: Number(dayData.hours.toFixed(2)),
                         t: 'n',
                         s: {
                             fill: { fgColor: { rgb: areaColorMap[dayData.areaId] || "FFFFFF" } },
-                            alignment: centerStyle
+                            alignment: centerStyle // AGGIUNTO ALLINEAMENTO QUI
                         }
                     };
                     row.push(cell); 
-                } else if (dayData && dayData.absenceCode) {
-                    // Cella con SIGLA ASSENZA (F, M, P...) - Grassetto
-                    const cell = {
-                        v: dayData.absenceCode,
-                        t: 's',
-                        s: { 
-                            alignment: centerStyle,
-                            font: { bold: true } 
-                        }
-                    };
-                    row.push(cell);
                 } else {
-                    // Cella vuota
+                    // Cella vuota ma con stile (opzionale, per mantenere allineamento se necessario)
                     row.push({ v: "", t: 's', s: { alignment: centerStyle } });
                 }
             });
-            // Totale Riga
+            // Totale Riga (Centrato)
             row.push({ v: Number(emp.total.toFixed(2)), t: 'n', s: { alignment: centerStyle, font: { bold: true } } });
             sheetData.push(row);
         });
@@ -660,7 +609,7 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
         sheetData.push([]);
         sheetData.push([]);
 
-        // Riepilogo Aree
+        // Riepilogo Aree (Intestazioni Centrate)
         sheetData.push([
             { v: "RIEPILOGO PER AREA", t: 's', s: { font: { bold: true }, alignment: centerStyle } },
             { v: "TOT", t: 's', s: { font: { bold: true }, alignment: centerStyle } }
@@ -670,11 +619,13 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
             const areaObj = allWorkAreas.find(a => a.name === areaName);
             const color = areaObj ? (areaColorMap[areaObj.id] || "FFFFFF") : "FFFFFF";
             
+            // Nome Area (Centrato con sfondo colorato)
             const cellName = {
                 v: areaName,
                 t: 's',
                 s: { fill: { fgColor: { rgb: color } }, font: { bold: true }, alignment: centerStyle }
             };
+            // Valore Ore (Centrato)
             const cellVal = {
                 v: Number(areaStats[areaName].toFixed(2)),
                 t: 'n',
@@ -682,33 +633,12 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
             };
             sheetData.push([cellName, cellVal]);
         });
-
-        // NUOVA SEZIONE: LEGENDA SIGLE ASSENZE
-        sheetData.push([]); // Riga vuota spaziatrice
-        sheetData.push([{ v: "LEGENDA SIGLE ASSENZE", t: 's', s: { font: { bold: true, underline: true } } }]);
-        
-        const legendItems = [
-            { code: 'F', desc: 'Ferie' },
-            { code: 'M', desc: 'Malattia' },
-            { code: 'P', desc: 'Permesso' },
-            { code: '104', desc: 'Legge 104' },
-            { code: 'I', desc: 'Infortunio' },
-            { code: 'AI', desc: 'Assenza Ingiustificata' },
-            { code: 'A', desc: 'Altro' }
-        ];
-
-        legendItems.forEach(item => {
-             sheetData.push([
-                 { v: item.code, t: 's', s: { font: { bold: true }, alignment: centerStyle } },
-                 { v: item.desc, t: 's', s: { alignment: { vertical: 'center', horizontal: 'left' } } }
-             ]);
-        });
         
         const ws = utils.aoa_to_sheet(sheetData);
         
-        // Larghezza colonne
+        // Larghezza colonne (Aumentiamo leggermente la colonna nomi per farli stare comodi)
         const wscols = [{wch: 30}]; 
-        dateArray.forEach(() => wscols.push({wch: 5})); 
+        dateArray.forEach(() => wscols.push({wch: 5})); // Leggermente più larghe per i numeri centrati
         wscols.push({wch: 12}); 
         ws['!cols'] = wscols;
 
@@ -1269,7 +1199,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         } catch (error) { const displayMessage = error.message.includes(":") ? error.message.split(":")[1].trim() : error.message; showNotification(`Errore generazione report: ${displayMessage || 'Errore Server.'}`, 'error'); console.error(error); }
         finally { if (isMounted) setIsLoading(false); }
         return () => { isMounted = false; };
-    }, [dateRange, reportAreaFilter, reportEmployeeFilter, allEmployees, allWorkAreas, showNotification]);
+    }, [dateRange, reportAreaFilter, reportEmployeeFilter, allEmployees, allWorkAreas, showNotification, currentUserRole, userData]); // CORRETTO: Aggiunte dipendenze currentUserRole e userData
 
     const handleReviewSkipBreak = useCallback(async (entryId, decision) => {
         if (!entryId || !decision) return;
@@ -1394,7 +1324,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                          <div className="flex flex-wrap justify-center py-2 sm:space-x-4">
                              <button onClick={() => handleSwitchView('dashboard')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'dashboard' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>🏠Dashboard</button>
                              <button onClick={() => handleSwitchView('employees')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'employees' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>👥Gestione Dipendenti</button>
-                             <button onClick={() => handleSwitchView('areas')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'areas' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>📍Gestione Aree</button>
+                             <button onClick={() => handleSwitchView('areas')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'areas' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>📍GestioneAree</button>
                              {/* MODIFICA: Moduli Forms disabilitato per ora */}
                              <button disabled className="py-2 px-3 sm:border-b-2 text-sm font-medium border-transparent text-gray-300 cursor-not-allowed" title="In arrivo...">📋Moduli Forms</button>
                              {currentUserRole === 'admin' && <button onClick={() => handleSwitchView('admins')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'admins' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>👮Gestione Admin</button>}
