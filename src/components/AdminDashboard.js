@@ -6,12 +6,13 @@ import { db } from '../firebase';
 import {
     collection, getDocs, query, where,
     Timestamp, onSnapshot, updateDoc, doc, limit,
-    addDoc, writeBatch, deleteDoc, arrayUnion // AGGIUNTO arrayUnion
+    addDoc, writeBatch, deleteDoc, arrayUnion
 } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import CompanyLogo from './CompanyLogo';
 import AdminModal from './AdminModal'; 
 import MappaPresenze from './MappaPresenze'; 
+// IMPORT IMPORTANTE: Libreria che supporta stili e colori
 import { utils, writeFile } from 'xlsx-js-style'; 
 import { saveAs } from 'file-saver';
 
@@ -22,7 +23,7 @@ import { saveAs } from 'file-saver';
 const SUPER_ADMIN_EMAIL = "domenico.leoncino@tcsitalia.com"; 
 
 // --- CONFIGURAZIONE LIMITI ---
-const MAX_DEVICE_LIMIT = 2; 
+const MAX_DEVICE_LIMIT = 2; // Imposta qui il numero massimo di dispositivi consentiti per dipendente
 
 // Palette colori per Excel (Aree)
 const AREA_COLORS = [
@@ -91,6 +92,7 @@ const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) =>
         onSave(entry.id, { ...formData, skippedBreak: skipPause });
     };
 
+    // Stili Standard per Modali
     const overlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: 99998, backdropFilter: 'blur(4px)' };
     const containerStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' };
     const modalStyle = { backgroundColor: '#ffffff', width: '100%', maxWidth: '500px', maxHeight: '85vh', borderRadius: '12px', overflow: 'hidden', pointerEvents: 'auto', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column' };
@@ -144,7 +146,9 @@ const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) =>
     );
 };
 
+// === COMPONENTE DEDICATO PER AGGIUNGERE FORMS (STILE IDENTICO) ===
 const AddFormModal = ({ show, onClose, workAreas, user, onDataUpdate, currentUserRole, userData, showNotification }) => {
+    // 1. Hooks (sempre in cima)
     const [formTitle, setFormTitle] = useState('');
     const [formUrl, setFormUrl] = useState('');
     const [formAreaId, setFormAreaId] = useState('');
@@ -158,6 +162,7 @@ const AddFormModal = ({ show, onClose, workAreas, user, onDataUpdate, currentUse
         return [];
     }, [currentUserRole, userData, workAreas]);
 
+    // 2. Return condizionale (dopo gli hooks)
     if (!show) return null;
 
     const handleSaveForm = async (e) => {
@@ -182,6 +187,7 @@ const AddFormModal = ({ show, onClose, workAreas, user, onDataUpdate, currentUse
         } finally { setIsSaving(false); }
     };
 
+    // Stili
     const overlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: 99998, backdropFilter: 'blur(4px)' };
     const containerStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' };
     const modalStyle = { backgroundColor: '#ffffff', width: '100%', maxWidth: '500px', maxHeight: '85vh', borderRadius: '12px', overflow: 'hidden', pointerEvents: 'auto', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column' };
@@ -193,17 +199,34 @@ const AddFormModal = ({ show, onClose, workAreas, user, onDataUpdate, currentUse
             <div style={overlayStyle} onClick={onClose} />
             <div style={containerStyle}>
                 <div style={modalStyle}>
+                    {/* Header */}
                     <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#111827' }}>🔗 Aggiungi Modulo Forms</h3>
                         <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '24px', color: '#9ca3af', cursor: 'pointer', lineHeight: '1' }}>&times;</button>
                     </div>
+
+                    {/* Body */}
                     <div style={{ padding: '24px', overflowY: 'auto' }}>
                         <form id="add-form-submit" onSubmit={handleSaveForm} className="space-y-5">
-                            <div><label className={labelClasses}>Titolo Modulo</label><input type="text" value={formTitle} onChange={e => setFormTitle(e.target.value)} placeholder="Es. Checklist Sicurezza" className={inputClasses} required /></div>
-                            <div><label className={labelClasses}>Link Microsoft Forms (URL)</label><input type="url" value={formUrl} onChange={e => setFormUrl(e.target.value)} placeholder="https://forms.office.com/..." className={inputClasses} required /></div>
-                            <div><label className={labelClasses}>Assegna all'Area</label><select value={formAreaId} onChange={e => setFormAreaId(e.target.value)} className={inputClasses} required><option value="">-- Seleziona Area --</option>{availableAreas.map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}</select></div>
+                            <div>
+                                <label className={labelClasses}>Titolo Modulo</label>
+                                <input type="text" value={formTitle} onChange={e => setFormTitle(e.target.value)} placeholder="Es. Checklist Sicurezza" className={inputClasses} required />
+                            </div>
+                            <div>
+                                <label className={labelClasses}>Link Microsoft Forms (URL)</label>
+                                <input type="url" value={formUrl} onChange={e => setFormUrl(e.target.value)} placeholder="https://forms.office.com/..." className={inputClasses} required />
+                            </div>
+                            <div>
+                                <label className={labelClasses}>Assegna all'Area</label>
+                                <select value={formAreaId} onChange={e => setFormAreaId(e.target.value)} className={inputClasses} required>
+                                    <option value="">-- Seleziona Area --</option>
+                                    {availableAreas.map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}
+                                </select>
+                            </div>
                         </form>
                     </div>
+
+                    {/* Footer */}
                     <div style={{ padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
                         <button type="button" onClick={onClose} className="px-5 py-2.5 bg-white border border-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-50 transition-colors text-sm shadow-sm">Annulla</button>
                         <button type="submit" form="add-form-submit" disabled={isSaving} className="px-5 py-2.5 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 transition-colors text-sm shadow-md disabled:opacity-70 disabled:cursor-not-allowed">{isSaving ? 'Salvataggio...' : 'Crea Modulo'}</button>
@@ -509,7 +532,7 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
             if (t.includes('FERIE')) return 'F';
             if (t.includes('MALATTIA')) return 'M';
             if (t.includes('PERMESSO')) return 'P';
-            if (t.includes('LEGGE 104')) return 'L104'; 
+            if (t.includes('LEGGE 104')) return '104'; 
             if (t.includes('INFORTUNIO')) return 'I';
             if (t.includes('INGIUSTIFICATA')) return 'AI';
             if (t.includes('ALTRO')) return 'A';
@@ -668,7 +691,7 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
             { code: 'F', desc: 'Ferie' },
             { code: 'M', desc: 'Malattia' },
             { code: 'P', desc: 'Permesso' },
-            { code: 'L104', desc: 'Legge 104' },
+            { code: '104', desc: 'Legge 104' },
             { code: 'I', desc: 'Infortunio' },
             { code: 'AI', desc: 'Assenza Ingiustificata' },
             { code: 'A', desc: 'Altro' }
@@ -1195,7 +1218,20 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             const generateReportFunction = httpsCallable(functions, 'generateTimeReport');
             const result = await generateReportFunction({ startDate: dateRange.start, endDate: dateRange.end, employeeIdFilter: reportEmployeeFilter, areaIdFilter: reportAreaFilter });
             if (!isMounted) return; 
-            const fetchedEntries = result.data.reports;
+            
+            let fetchedEntries = result.data.reports;
+
+            // --- FILTRO AGGIUNTIVO PER PREPOSTI ---
+            if (currentUserRole === 'preposto') {
+                const managedIds = userData?.managedAreaIds || [];
+                fetchedEntries = fetchedEntries.filter(entry => {
+                    // Se è un'assenza la manteniamo (il dipendente fa parte del gruppo)
+                    // Se è una timbratura, controlliamo che sia stata fatta in un'area gestita da questo preposto
+                    if (entry.isAbsence) return true; 
+                    return managedIds.includes(entry.workAreaId);
+                });
+            }
+
             const areaHoursMap = new Map(allWorkAreas.map(area => [area.id, 0]));
             const formatTime = (date, time) => { const finalTime = time === 'In corso' ? '99:99' : time; const formattedDate = date.replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3-$2-$1'); return new Date(`${formattedDate} ${finalTime}`); };
             const reportData = fetchedEntries.map(entry => {
