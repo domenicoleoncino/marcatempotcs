@@ -22,6 +22,9 @@ import { saveAs } from 'file-saver';
 
 const SUPER_ADMIN_EMAIL = "domenico.leoncino@tcsitalia.com"; 
 
+// --- CONFIGURAZIONE LIMITI ---
+const MAX_DEVICE_LIMIT = 2; // Imposta qui il numero massimo di dispositivi consentiti per dipendente
+
 // Palette colori per Excel (Aree)
 const AREA_COLORS = [
     "FFCCCC", // Rosso chiaro
@@ -338,7 +341,21 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                 const clockOutType = isSelfClockIn ? 'manualClockOut' : 'adminClockOut'; 
                                 return ( 
                                     <tr key={emp.id} className="hover:bg-blue-50/30 transition-colors">
-                                        <td className="px-6 py-4 whitespace-nowrap"><div className="text-sm font-bold text-gray-900">{emp.name} {emp.surname}</div><div className="text-xs text-gray-500 break-all">{emp.email}</div></td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            {/* VISUALIZZAZIONE NOME CON ICONA DI AVVISO (MANTENUTA) */}
+                                            <div className="flex items-center gap-2">
+                                                <div className="text-sm font-bold text-gray-900">{emp.name} {emp.surname}</div>
+                                                {emp.deviceIds && emp.deviceIds.length > MAX_DEVICE_LIMIT && (
+                                                    <div className="relative group cursor-help">
+                                                        <span className="text-lg">⚠️</span>
+                                                        <span className="absolute left-0 bottom-full mb-1 w-max px-2 py-1 text-xs text-white bg-red-600 rounded shadow-lg hidden group-hover:block z-50">
+                                                            Limite superato: {emp.deviceIds.length} dispositivi!
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="text-xs text-gray-500 break-all">{emp.email}</div>
+                                        </td>
                                         <td className="px-6 py-4 whitespace-nowrap"><span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-bold rounded-full border ${emp.activeEntry ? (emp.activeEntry.status === 'In Pausa' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' : 'bg-green-50 text-green-700 border-green-200') : 'bg-gray-100 text-gray-600 border-gray-200'}`}>{emp.activeEntry ? emp.activeEntry.status : 'Non al Lavoro'}</span></td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 max-w-xs truncate" title={emp.workAreaNames?.join(', ')}>{emp.workAreaNames?.join(', ') || 'Nessuna'}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -618,7 +635,7 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
         // Riepilogo Aree (Intestazioni Centrate)
         sheetData.push([
             { v: "RIEPILOGO PER AREA", t: 's', s: { font: { bold: true }, alignment: centerStyle } },
-            { v: "TOT", t: 's', s: { font: { bold: true }, alignment: centerStyle } }
+            { v: "ORE TOTALI", t: 's', s: { font: { bold: true }, alignment: centerStyle } }
         ]);
 
         Object.keys(areaStats).sort().forEach(areaName => {
@@ -894,6 +911,18 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         if (user && userData) fetchData();
     }, [user, userData, fetchData]); 
 
+    // --- NUOVO: Controllo Dispositivi all'avvio (Popup attivo) ---
+    useEffect(() => {
+        if (allEmployees.length > 0) {
+            const violators = allEmployees.filter(e => e.deviceIds && e.deviceIds.length > MAX_DEVICE_LIMIT);
+            if (violators.length > 0) {
+                setTimeout(() => {
+                    showNotification(`ATTENZIONE: ${violators.length} dipendenti hanno superato il limite di ${MAX_DEVICE_LIMIT} dispositivi! Controlla la lista.`, 'error');
+                }, 1000);
+            }
+        }
+    }, [allEmployees, showNotification]);
+
     const sortedAndFilteredEmployees = useMemo(() => {
         const employeesWithDetails = managedEmployees.map(emp => ({
             ...emp,
@@ -963,8 +992,8 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                     if (currentUserRole === 'preposto') {
                          const managedAreaIds = userData?.managedAreaIds || []; 
                          if (managedAreaIds.length === 0) return false; 
-                        const employee = allEmployees.find(emp => emp.id === detail.employeeId);
-                        return employee?.workAreaIds?.some(waId => managedAreaIds.includes(waId));
+                         // MODIFICA QUI: Il dipendente è visibile solo se sta timbrando in un'area gestita dal preposto
+                         return managedAreaIds.includes(detail.workAreaId);
                     }
                     return false; 
                 }).sort((a, b) => a.employeeName.localeCompare(b.employeeName)); 
@@ -1282,7 +1311,8 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                              <button onClick={() => handleSwitchView('dashboard')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'dashboard' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>🏠Dashboard</button>
                              <button onClick={() => handleSwitchView('employees')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'employees' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>👥Gestione Dipendenti</button>
                              <button onClick={() => handleSwitchView('areas')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'areas' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>📍Gestione Aree</button>
-                             <button onClick={() => handleSwitchView('forms')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'forms' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>📋Moduli Forms</button>
+                             {/* MODIFICA: Moduli Forms disabilitato per ora */}
+                             <button disabled className="py-2 px-3 sm:border-b-2 text-sm font-medium border-transparent text-gray-300 cursor-not-allowed" title="In arrivo...">📋Moduli Forms</button>
                              {currentUserRole === 'admin' && <button onClick={() => handleSwitchView('admins')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'admins' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>👮Gestione Admin</button>}
                              {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (
                                 <button 
