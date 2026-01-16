@@ -79,7 +79,7 @@ const LoginScreen = () => {
 
                 {/* Form Card (bg-white, shadow, rounded) */}
                 <div className="bg-white p-8 rounded-xl shadow-2xl border border-gray-200">
-                    <h2 className="text-2xl font-bold text-center text-gray-800 mb-6">Accesso</h2>
+                    <h2 className="text-2xl font-bold text-center text-gray-800 mb-6">Accesso Marcatempo</h2>
                     
                     <form onSubmit={handleLogin} className="space-y-5">
                         <div>
