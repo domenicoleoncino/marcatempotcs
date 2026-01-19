@@ -12,6 +12,11 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 // ===========================================
+// --- CONFIGURAZIONE BLOCCO RIENTRO ---
+// ===========================================
+const MIN_REENTRY_DELAY_MINUTES = 30; // Tempo minimo di attesa (in minuti) tra Uscita e nuova Entrata
+
+// ===========================================
 // --- 1. FUNZIONE UTILITY DEVICE ID ---
 // ===========================================
 function getOrGenerateDeviceId() {
@@ -281,6 +286,27 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             const currentLon = inRangeArea?.longitude;
 
             if (action === 'clockIn') {
+                // =========================================================
+                // CONTROLLO DI SICUREZZA: RIENTRO TROPPO RAPIDO
+                // =========================================================
+                if (todaysEntries.length > 0) {
+                    const lastEntry = todaysEntries[0]; // È ordinato decrescente, quindi il primo è l'ultimo inserito
+                    if (lastEntry.clockOutTime) {
+                        const lastOutDate = lastEntry.clockOutTime.toDate();
+                        const now = new Date();
+                        const diffMs = now - lastOutDate;
+                        const diffMins = Math.floor(diffMs / 60000); // Differenza in minuti
+
+                        if (diffMins < MIN_REENTRY_DELAY_MINUTES) {
+                            const remaining = MIN_REENTRY_DELAY_MINUTES - diffMins;
+                            alert(`⛔ BLOCCO SICUREZZA: Non puoi timbrare subito dopo l'uscita.\n\nDevi attendere ancora ${remaining} minuti.`);
+                            setIsProcessing(false);
+                            return; // Blocca tutto
+                        }
+                    }
+                }
+                // =========================================================
+
                 let areaIdToClockIn = null;
                 let note = ''; 
 
