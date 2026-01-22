@@ -7,6 +7,7 @@ import LoginScreen from './components/LoginScreen';
 import AdminDashboard from './components/AdminDashboard';
 import EmployeeDashboard from './components/EmployeeDashboard';
 import ChangePasswordScreen from './components/ChangePasswordScreen';
+import SimpleEmployeeApp from './components/SimpleEmployeeApp';
 
 console.log("PROGETTO ATTUALMENTE IN USO:", process.env.REACT_APP_PROJECT_ID);
 
@@ -154,7 +155,7 @@ const App = () => {
     }
     
     if (userData.role === 'dipendente') {
-        return <EmployeeDashboard user={user} employeeData={userData} handleLogout={handleLogout} allWorkAreas={allWorkAreas} />;
+       return <SimpleEmployeeApp user={user} employeeData={userData} handleLogout={handleLogout} allWorkAreas={allWorkAreas} />;
     }
 
     return (
