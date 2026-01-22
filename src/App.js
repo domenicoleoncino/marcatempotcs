@@ -19,6 +19,22 @@ const App = () => {
     const [isAppActive, setIsAppActive] = useState(true);
     const [appStatusChecked, setAppStatusChecked] = useState(false);
 
+    // --- NUOVO STATO: Rilevamento Mobile ---
+    // Se lo schermo è più piccolo di 900px, lo consideriamo "Mobile"
+    const [isMobile, setIsMobile] = useState(window.innerWidth < 900);
+
+    // Effect #0: Listener per ridimensionamento finestra (PC vs Mobile)
+    useEffect(() => {
+        const handleResize = () => {
+            setIsMobile(window.innerWidth < 900);
+        };
+
+        window.addEventListener('resize', handleResize);
+        
+        // Pulizia listener quando il componente viene smontato
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
     // Effect #1: Controlla stato app (kill switch)
     useEffect(() => {
         const configRef = doc(db, 'app_config', 'status');
@@ -154,8 +170,16 @@ const App = () => {
         return <AdminDashboard user={user} userData={userData} handleLogout={handleLogout} allWorkAreas={allWorkAreas} />;
     }
     
+    // --- MODIFICA QUI: LOGICA DI SCELTA INTERFACCIA ---
     if (userData.role === 'dipendente') {
-       return <SimpleEmployeeApp user={user} employeeData={userData} handleLogout={handleLogout} allWorkAreas={allWorkAreas} />;
+       // Se è un dispositivo mobile (schermo stretto), mostra l'App Semplificata
+       if (isMobile) {
+           return <SimpleEmployeeApp user={user} employeeData={userData} handleLogout={handleLogout} allWorkAreas={allWorkAreas} />;
+       }
+       // Se è un PC (schermo largo), mostra la Dashboard Completa
+       else {
+           return <EmployeeDashboard user={user} employeeData={userData} handleLogout={handleLogout} allWorkAreas={allWorkAreas} />;
+       }
     }
 
     return (
