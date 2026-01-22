@@ -6,7 +6,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 
-// --- MOTIVI DI MANCATA PAUSA ---
+// --- MOTIVI DI MANCATA PAUSA (Presi dal tuo EmployeeDashboard.js) ---
 const PAUSE_REASONS = [
     { code: '01', reason: 'Mancata pausa per intervento urgente.' },
     { code: '02', reason: 'Mancata pausa per ore non complete.' },
@@ -36,7 +36,7 @@ const styles = {
     headerInner: {
         width: '100%',
         maxWidth: '500px', 
-        padding: '8px 15px', // Ridotto padding header
+        padding: '10px 20px', 
         display: 'grid',
         gridTemplateColumns: '1fr auto 1fr', 
         alignItems: 'center',
@@ -49,24 +49,24 @@ const styles = {
         alignItems: 'center',
         justifyContent: 'center'
     },
-    logo: { height: '45px', objectFit: 'contain', marginBottom: '2px' }, // Logo un po' più piccolo
-    companyName: { fontWeight: '900', color: '#001529', fontSize: '0.8rem', letterSpacing: '1px', textTransform: 'uppercase' }, 
+    logo: { height: '55px', objectFit: 'contain', marginBottom: '4px' }, 
+    companyName: { fontWeight: '900', color: '#001529', fontSize: '0.9rem', letterSpacing: '1.5px', textTransform: 'uppercase' }, 
     logoutBtn: { 
         justifySelf: 'end',
         backgroundColor: '#fff1f0', 
         border: '1px solid #ffccc7', 
         color: '#f5222d', 
-        padding: '6px 12px', 
-        borderRadius: '6px', 
+        padding: '8px 16px', 
+        borderRadius: '8px', 
         cursor: 'pointer', 
         fontWeight: 'bold', 
-        fontSize: '0.75rem',
+        fontSize: '0.85rem',
         transition: 'all 0.2s',
         whiteSpace: 'nowrap' 
     },
     body: { 
         flex: 1, 
-        padding: '15px', 
+        padding: '20px', 
         display: 'flex', 
         flexDirection: 'column', 
         alignItems: 'center', 
@@ -75,46 +75,23 @@ const styles = {
         width: '100%',
         boxSizing: 'border-box'
     },
-    clockCard: { backgroundColor: '#fff', padding: '15px', borderRadius: '12px', textAlign: 'center', width: '100%', marginBottom: '10px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', boxSizing: 'border-box' },
-    clockTime: { fontSize: '2.5rem', fontWeight: '800', color: '#1890ff', lineHeight: 1, marginBottom: '5px', letterSpacing: '-1px' }, 
-    clockDate: { color: '#8c8c8c', fontSize: '0.9rem', textTransform: 'capitalize', fontWeight: '500' },
-    employeeName: { marginTop: '5px', color: '#262626', fontWeight: '600', fontSize: '0.9rem' },
-    
-    // --- STILE COMPATTO RIEPILOGO ---
-    sessionInfoCard: {
-        backgroundColor: '#f0f5ff',
-        border: '1px solid #adc6ff',
-        borderRadius: '8px',
-        width: '100%',
-        padding: '10px',
-        marginBottom: '15px',
-        boxSizing: 'border-box',
-        color: '#003a8c',
-        fontSize: '0.9rem',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '5px'
-    },
-    sessionRow: {
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-
-    statusBox: { padding: '8px', borderRadius: '8px', marginBottom: '15px', width: '100%', textAlign: 'center', fontWeight: '600', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxSizing: 'border-box' },
-    
+    clockCard: { backgroundColor: '#fff', padding: '20px', borderRadius: '15px', textAlign: 'center', width: '100%', marginBottom: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', boxSizing: 'border-box' },
+    clockTime: { fontSize: '3rem', fontWeight: '800', color: '#1890ff', lineHeight: 1, marginBottom: '5px', letterSpacing: '-1px' }, 
+    clockDate: { color: '#8c8c8c', fontSize: '1rem', textTransform: 'capitalize', fontWeight: '500' },
+    employeeName: { marginTop: '8px', color: '#262626', fontWeight: '600', fontSize: '0.95rem' },
+    statusBox: { padding: '12px', borderRadius: '10px', marginBottom: '25px', width: '100%', textAlign: 'center', fontWeight: '600', fontSize: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxSizing: 'border-box' },
     btnBig: { 
         width: '100%', 
-        padding: '20px', 
+        padding: '22px', 
         fontSize: '1.2rem', 
         fontWeight: '700', 
         border: 'none', 
-        borderRadius: '12px', 
+        borderRadius: '14px', 
         cursor: 'pointer', 
         color: '#fff', 
-        boxShadow: '0 4px 10px rgba(0,0,0,0.15)', 
+        boxShadow: '0 6px 12px rgba(0,0,0,0.1)', 
         transition: 'transform 0.1s, filter 0.2s', 
-        marginBottom: '10px', 
+        marginBottom: '12px', 
         display: 'flex', 
         alignItems: 'center', 
         justifyContent: 'center', 
@@ -126,37 +103,9 @@ const styles = {
     btnOrange: { backgroundColor: '#faad14', backgroundImage: 'linear-gradient(to bottom right, #ffc53d, #faad14)' },
     btnBlue: { backgroundColor: '#1890ff', backgroundImage: 'linear-gradient(to bottom right, #40a9ff, #1890ff)' },
     btnDisabled: { backgroundColor: '#f5f5f5', color: '#b8b8b8', cursor: 'not-allowed', boxShadow: 'none', backgroundImage: 'none', border: '1px solid #d9d9d9' },
-    
-    // --- REPORT SECTION RISTRETTA ---
-    reportSection: { 
-        marginTop: 'auto', // Spinge in basso ma non troppo
-        backgroundColor: '#fff', 
-        padding: '10px 15px', 
-        borderRadius: '10px', 
-        width: '100%', 
-        boxShadow: '0 -2px 10px rgba(0,0,0,0.03)', 
-        border: '1px solid #f0f0f0', 
-        boxSizing: 'border-box',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '8px'
-    },
-    selectContainer: { display: 'flex', gap: '8px' },
-    select: { flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid #d9d9d9', fontSize: '0.85rem', backgroundColor: '#fff', outline: 'none' },
-    btnReport: { 
-        width: '100%', 
-        padding: '10px', 
-        fontSize: '0.9rem', 
-        fontWeight: '600', 
-        border: 'none', 
-        borderRadius: '6px', 
-        cursor: 'pointer', 
-        color: '#fff', 
-        backgroundColor: '#595959',
-        boxShadow: 'none'
-    },
-    
-    footer: { textAlign: 'center', padding: '15px', color: '#bfbfbf', fontSize: '0.7rem', lineHeight: '1.2', boxSizing: 'border-box' }
+    select: { width: '100%', padding: '14px', borderRadius: '10px', border: '1px solid #d9d9d9', fontSize: '1rem', marginBottom: '15px', backgroundColor: '#fff', outline: 'none', boxSizing: 'border-box' },
+    reportSection: { marginTop: '10px', backgroundColor: '#fff', padding: '20px', borderRadius: '15px', width: '100%', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', border: '1px solid #f0f0f0', boxSizing: 'border-box' },
+    footer: { textAlign: 'center', padding: '30px 20px', color: '#bfbfbf', fontSize: '0.75rem', lineHeight: '1.5', boxSizing: 'border-box' }
 };
 
 function getDistanceInMeters(lat1, lon1, lat2, lon2) {
@@ -265,7 +214,7 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
     const isOnPause = pauseStatus === 'ACTIVE';
     const isOut = !activeEntry;
 
-    // --- FUNZIONE AZIONI ---
+    // --- FUNZIONE AZIONI COMPLETA DI LOGICA PAUSA ---
     const handleAction = async (action) => {
         setIsProcessing(true);
         try {
@@ -283,12 +232,13 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
 
             } else if (action === 'clockOut') {
                 
-                // --- LOGICA MANCATA PAUSA ---
+                // --- LOGICA MANCATA PAUSA COME DA DASHBOARD ORIGINALE ---
                 let finalReasonCode = null;
                 let finalNoteText = '';
                 const area = allWorkAreas.find(a => a.id === activeEntry.workAreaId);
                 const pauseDuration = area?.pauseDuration || 0;
                 
+                // Se c'è una pausa prevista e non è stata completata
                 if (pauseDuration > 0 && pauseStatus !== 'COMPLETED') { 
                     const reasonOptions = PAUSE_REASONS.map((r, i) => `${i + 1} - ${r.reason}`).join('\n');
                     
@@ -301,6 +251,7 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
                             `Seleziona il numero del motivo (da 1 a ${PAUSE_REASONS.length}):\n\n${reasonOptions}`
                         );
                         
+                        // Controllo annullamento prompt
                         if (selectedCode === null) {
                             setIsProcessing(false);
                             return; 
@@ -317,6 +268,7 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
                         
                         finalReasonCode = selectedReason.code;
 
+                        // Se ha scelto "Altro" (04), chiediamo il testo
                         if (selectedReason.code === '04') { 
                             finalNoteText = window.prompt("Hai selezionato 'Altro'. Specifica il motivo (OBBLIGATORIO):");
                             if (!finalNoteText || finalNoteText.trim() === '') {
@@ -328,11 +280,14 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
                             finalNoteText = selectedReason.reason; 
                         }
                     } else {
+                        // Ha premuto Annulla sul confirm iniziale
                         setIsProcessing(false);
                         return;
                     }
                 }
+                // ----------------------------------------------------
 
+                // Eseguiamo l'uscita passando anche il motivo (pauseSkipReason)
                 const res = await clockOut({ 
                     deviceId, 
                     isGpsRequired, 
@@ -387,7 +342,7 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
             docPDF.setFontSize(22); docPDF.setFont("helvetica", "bold"); docPDF.setTextColor(24, 144, 255);
             docPDF.text("TCS ITALIA S.R.L.", 14, 20);
             docPDF.setFontSize(10); docPDF.setFont("helvetica", "normal"); docPDF.setTextColor(100);
-            docPDF.text("Via ....., Città (PROV)", 14, 26); docPDF.text("P.IVA: ...........", 14, 31);
+            docPDF.text("Via Castagna III Trav 1, Casoria (NA)", 14, 26); docPDF.text("P.IVA: 05552321217", 14, 31);
             docPDF.setDrawColor(200); docPDF.line(14, 38, 196, 38);
             docPDF.setFontSize(14); docPDF.setTextColor(0); docPDF.setFont("helvetica", "bold");
             docPDF.text(`Report: ${["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"][selectedMonth]} ${selectedYear}`, 14, 50);
@@ -433,32 +388,9 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
                     <div style={styles.clockTime}>{currentTime.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</div>
                     <div style={styles.employeeName}>{employeeData.name} {employeeData.surname}</div>
                 </div>
-                
-                {/* --- BOX STATO GPS (Ridotto) --- */}
                 <div style={{...styles.statusBox, backgroundColor: gpsLoading?'#fffbe6':inRangeArea?'#f6ffed':'#fff1f0', color: gpsLoading?'#d48806':inRangeArea?'#389e0d':'#cf1322', border:`1px solid ${gpsLoading?'#ffe58f':inRangeArea?'#b7eb8f':'#ffa39e'}`}}>
                     {gpsLoading ? "📡 Ricerca GPS..." : locationError ? `⚠️ ${locationError}` : inRangeArea ? `✅ Zona: ${inRangeArea.name}` : isGpsRequired ? "❌ Fuori Zona" : "ℹ️ GPS Opzionale"}
                 </div>
-
-                {/* --- RIEPILOGO SESSIONE (Nuovo Design Compatto) --- */}
-                {activeEntry && (
-                    <div style={styles.sessionInfoCard}>
-                        <div style={styles.sessionRow}>
-                            <span>🟢 Entrata:</span>
-                            <strong>{activeEntry.clockInTime.toDate().toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'})}</strong>
-                        </div>
-                        <div style={styles.sessionRow}>
-                            <span>📍 Cantiere:</span>
-                            <strong style={{maxWidth:'200px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{workAreaName}</strong>
-                        </div>
-                        {pauseStatus === 'ACTIVE' && (
-                            <div style={{...styles.sessionRow, color: '#d48806', fontWeight: 'bold', marginTop: 5}}>
-                                <span>☕ Stato:</span>
-                                <span>IN PAUSA</span>
-                            </div>
-                        )}
-                    </div>
-                )}
-
                 {isOut && (
                     <>
                         {!isGpsRequired && (
@@ -472,40 +404,43 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
                         </button>
                     </>
                 )}
-                
                 {isWorking && (
-                    <div style={{display:'flex', gap:'15px', width:'100%'}}>
-                        <button style={{...styles.btnBig, ...(isProcessing || pauseStatus === 'COMPLETED' ? styles.btnDisabled : styles.btnOrange), flex:1, fontSize:'1rem'}} disabled={isProcessing || pauseStatus === 'COMPLETED'} onClick={() => handleAction('clockPause')}>
-                            {pauseStatus === 'COMPLETED' ? 'PAUSA OK' : '☕ PAUSA'}
-                        </button>
-                        <button style={{...styles.btnBig, ...styles.btnRed, flex:1, fontSize:'1rem'}} disabled={isProcessing} onClick={() => handleAction('clockOut')}>
-                            🚪 USCITA
-                        </button>
-                    </div>
+                    <>
+                        <div style={{...styles.statusBox, backgroundColor:'#e6f7ff', border:'1px solid #91d5ff', color:'#0050b3'}}>📍 Lavoro in corso: <strong>{workAreaName}</strong></div>
+                        <div style={{display:'flex', gap:'15px', width:'100%'}}>
+                            <button style={{...styles.btnBig, ...(isProcessing || pauseStatus === 'COMPLETED' ? styles.btnDisabled : styles.btnOrange), flex:1, fontSize:'1.1rem'}} disabled={isProcessing || pauseStatus === 'COMPLETED'} onClick={() => handleAction('clockPause')}>
+                                {pauseStatus === 'COMPLETED' ? 'PAUSA OK' : '☕ PAUSA'}
+                            </button>
+                            <button style={{...styles.btnBig, ...styles.btnRed, flex:1, fontSize:'1.1rem'}} disabled={isProcessing} onClick={() => handleAction('clockOut')}>
+                                🚪 USCITA
+                            </button>
+                        </div>
+                    </>
                 )}
-                
                 {isOnPause && (
-                    <button style={{...styles.btnBig, ...styles.btnBlue}} disabled={isProcessing} onClick={() => handleAction('clockPause')}>▶️ FINE PAUSA</button>
+                    <>
+                        <div style={{...styles.statusBox, backgroundColor:'#fffbe6', border:'1px solid #ffe58f', color:'#d48806'}}>⏸️ SEI IN PAUSA</div>
+                        <button style={{...styles.btnBig, ...styles.btnBlue}} disabled={isProcessing} onClick={() => handleAction('clockPause')}>▶️ FINE PAUSA</button>
+                    </>
                 )}
-
-                {/* --- SEZIONE REPORT RISTRETTA --- */}
                 <div style={styles.reportSection}>
-                    <div style={{fontSize:'0.8rem', fontWeight:'bold', color:'#595959', textAlign:'center'}}>📄 Scarica Report Ore</div>
-                    <div style={styles.selectContainer}>
-                        <select style={styles.select} value={selectedMonth} onChange={(e)=>setSelectedMonth(parseInt(e.target.value))}>
+                    <h4 style={{margin:'0 0 15px 0', textAlign:'center', color:'#595959'}}>📄 Scarica Report Ore</h4>
+                    <div style={{display:'flex', gap:'10px', marginBottom:'15px'}}>
+                        <select style={{...styles.select, marginBottom:0}} value={selectedMonth} onChange={(e)=>setSelectedMonth(parseInt(e.target.value))}>
                             {["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"].map((m,i) => <option key={i} value={i}>{m}</option>)}
                         </select>
-                        <select style={{...styles.select, flex: 0.6}} value={selectedYear} onChange={(e)=>setSelectedYear(parseInt(e.target.value))}>
+                        <select style={{...styles.select, marginBottom:0}} value={selectedYear} onChange={(e)=>setSelectedYear(parseInt(e.target.value))}>
                             {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
                         </select>
                     </div>
-                    <button style={styles.btnReport} onClick={handleExportPDF} disabled={isGeneratingPdf}>
-                        {isGeneratingPdf ? '⏳' : 'SCARICA PDF'}
+                    <button style={{...styles.btnBig, backgroundColor: '#434343', fontSize:'1rem', padding:'15px', marginBottom:0, boxShadow:'none'}} onClick={handleExportPDF} disabled={isGeneratingPdf}>
+                        {isGeneratingPdf ? 'PDF...' : 'SCARICA PDF'}
                     </button>
                 </div>
             </div>
             <div style={styles.footer}>
-                TCS Italia App v2.1 - D.Leoncino
+                TCS Italia App v2.0 <br/>
+                <strong>Creato da D.Leoncino</strong>
             </div>
         </div>
     );
