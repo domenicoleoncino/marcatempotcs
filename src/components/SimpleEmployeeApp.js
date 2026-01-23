@@ -80,10 +80,9 @@ const styles = {
     clockDate: { color: '#8c8c8c', fontSize: '0.85rem', textTransform: 'capitalize', fontWeight: '500' },
     employeeName: { marginTop: '4px', color: '#262626', fontWeight: '600', fontSize: '0.95rem' },
     
-    // --- INFO LINEA UNICA (COMPATTA E DINAMICA) ---
+    // --- INFO LINEA UNICA (STABILE) ---
     compactInfoLine: {
         width: '100%',
-        textAlign: 'center',
         fontSize: '1rem',
         fontWeight: '600',
         marginBottom: '15px', 
@@ -91,12 +90,15 @@ const styles = {
         borderRadius: '8px',
         border: '1px solid', 
         backgroundColor: '#fff',
-        display: 'flex',
-        justifyContent: 'center',
+        display: 'grid', 
+        gridTemplateColumns: '1fr auto 1fr', 
         alignItems: 'center',
-        gap: '15px',
-        color: '#333'
+        color: '#333',
+        boxSizing: 'border-box'
     },
+    infoColLeft: { textAlign: 'right', paddingRight: '10px' },
+    infoColCenter: { color: '#d9d9d9' },
+    infoColRight: { textAlign: 'left', paddingLeft: '10px' },
 
     statusBox: { padding: '5px', borderRadius: '6px', marginBottom: '10px', width: '100%', textAlign: 'center', fontWeight: '600', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', boxSizing: 'border-box' },
     
@@ -124,7 +126,7 @@ const styles = {
     btnBlue: { backgroundColor: '#1890ff', backgroundImage: 'linear-gradient(to bottom right, #40a9ff, #1890ff)' },
     btnDisabled: { backgroundColor: '#f5f5f5', color: '#b8b8b8', cursor: 'not-allowed', boxShadow: 'none', backgroundImage: 'none', border: '1px solid #d9d9d9' },
     
-    // --- REPORT SECTION INGRANDITA ---
+    // --- REPORT SECTION ---
     reportSection: { 
         marginTop: '25px', 
         backgroundColor: '#fff', 
@@ -258,7 +260,6 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
     }, [employeeData]);
 
     // --- 2. RECUPERA LE VOCI DEL "GIORNO DI RIFERIMENTO" (SOLO DATI, NO CALCOLI TEMPO) ---
-    // Questo snapshot scatta SOLO se cambiano i dati nel DB, non ogni secondo.
     useEffect(() => {
         if (!employeeData?.id || !lastEntry) {
             setRawTodayEntries([]);
@@ -286,7 +287,7 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
         });
 
         return () => unsub();
-    }, [employeeData, lastEntry]); // Rimuovo currentTime da qui per stabilità
+    }, [employeeData, lastEntry]); 
 
     // --- 3. CALCOLO TOTALE (SCATTA OGNI SECONDO MA USA DATI IN CACHE) ---
     useEffect(() => {
@@ -325,7 +326,6 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
 
     }, [rawTodayEntries, currentTime]); // Qui uso currentTime per aggiornare i minuti che scorrono
 
-    // --- LOGICA UI ---
     const pauseStatus = useMemo(() => {
         if (!activeEntry) return 'NONE';
         const pauses = activeEntry.pauses || [];
@@ -386,32 +386,24 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 if (!res.data.success) { alert(res.data.message); } else { playSound('pause_start'); }
 
             } else if (action === 'clockOut') {
-                
                 let finalReasonCode = null;
                 let finalNoteText = '';
                 const area = allWorkAreas.find(a => a.id === activeEntry.workAreaId);
                 const pauseDuration = area?.pauseDuration || 0;
                 
                 if (pauseDuration > 0 && pauseStatus !== 'COMPLETED') { 
-                    const confirmExit = window.confirm(
-                        `ATTENZIONE: La tua area prevede una pausa di ${pauseDuration} minuti, ma non risulta sia stata completata.\n\nVuoi uscire senza pausa? Clicca OK per selezionare il motivo.`
-                    );
-
+                    const confirmExit = window.confirm(`ATTENZIONE: Pausa di ${pauseDuration} min non rilevata.\nVuoi uscire senza pausa?`);
                     if (confirmExit) {
-                        const selectedCode = window.prompt(
-                            `Seleziona il numero del motivo (da 1 a ${PAUSE_REASONS.length}):\n\n${PAUSE_REASONS.map((r,i)=>`${i+1} - ${r.reason}`).join('\n')}`
-                        );
-                        
+                        const reasonOptions = PAUSE_REASONS.map((r, i) => `${i + 1} - ${r.reason}`).join('\n');
+                        const selectedCode = window.prompt(`Seleziona motivo (1-${PAUSE_REASONS.length}):\n\n${reasonOptions}`);
                         if (selectedCode === null) { setIsProcessing(false); return; }
                         const selectedIndex = parseInt(selectedCode) - 1; 
                         const selectedReason = PAUSE_REASONS[selectedIndex];
-                        
-                        if (!selectedReason) { alert("Selezione non valida."); setIsProcessing(false); return; }
+                        if (!selectedReason) { alert("Motivo non valido"); setIsProcessing(false); return; }
                         finalReasonCode = selectedReason.code;
-
                         if (selectedReason.code === '04') { 
-                            finalNoteText = window.prompt("Specifica motivo (OBBLIGATORIO):");
-                            if (!finalNoteText) { alert("Specifica obbligatoria."); setIsProcessing(false); return; }
+                            finalNoteText = window.prompt("Specifica motivo:");
+                            if (!finalNoteText) { alert("Specifica obbligatoria"); setIsProcessing(false); return; }
                         } else { finalNoteText = selectedReason.reason; }
                     } else { setIsProcessing(false); return; }
                 }
@@ -455,7 +447,7 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
             docPDF.setFontSize(22); docPDF.setFont("helvetica", "bold"); docPDF.setTextColor(24, 144, 255);
             docPDF.text("TCS ITALIA S.R.L.", 14, 20);
             docPDF.setFontSize(10); docPDF.setFont("helvetica", "normal"); docPDF.setTextColor(100);
-            docPDF.text("Via Castagna III Trav 1, Casoria (NA)", 14, 26); docPDF.text("P.IVA: 05552321217", 14, 31);
+            docPDF.text("Via Castagna III Trav. 1, Casoria (NA)", 14, 26); docPDF.text("P.IVA: 05552321217", 14, 31);
             docPDF.setDrawColor(200); docPDF.line(14, 38, 196, 38);
             docPDF.setFontSize(14); docPDF.setTextColor(0); docPDF.setFont("helvetica", "bold");
             docPDF.text(`Report: ${["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"][selectedMonth]} ${selectedYear}`, 14, 50);
@@ -495,7 +487,6 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
                     <div style={styles.employeeName}>{employeeData.name} {employeeData.surname}</div>
                 </div>
                 
-                {/* --- BOX STATO GPS (Ridotto) --- */}
                 <div style={{...styles.statusBox, backgroundColor: gpsLoading?'#fffbe6':inRangeArea?'#f6ffed':'#fff1f0', color: gpsLoading?'#d48806':inRangeArea?'#389e0d':'#cf1322', border:`1px solid ${gpsLoading?'#ffe58f':inRangeArea?'#b7eb8f':'#ffa39e'}`}}>
                     {gpsLoading ? "📡 Ricerca GPS..." : locationError ? `⚠️ ${locationError}` : inRangeArea ? `✅ Zona: ${inRangeArea.name}` : isGpsRequired ? "❌ Fuori Zona" : "ℹ️ GPS Opzionale"}
                 </div>
@@ -504,19 +495,18 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 {/* Caso 1: Lavoro in corso */}
                 {activeEntry && (
                     <div style={{...styles.compactInfoLine, backgroundColor:'#e6f7ff', borderColor:'#91d5ff', color:'#0050b3'}}>
-                        <div>🟢 Entrata: <strong>{activeEntry.clockInTime.toDate().toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'})}</strong></div>
-                        <div style={{color:'#bfbfbf'}}>|</div>
-                        <div>⏱️ Tot: <strong>{dailyTotalString}</strong></div>
-                        {pauseStatus === 'ACTIVE' && <div style={{marginLeft: 5, color: '#faad14', fontWeight:'bold', fontSize:'0.8rem'}}>⏸️ PAUSA</div>}
+                        <div style={styles.infoColLeft}>🟢 Entrata: <strong>{activeEntry.clockInTime.toDate().toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'})}</strong></div>
+                        <div style={styles.infoColCenter}>|</div>
+                        <div style={styles.infoColRight}>⏱️ Tot: <strong>{dailyTotalString}</strong></div>
                     </div>
                 )}
 
                 {/* Caso 2: Uscito (Mostra ultima uscita e totale di quel giorno) */}
                 {isOut && lastEntry && (
                     <div style={{...styles.compactInfoLine, backgroundColor:'#fff1f0', borderColor:'#ffccc7', color:'#cf1322'}}>
-                        <div>🔴 Uscita: <strong>{lastEntry.clockOutTime ? lastEntry.clockOutTime.toDate().toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'}) : '--:--'}</strong></div>
-                        <div style={{color:'#bfbfbf'}}>|</div>
-                        <div>⏱️ Tot: <strong>{dailyTotalString}</strong></div>
+                        <div style={styles.infoColLeft}>🔴 Uscita: <strong>{lastEntry.clockOutTime ? lastEntry.clockOutTime.toDate().toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'}) : '--:--'}</strong></div>
+                        <div style={styles.infoColCenter}>|</div>
+                        <div style={styles.infoColRight}>⏱️ Tot: <strong>{dailyTotalString}</strong></div>
                     </div>
                 )}
 
