@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../firebase';
-import { collection, query, where, onSnapshot, orderBy, Timestamp, limit, getDocs } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy, limit, getDocs, Timestamp } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -80,7 +80,7 @@ const styles = {
     clockDate: { color: '#8c8c8c', fontSize: '0.85rem', textTransform: 'capitalize', fontWeight: '500' },
     employeeName: { marginTop: '4px', color: '#262626', fontWeight: '600', fontSize: '0.95rem' },
     
-    // --- INFO LINEA UNICA (STABILE) ---
+    // --- INFO LINEA UNICA (COMPATTA E DINAMICA) ---
     compactInfoLine: {
         width: '100%',
         textAlign: 'center',
@@ -124,6 +124,7 @@ const styles = {
     btnBlue: { backgroundColor: '#1890ff', backgroundImage: 'linear-gradient(to bottom right, #40a9ff, #1890ff)' },
     btnDisabled: { backgroundColor: '#f5f5f5', color: '#b8b8b8', cursor: 'not-allowed', boxShadow: 'none', backgroundImage: 'none', border: '1px solid #d9d9d9' },
     
+    // --- REPORT SECTION INGRANDITA ---
     reportSection: { 
         marginTop: '25px', 
         backgroundColor: '#fff', 
@@ -454,7 +455,7 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
             docPDF.setFontSize(22); docPDF.setFont("helvetica", "bold"); docPDF.setTextColor(24, 144, 255);
             docPDF.text("TCS ITALIA S.R.L.", 14, 20);
             docPDF.setFontSize(10); docPDF.setFont("helvetica", "normal"); docPDF.setTextColor(100);
-            docPDF.text("Via Castagna III Trav 1, casoria (NA)", 14, 26); docPDF.text("P.IVA: 05552321217", 14, 31);
+            docPDF.text("Via Castagna III Trav 1, Casoria (NA)", 14, 26); docPDF.text("P.IVA: 05552321217", 14, 31);
             docPDF.setDrawColor(200); docPDF.line(14, 38, 196, 38);
             docPDF.setFontSize(14); docPDF.setTextColor(0); docPDF.setFont("helvetica", "bold");
             docPDF.text(`Report: ${["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"][selectedMonth]} ${selectedYear}`, 14, 50);
