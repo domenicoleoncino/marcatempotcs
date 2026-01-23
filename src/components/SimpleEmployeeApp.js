@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { db } from '../firebase';
 import { collection, query, where, onSnapshot, orderBy, Timestamp, limit, getDocs } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
@@ -6,7 +6,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 
-// --- MOTIVI DI MANCATA PAUSA (Presi dal tuo EmployeeDashboard.js) ---
+// --- MOTIVI DI MANCATA PAUSA ---
 const PAUSE_REASONS = [
     { code: '01', reason: 'Mancata pausa per intervento urgente.' },
     { code: '02', reason: 'Mancata pausa per ore non complete.' },
@@ -36,7 +36,7 @@ const styles = {
     headerInner: {
         width: '100%',
         maxWidth: '500px', 
-        padding: '10px 20px', 
+        padding: '8px 15px', 
         display: 'grid',
         gridTemplateColumns: '1fr auto 1fr', 
         alignItems: 'center',
@@ -49,24 +49,24 @@ const styles = {
         alignItems: 'center',
         justifyContent: 'center'
     },
-    logo: { height: '55px', objectFit: 'contain', marginBottom: '4px' }, 
-    companyName: { fontWeight: '900', color: '#001529', fontSize: '0.9rem', letterSpacing: '1.5px', textTransform: 'uppercase' }, 
+    logo: { height: '40px', objectFit: 'contain', marginBottom: '2px' }, 
+    companyName: { fontWeight: '900', color: '#001529', fontSize: '0.8rem', letterSpacing: '1px', textTransform: 'uppercase' }, 
     logoutBtn: { 
         justifySelf: 'end',
         backgroundColor: '#fff1f0', 
         border: '1px solid #ffccc7', 
         color: '#f5222d', 
-        padding: '8px 16px', 
-        borderRadius: '8px', 
+        padding: '6px 12px', 
+        borderRadius: '6px', 
         cursor: 'pointer', 
         fontWeight: 'bold', 
-        fontSize: '0.85rem',
+        fontSize: '0.75rem',
         transition: 'all 0.2s',
         whiteSpace: 'nowrap' 
     },
     body: { 
         flex: 1, 
-        padding: '20px', 
+        padding: '15px', 
         display: 'flex', 
         flexDirection: 'column', 
         alignItems: 'center', 
@@ -75,23 +75,43 @@ const styles = {
         width: '100%',
         boxSizing: 'border-box'
     },
-    clockCard: { backgroundColor: '#fff', padding: '20px', borderRadius: '15px', textAlign: 'center', width: '100%', marginBottom: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', boxSizing: 'border-box' },
-    clockTime: { fontSize: '3rem', fontWeight: '800', color: '#1890ff', lineHeight: 1, marginBottom: '5px', letterSpacing: '-1px' }, 
-    clockDate: { color: '#8c8c8c', fontSize: '1rem', textTransform: 'capitalize', fontWeight: '500' },
-    employeeName: { marginTop: '8px', color: '#262626', fontWeight: '600', fontSize: '0.95rem' },
-    statusBox: { padding: '12px', borderRadius: '10px', marginBottom: '25px', width: '100%', textAlign: 'center', fontWeight: '600', fontSize: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxSizing: 'border-box' },
+    clockCard: { backgroundColor: '#fff', padding: '10px', borderRadius: '12px', textAlign: 'center', width: '100%', marginBottom: '10px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', boxSizing: 'border-box' },
+    clockTime: { fontSize: '2.8rem', fontWeight: '800', color: '#1890ff', lineHeight: 1, marginBottom: '2px', letterSpacing: '-1px' }, 
+    clockDate: { color: '#8c8c8c', fontSize: '0.85rem', textTransform: 'capitalize', fontWeight: '500' },
+    employeeName: { marginTop: '4px', color: '#262626', fontWeight: '600', fontSize: '0.95rem' },
+    
+    // --- INFO LINEA UNICA (STABILE) ---
+    compactInfoLine: {
+        width: '100%',
+        textAlign: 'center',
+        fontSize: '1rem',
+        fontWeight: '600',
+        marginBottom: '15px', 
+        padding: '12px',
+        borderRadius: '8px',
+        border: '1px solid', 
+        backgroundColor: '#fff',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: '15px',
+        color: '#333'
+    },
+
+    statusBox: { padding: '5px', borderRadius: '6px', marginBottom: '10px', width: '100%', textAlign: 'center', fontWeight: '600', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', boxSizing: 'border-box' },
+    
     btnBig: { 
         width: '100%', 
         padding: '22px', 
-        fontSize: '1.2rem', 
+        fontSize: '1.3rem', 
         fontWeight: '700', 
         border: 'none', 
-        borderRadius: '14px', 
+        borderRadius: '12px', 
         cursor: 'pointer', 
         color: '#fff', 
-        boxShadow: '0 6px 12px rgba(0,0,0,0.1)', 
+        boxShadow: '0 4px 10px rgba(0,0,0,0.15)', 
         transition: 'transform 0.1s, filter 0.2s', 
-        marginBottom: '12px', 
+        marginBottom: '10px', 
         display: 'flex', 
         alignItems: 'center', 
         justifyContent: 'center', 
@@ -103,9 +123,62 @@ const styles = {
     btnOrange: { backgroundColor: '#faad14', backgroundImage: 'linear-gradient(to bottom right, #ffc53d, #faad14)' },
     btnBlue: { backgroundColor: '#1890ff', backgroundImage: 'linear-gradient(to bottom right, #40a9ff, #1890ff)' },
     btnDisabled: { backgroundColor: '#f5f5f5', color: '#b8b8b8', cursor: 'not-allowed', boxShadow: 'none', backgroundImage: 'none', border: '1px solid #d9d9d9' },
-    select: { width: '100%', padding: '14px', borderRadius: '10px', border: '1px solid #d9d9d9', fontSize: '1rem', marginBottom: '15px', backgroundColor: '#fff', outline: 'none', boxSizing: 'border-box' },
-    reportSection: { marginTop: '10px', backgroundColor: '#fff', padding: '20px', borderRadius: '15px', width: '100%', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', border: '1px solid #f0f0f0', boxSizing: 'border-box' },
-    footer: { textAlign: 'center', padding: '30px 20px', color: '#bfbfbf', fontSize: '0.75rem', lineHeight: '1.5', boxSizing: 'border-box' }
+    
+    reportSection: { 
+        marginTop: '25px', 
+        backgroundColor: '#fff', 
+        padding: '20px', 
+        borderRadius: '12px', 
+        width: '100%', 
+        boxShadow: '0 4px 15px rgba(0,0,0,0.05)', 
+        border: '1px solid #f0f0f0', 
+        boxSizing: 'border-box',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '12px' 
+    },
+    selectContainer: { 
+        display: 'flex', 
+        gap: '10px',
+        width: '100%' 
+    },
+    select: { 
+        flex: 1, 
+        padding: '12px', 
+        borderRadius: '8px', 
+        border: '1px solid #d9d9d9', 
+        fontSize: '1rem', 
+        backgroundColor: '#fff', 
+        outline: 'none',
+        height: '45px'
+    },
+    btnReport: { 
+        width: '100%', 
+        padding: '12px', 
+        fontSize: '1rem', 
+        fontWeight: '700', 
+        border: 'none', 
+        borderRadius: '8px', 
+        cursor: 'pointer', 
+        color: '#fff', 
+        backgroundColor: '#595959',
+        boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
+        height: '45px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '8px'
+    },
+    
+    footer: { 
+        marginTop: 'auto', 
+        textAlign: 'center', 
+        padding: '20px', 
+        color: '#8c8c8c', 
+        fontSize: '0.8rem', 
+        lineHeight: '1.5', 
+        boxSizing: 'border-box' 
+    }
 };
 
 function getDistanceInMeters(lat1, lon1, lat2, lon2) {
@@ -134,7 +207,7 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
     const [currentTime, setCurrentTime] = useState(new Date());
     const [isProcessing, setIsProcessing] = useState(false);
     const [activeEntry, setActiveEntry] = useState(null);
-    const [workAreaName, setWorkAreaName] = useState('');
+    const [lastEntry, setLastEntry] = useState(null); 
     const [inRangeArea, setInRangeArea] = useState(null); 
     const [locationError, setLocationError] = useState(null);
     const [gpsLoading, setGpsLoading] = useState(true);
@@ -142,6 +215,10 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+    
+    // Stato per i dati grezzi delle entrate (per evitare saltellamenti)
+    const [rawTodayEntries, setRawTodayEntries] = useState([]);
+    const [dailyTotalString, setDailyTotalString] = useState('...');
 
     const functions = getFunctions(undefined, 'europe-west1');
     const clockIn = httpsCallable(functions, 'clockEmployeeIn');
@@ -149,12 +226,118 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
     const applyAutoPauseEmployee = httpsCallable(functions, 'applyAutoPauseEmployee');
     const deviceId = localStorage.getItem('marcatempoDeviceId') || "UNKNOWN";
 
+    // --- OROLOGIO PRINCIPALE ---
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
         playSound('app_open'); 
         return () => clearInterval(timer);
     }, []);
 
+    // --- 1. RECUPERA ULTIMA VOCE (Per sapere stato attuale e data riferimento) ---
+    useEffect(() => {
+        if (!employeeData?.id) return;
+        const qLast = query(
+            collection(db, "time_entries"),
+            where("employeeId", "==", employeeData.id),
+            orderBy("clockInTime", "desc"),
+            limit(1)
+        );
+        const unsub = onSnapshot(qLast, (snap) => {
+            if (!snap.empty) {
+                const data = { id: snap.docs[0].id, ...snap.docs[0].data() };
+                setLastEntry(data);
+                if (data.status === 'clocked-in') setActiveEntry(data);
+                else setActiveEntry(null);
+            } else {
+                setLastEntry(null);
+                setActiveEntry(null);
+            }
+        });
+        return () => unsub();
+    }, [employeeData]);
+
+    // --- 2. RECUPERA LE VOCI DEL "GIORNO DI RIFERIMENTO" (SOLO DATI, NO CALCOLI TEMPO) ---
+    // Questo snapshot scatta SOLO se cambiano i dati nel DB, non ogni secondo.
+    useEffect(() => {
+        if (!employeeData?.id || !lastEntry) {
+            setRawTodayEntries([]);
+            return;
+        }
+
+        // Determina il giorno di riferimento in base all'ultima voce
+        const lastEntryDate = lastEntry.clockInTime.toDate();
+        const startOfReferenceDay = new Date(lastEntryDate);
+        startOfReferenceDay.setHours(0, 0, 0, 0);
+        
+        const endOfReferenceDay = new Date(startOfReferenceDay);
+        endOfReferenceDay.setDate(endOfReferenceDay.getDate() + 1);
+
+        const qStats = query(
+            collection(db, "time_entries"),
+            where("employeeId", "==", employeeData.id),
+            where("clockInTime", ">=", Timestamp.fromDate(startOfReferenceDay)),
+            where("clockInTime", "<", Timestamp.fromDate(endOfReferenceDay))
+        );
+
+        const unsub = onSnapshot(qStats, (snapshot) => {
+            const entries = snapshot.docs.map(doc => doc.data());
+            setRawTodayEntries(entries);
+        });
+
+        return () => unsub();
+    }, [employeeData, lastEntry]); // Rimuovo currentTime da qui per stabilità
+
+    // --- 3. CALCOLO TOTALE (SCATTA OGNI SECONDO MA USA DATI IN CACHE) ---
+    useEffect(() => {
+        if (!rawTodayEntries || rawTodayEntries.length === 0) {
+            setDailyTotalString("0h 0m");
+            return;
+        }
+
+        let totalMillis = 0;
+        const now = new Date();
+
+        rawTodayEntries.forEach(data => {
+            const start = data.clockInTime.toDate();
+            // Se c'è uscita usa quella, se è clocked-in usa ADESSO
+            const end = data.clockOutTime ? data.clockOutTime.toDate() : (data.status === 'clocked-in' ? now : null);
+            
+            if (end) {
+                let duration = end - start;
+                // Sottrai pause
+                if (data.pauses && Array.isArray(data.pauses)) {
+                    data.pauses.forEach(p => {
+                        const pStart = p.start.toDate();
+                        // Se pausa finita usa fine, se pausa in corso usa ADESSO
+                        const pEnd = p.end ? p.end.toDate() : (data.status === 'clocked-in' ? now : null);
+                        if (pEnd) duration -= (pEnd - pStart);
+                    });
+                }
+                if (duration > 0) totalMillis += duration;
+            }
+        });
+
+        const totalMinutes = Math.floor(totalMillis / 60000);
+        const h = Math.floor(totalMinutes / 60);
+        const m = totalMinutes % 60;
+        setDailyTotalString(`${h}h ${m}m`);
+
+    }, [rawTodayEntries, currentTime]); // Qui uso currentTime per aggiornare i minuti che scorrono
+
+    // --- LOGICA UI ---
+    const pauseStatus = useMemo(() => {
+        if (!activeEntry) return 'NONE';
+        const pauses = activeEntry.pauses || [];
+        const isActive = pauses.some(p => p.start && !p.end);
+        const isCompleted = pauses.some(p => p.start && p.end);
+        if (isActive) return 'ACTIVE'; if (isCompleted) return 'COMPLETED'; return 'NONE';
+    }, [activeEntry]);
+
+    const isWorking = activeEntry && pauseStatus !== 'ACTIVE';
+    const isOnPause = pauseStatus === 'ACTIVE';
+    const isOut = !activeEntry;
+
+    // --- GPS Logic ---
     const employeeWorkAreas = useMemo(() => {
         if (!employeeData || !employeeData.workAreaIds || !allWorkAreas) return [];
         return allWorkAreas.filter(area => employeeData.workAreaIds.includes(area.id));
@@ -185,36 +368,7 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
         else { setLocationError("GPS non supportato"); setGpsLoading(false); }
     }, [employeeWorkAreas, isGpsRequired]);
 
-    useEffect(() => {
-        if (!employeeData?.id) return;
-        const qActive = query(collection(db, "time_entries"),
-            where("employeeId", "==", employeeData.id),
-            where("status", "==", "clocked-in"),
-            limit(1));
-        const unsub = onSnapshot(qActive, (snap) => {
-            if (!snap.empty) {
-                const data = { id: snap.docs[0].id, ...snap.docs[0].data() };
-                setActiveEntry(data);
-                const area = allWorkAreas.find(a => a.id === data.workAreaId);
-                setWorkAreaName(area ? area.name : 'Sconosciuta');
-            } else { setActiveEntry(null); setWorkAreaName(''); }
-        });
-        return () => unsub();
-    }, [employeeData, allWorkAreas]);
-
-    const pauseStatus = useMemo(() => {
-        if (!activeEntry) return 'NONE';
-        const pauses = activeEntry.pauses || [];
-        const isActive = pauses.some(p => p.start && !p.end);
-        const isCompleted = pauses.some(p => p.start && p.end);
-        if (isActive) return 'ACTIVE'; if (isCompleted) return 'COMPLETED'; return 'NONE';
-    }, [activeEntry]);
-
-    const isWorking = activeEntry && pauseStatus !== 'ACTIVE';
-    const isOnPause = pauseStatus === 'ACTIVE';
-    const isOut = !activeEntry;
-
-    // --- FUNZIONE AZIONI COMPLETA DI LOGICA PAUSA ---
+    // --- AZIONI ---
     const handleAction = async (action) => {
         setIsProcessing(true);
         try {
@@ -232,79 +386,37 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
 
             } else if (action === 'clockOut') {
                 
-                // --- LOGICA MANCATA PAUSA COME DA DASHBOARD ORIGINALE ---
                 let finalReasonCode = null;
                 let finalNoteText = '';
                 const area = allWorkAreas.find(a => a.id === activeEntry.workAreaId);
                 const pauseDuration = area?.pauseDuration || 0;
                 
-                // Se c'è una pausa prevista e non è stata completata
                 if (pauseDuration > 0 && pauseStatus !== 'COMPLETED') { 
-                    const reasonOptions = PAUSE_REASONS.map((r, i) => `${i + 1} - ${r.reason}`).join('\n');
-                    
                     const confirmExit = window.confirm(
                         `ATTENZIONE: La tua area prevede una pausa di ${pauseDuration} minuti, ma non risulta sia stata completata.\n\nVuoi uscire senza pausa? Clicca OK per selezionare il motivo.`
                     );
 
                     if (confirmExit) {
                         const selectedCode = window.prompt(
-                            `Seleziona il numero del motivo (da 1 a ${PAUSE_REASONS.length}):\n\n${reasonOptions}`
+                            `Seleziona il numero del motivo (da 1 a ${PAUSE_REASONS.length}):\n\n${PAUSE_REASONS.map((r,i)=>`${i+1} - ${r.reason}`).join('\n')}`
                         );
                         
-                        // Controllo annullamento prompt
-                        if (selectedCode === null) {
-                            setIsProcessing(false);
-                            return; 
-                        }
-
+                        if (selectedCode === null) { setIsProcessing(false); return; }
                         const selectedIndex = parseInt(selectedCode) - 1; 
                         const selectedReason = PAUSE_REASONS[selectedIndex];
                         
-                        if (!selectedReason) {
-                            alert("Selezione motivo non valida. Uscita annullata.");
-                            setIsProcessing(false);
-                            return;
-                        }
-                        
+                        if (!selectedReason) { alert("Selezione non valida."); setIsProcessing(false); return; }
                         finalReasonCode = selectedReason.code;
 
-                        // Se ha scelto "Altro" (04), chiediamo il testo
                         if (selectedReason.code === '04') { 
-                            finalNoteText = window.prompt("Hai selezionato 'Altro'. Specifica il motivo (OBBLIGATORIO):");
-                            if (!finalNoteText || finalNoteText.trim() === '') {
-                                alert("La specifica è obbligatoria per il motivo 'Altro'. Uscita annullata.");
-                                setIsProcessing(false);
-                                return;
-                            }
-                        } else {
-                            finalNoteText = selectedReason.reason; 
-                        }
-                    } else {
-                        // Ha premuto Annulla sul confirm iniziale
-                        setIsProcessing(false);
-                        return;
-                    }
+                            finalNoteText = window.prompt("Specifica motivo (OBBLIGATORIO):");
+                            if (!finalNoteText) { alert("Specifica obbligatoria."); setIsProcessing(false); return; }
+                        } else { finalNoteText = selectedReason.reason; }
+                    } else { setIsProcessing(false); return; }
                 }
-                // ----------------------------------------------------
 
-                // Eseguiamo l'uscita passando anche il motivo (pauseSkipReason)
-                const res = await clockOut({ 
-                    deviceId, 
-                    isGpsRequired, 
-                    note: finalNoteText, 
-                    pauseSkipReason: finalReasonCode 
-                });
-                
-                if (!res.data.success) { 
-                    alert(res.data.message); 
-                } else { 
-                    playSound('clock_out'); 
-                    let msg = 'Uscita registrata.';
-                    if (finalReasonCode) {
-                        msg += '\n\n⚠️ NOTA: Hai dichiarato di non aver fatto pausa. La richiesta è IN ATTESA DI APPROVAZIONE dal preposto.';
-                    }
-                    alert(msg);
-                }
+                const res = await clockOut({ deviceId, isGpsRequired, note: finalNoteText, pauseSkipReason: finalReasonCode });
+                if (!res.data.success) { alert(res.data.message); } else { playSound('clock_out'); alert('Uscita registrata.'); }
             }
         } catch (e) { alert(e.message || "Errore"); } finally { setIsProcessing(false); }
     };
@@ -342,7 +454,7 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
             docPDF.setFontSize(22); docPDF.setFont("helvetica", "bold"); docPDF.setTextColor(24, 144, 255);
             docPDF.text("TCS ITALIA S.R.L.", 14, 20);
             docPDF.setFontSize(10); docPDF.setFont("helvetica", "normal"); docPDF.setTextColor(100);
-            docPDF.text("Via Castagna III Trav 1, Casoria (NA)", 14, 26); docPDF.text("P.IVA: 05552321217", 14, 31);
+            docPDF.text("Via Castagna III Trav 1, casoria (NA)", 14, 26); docPDF.text("P.IVA: 05552321217", 14, 31);
             docPDF.setDrawColor(200); docPDF.line(14, 38, 196, 38);
             docPDF.setFontSize(14); docPDF.setTextColor(0); docPDF.setFont("helvetica", "bold");
             docPDF.text(`Report: ${["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"][selectedMonth]} ${selectedYear}`, 14, 50);
@@ -356,16 +468,9 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 const pdfOutput = docPDF.output('datauristring');
                 const base64Data = pdfOutput.split(',')[1];
                 const fileName = `Report_${employeeData.surname}_${selectedMonth+1}_${selectedYear}.pdf`;
-                await Filesystem.writeFile({
-                    path: fileName,
-                    data: base64Data,
-                    directory: Directory.Documents
-                });
+                await Filesystem.writeFile({ path: fileName, data: base64Data, directory: Directory.Documents });
                 alert(`✅ PDF Salvato!\nLo trovi nella cartella "Documenti" del telefono con nome:\n${fileName}`);
-            } catch (err) {
-                console.error("Errore salvataggio:", err);
-                alert("Errore nel salvataggio del file: " + err.message);
-            }
+            } catch (err) { alert("Errore salvataggio: " + err.message); }
 
         } catch (e) { alert("Errore generazione PDF: " + e.message); } finally { setIsGeneratingPdf(false); }
     };
@@ -388,9 +493,32 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
                     <div style={styles.clockTime}>{currentTime.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</div>
                     <div style={styles.employeeName}>{employeeData.name} {employeeData.surname}</div>
                 </div>
+                
+                {/* --- BOX STATO GPS (Ridotto) --- */}
                 <div style={{...styles.statusBox, backgroundColor: gpsLoading?'#fffbe6':inRangeArea?'#f6ffed':'#fff1f0', color: gpsLoading?'#d48806':inRangeArea?'#389e0d':'#cf1322', border:`1px solid ${gpsLoading?'#ffe58f':inRangeArea?'#b7eb8f':'#ffa39e'}`}}>
                     {gpsLoading ? "📡 Ricerca GPS..." : locationError ? `⚠️ ${locationError}` : inRangeArea ? `✅ Zona: ${inRangeArea.name}` : isGpsRequired ? "❌ Fuori Zona" : "ℹ️ GPS Opzionale"}
                 </div>
+
+                {/* --- INFO TIMBRATURA (RIGA UNICA STABILE) --- */}
+                {/* Caso 1: Lavoro in corso */}
+                {activeEntry && (
+                    <div style={{...styles.compactInfoLine, backgroundColor:'#e6f7ff', borderColor:'#91d5ff', color:'#0050b3'}}>
+                        <div>🟢 Entrata: <strong>{activeEntry.clockInTime.toDate().toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'})}</strong></div>
+                        <div style={{color:'#bfbfbf'}}>|</div>
+                        <div>⏱️ Tot: <strong>{dailyTotalString}</strong></div>
+                        {pauseStatus === 'ACTIVE' && <div style={{marginLeft: 5, color: '#faad14', fontWeight:'bold', fontSize:'0.8rem'}}>⏸️ PAUSA</div>}
+                    </div>
+                )}
+
+                {/* Caso 2: Uscito (Mostra ultima uscita e totale di quel giorno) */}
+                {isOut && lastEntry && (
+                    <div style={{...styles.compactInfoLine, backgroundColor:'#fff1f0', borderColor:'#ffccc7', color:'#cf1322'}}>
+                        <div>🔴 Uscita: <strong>{lastEntry.clockOutTime ? lastEntry.clockOutTime.toDate().toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'}) : '--:--'}</strong></div>
+                        <div style={{color:'#bfbfbf'}}>|</div>
+                        <div>⏱️ Tot: <strong>{dailyTotalString}</strong></div>
+                    </div>
+                )}
+
                 {isOut && (
                     <>
                         {!isGpsRequired && (
@@ -404,43 +532,40 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
                         </button>
                     </>
                 )}
+                
                 {isWorking && (
-                    <>
-                        <div style={{...styles.statusBox, backgroundColor:'#e6f7ff', border:'1px solid #91d5ff', color:'#0050b3'}}>📍 Lavoro in corso: <strong>{workAreaName}</strong></div>
-                        <div style={{display:'flex', gap:'15px', width:'100%'}}>
-                            <button style={{...styles.btnBig, ...(isProcessing || pauseStatus === 'COMPLETED' ? styles.btnDisabled : styles.btnOrange), flex:1, fontSize:'1.1rem'}} disabled={isProcessing || pauseStatus === 'COMPLETED'} onClick={() => handleAction('clockPause')}>
-                                {pauseStatus === 'COMPLETED' ? 'PAUSA OK' : '☕ PAUSA'}
-                            </button>
-                            <button style={{...styles.btnBig, ...styles.btnRed, flex:1, fontSize:'1.1rem'}} disabled={isProcessing} onClick={() => handleAction('clockOut')}>
-                                🚪 USCITA
-                            </button>
-                        </div>
-                    </>
+                    <div style={{display:'flex', gap:'15px', width:'100%'}}>
+                        <button style={{...styles.btnBig, ...(isProcessing || pauseStatus === 'COMPLETED' ? styles.btnDisabled : styles.btnOrange), flex:1, fontSize:'1rem'}} disabled={isProcessing || pauseStatus === 'COMPLETED'} onClick={() => handleAction('clockPause')}>
+                            {pauseStatus === 'COMPLETED' ? 'PAUSA OK' : '☕ PAUSA'}
+                        </button>
+                        <button style={{...styles.btnBig, ...styles.btnRed, flex:1, fontSize:'1rem'}} disabled={isProcessing} onClick={() => handleAction('clockOut')}>
+                            🚪 USCITA
+                        </button>
+                    </div>
                 )}
+                
                 {isOnPause && (
-                    <>
-                        <div style={{...styles.statusBox, backgroundColor:'#fffbe6', border:'1px solid #ffe58f', color:'#d48806'}}>⏸️ SEI IN PAUSA</div>
-                        <button style={{...styles.btnBig, ...styles.btnBlue}} disabled={isProcessing} onClick={() => handleAction('clockPause')}>▶️ FINE PAUSA</button>
-                    </>
+                    <button style={{...styles.btnBig, ...styles.btnBlue}} disabled={isProcessing} onClick={() => handleAction('clockPause')}>▶️ FINE PAUSA</button>
                 )}
+
                 <div style={styles.reportSection}>
-                    <h4 style={{margin:'0 0 15px 0', textAlign:'center', color:'#595959'}}>📄 Scarica Report Ore</h4>
-                    <div style={{display:'flex', gap:'10px', marginBottom:'15px'}}>
-                        <select style={{...styles.select, marginBottom:0}} value={selectedMonth} onChange={(e)=>setSelectedMonth(parseInt(e.target.value))}>
+                    <div style={{fontSize:'1rem', fontWeight:'bold', color:'#595959', textAlign:'center'}}>📄 Scarica Report Ore</div>
+                    <div style={styles.selectContainer}>
+                        <select style={styles.select} value={selectedMonth} onChange={(e)=>setSelectedMonth(parseInt(e.target.value))}>
                             {["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"].map((m,i) => <option key={i} value={i}>{m}</option>)}
                         </select>
-                        <select style={{...styles.select, marginBottom:0}} value={selectedYear} onChange={(e)=>setSelectedYear(parseInt(e.target.value))}>
+                        <select style={{...styles.select}} value={selectedYear} onChange={(e)=>setSelectedYear(parseInt(e.target.value))}>
                             {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
                         </select>
                     </div>
-                    <button style={{...styles.btnBig, backgroundColor: '#434343', fontSize:'1rem', padding:'15px', marginBottom:0, boxShadow:'none'}} onClick={handleExportPDF} disabled={isGeneratingPdf}>
-                        {isGeneratingPdf ? 'PDF...' : 'SCARICA PDF'}
+                    <button style={styles.btnReport} onClick={handleExportPDF} disabled={isGeneratingPdf}>
+                        {isGeneratingPdf ? 'GENERAZIONE PDF...' : '⬇️ SCARICA PDF'}
                     </button>
                 </div>
             </div>
             <div style={styles.footer}>
-                TCS Italia App v2.0 <br/>
-                <strong>Creato da D.Leoncino</strong>
+                TCS Italia App v2.1<br/>
+                Creato da D. Leoncino
             </div>
         </div>
     );
