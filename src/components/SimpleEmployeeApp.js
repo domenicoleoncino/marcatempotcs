@@ -5,6 +5,7 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share'; // <--- 1. AGGIUNTO IMPORT SHARE
 import ExpenseModal from './ExpenseModal';
 
 // --- MOTIVI DI MANCATA PAUSA ---
@@ -15,7 +16,7 @@ const PAUSE_REASONS = [
     { code: '04', reason: 'Altro... (specificare).' }
 ];
 
-// --- STILI CSS ---
+// --- STILI CSS COMPLETI ---
 const styles = {
     container: { 
         minHeight: '100vh', 
@@ -318,52 +319,142 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
                         if (selectedCode === null) { setIsProcessing(false); return; }
                         const selectedIndex = parseInt(selectedCode) - 1; 
                         const selectedReason = PAUSE_REASONS[selectedIndex];
-                        if (!selectedReason) { alert("Motivo non valido"); setIsProcessing(false); return; }
+                        if (!selectedReason) { 
+                            alert("Selezione non valida."); 
+                            setIsProcessing(false); 
+                            return; 
+                        }
                         finalReasonCode = selectedReason.code;
                         if (selectedReason.code === '04') { 
-                            finalNoteText = window.prompt("Specifica motivo:");
-                            if (!finalNoteText) { alert("Specifica obbligatoria"); setIsProcessing(false); return; }
-                        } else { finalNoteText = selectedReason.reason; }
-                    } else { setIsProcessing(false); return; }
+                            finalNoteText = window.prompt("Hai selezionato 'Altro'. Specifica il motivo (OBBLIGATORIO):");
+                            if (!finalNoteText || finalNoteText.trim() === '') {
+                                alert("La specifica è obbligatoria per il motivo 'Altro'.");
+                                setIsProcessing(false);
+                                return;
+                            }
+                        } else {
+                            finalNoteText = selectedReason.reason; 
+                        }
+                    } else {
+                        setIsProcessing(false);
+                        return;
+                    }
                 }
-                const res = await clockOut({ deviceId, isGpsRequired, note: finalNoteText, pauseSkipReason: finalReasonCode });
-                if (!res.data.success) { alert(res.data.message); } else { playSound('clock_out'); alert('Uscita registrata.'); }
+
+                const res = await clockOut({ 
+                    deviceId, 
+                    isGpsRequired, 
+                    note: finalNoteText, 
+                    pauseSkipReason: finalReasonCode 
+                });
+                
+                if (res.data.success) {
+                    playSound('clock_out');
+                    alert('Timbratura di uscita registrata.');
+                } else {
+                    alert(res.data.message || "Errore in uscita");
+                }
             }
-        } catch (e) { alert(e.message || "Errore"); } finally { setIsProcessing(false); }
+        } catch (e) {
+            console.error("Errore Action:", e);
+            alert(e.message || "Si è verificato un errore.");
+        } finally {
+            setIsProcessing(false);
+        }
     };
 
-    // --- FUNZIONE EXPORT PDF (CAPACITOR SPECIFICA) ---
+    // --- FUNZIONE EXPORT PDF (CAPACITOR + SHARE) ---
     const handleExportPDF = async () => {
         setIsGeneratingPdf(true);
         try {
             const startDate = new Date(selectedYear, selectedMonth, 1);
-            const endDate = new Date(selectedMonth === 11 ? selectedYear + 1 : selectedYear, selectedMonth === 11 ? 0 : selectedMonth + 1, 1); 
-            const q = query(collection(db, "time_entries"), where("employeeId", "==", employeeData.id), where("clockInTime", ">=", Timestamp.fromDate(startDate)), where("clockInTime", "<", Timestamp.fromDate(endDate)), orderBy("clockInTime", "asc"));
+            const endDate = new Date(selectedYear, selectedMonth + 1, 1);
+
+            const q = query(
+                collection(db, "time_entries"),
+                where("employeeId", "==", employeeData.id),
+                where("clockInTime", ">=", Timestamp.fromDate(startDate)),
+                where("clockInTime", "<", Timestamp.fromDate(endDate)),
+                orderBy("clockInTime", "asc")
+            );
+
             const snapshot = await getDocs(q);
-            if (snapshot.empty) { alert("Nessun dato."); setIsGeneratingPdf(false); return; }
-            const rows = []; let totalMins = 0;
-            snapshot.forEach(doc => {
-                const d = doc.data(); const start = d.clockInTime.toDate(); const end = d.clockOutTime ? d.clockOutTime.toDate() : null; const area = allWorkAreas.find(a => a.id === d.workAreaId)?.name || 'N/D';
-                let worked = end ? Math.round((end - start) / 60000) : 0; let pMins = 0;
-                if (d.pauses) d.pauses.forEach(p => { if (p.start && p.end) pMins += Math.round((p.end.toMillis() - p.start.toMillis()) / 60000); });
-                worked -= pMins; if (worked > 0) totalMins += worked;
-                rows.push([start.toLocaleDateString(), start.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}), end ? end.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '-', pMins > 0 ? `${pMins}'` : '-', worked > 0 ? `${Math.floor(worked/60)}:${(worked%60).toString().padStart(2,'0')}` : '-', area]);
+            if (snapshot.empty) {
+                alert("Nessun dato trovato per il mese selezionato.");
+                setIsGeneratingPdf(false);
+                return;
+            }
+
+            const rows = [];
+            let totalWorkedMins = 0;
+
+            snapshot.forEach(docSnap => {
+                const d = docSnap.data();
+                const s = d.clockInTime.toDate();
+                const e = d.clockOutTime ? d.clockOutTime.toDate() : null;
+                const area = allWorkAreas.find(a => a.id === d.workAreaId)?.name || 'N/D';
+                
+                let pMins = 0;
+                if (d.pauses) {
+                    d.pauses.forEach(p => {
+                        if (p.start && p.end) pMins += Math.round((p.end.toMillis() - p.start.toMillis()) / 60000);
+                    });
+                }
+
+                let diff = e ? Math.round((e - s) / 60000) - pMins : 0;
+                if (diff > 0) totalWorkedMins += diff;
+
+                rows.push([
+                    s.toLocaleDateString(),
+                    s.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
+                    e ? e.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '--:--',
+                    pMins > 0 ? `${pMins}'` : '-',
+                    diff > 0 ? `${Math.floor(diff/60)}h ${diff%60}m` : '-',
+                    area
+                ]);
             });
+
             const docPDF = new jsPDF();
-            try { const img = new Image(); img.src = '/icon-192x192.png'; docPDF.addImage(img, 'PNG', 160, 10, 30, 30); } catch(e){}
-            docPDF.setFontSize(22); docPDF.setFont("helvetica", "bold"); docPDF.setTextColor(24, 144, 255); docPDF.text("TCS ITALIA S.R.L.", 14, 20);
-            docPDF.setFontSize(10); docPDF.setFont("helvetica", "normal"); docPDF.setTextColor(100); docPDF.text("Via Castagna III Trav. 1, Casoria (NA)", 14, 26); docPDF.text("P.IVA: 05552321217", 14, 31);
-            docPDF.setDrawColor(200); docPDF.line(14, 38, 196, 38);
-            docPDF.setFontSize(14); docPDF.setTextColor(0); docPDF.setFont("helvetica", "bold");
-            docPDF.text(`Report: ${["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"][selectedMonth]} ${selectedYear}`, 14, 50);
-            docPDF.setFontSize(12); docPDF.setFont("helvetica", "normal"); docPDF.text(`Dipendente: ${employeeData.name} ${employeeData.surname}`, 14, 57);
-            autoTable(docPDF, { head: [['Data','In','Out','Pausa','Tot','Cantiere']], body: rows, startY: 65, theme: 'grid', headStyles:{fillColor:[24,144,255]} });
-            const totalH = Math.floor(totalMins / 60); const totalM = totalMins % 60;
-            docPDF.text(`TOTALE: ${totalH}:${totalM.toString().padStart(2,'0')}`, 14, docPDF.lastAutoTable.finalY + 10);
-            const pdfOutput = docPDF.output('datauristring'); const base64Data = pdfOutput.split(',')[1]; const fileName = `Report_${employeeData.surname}_${selectedMonth+1}_${selectedYear}.pdf`;
-            await Filesystem.writeFile({ path: fileName, data: base64Data, directory: Directory.Documents });
-            alert(`✅ PDF Salvato!\nLo trovi nella cartella "Documenti" del telefono con nome:\n${fileName}`);
-        } catch (e) { alert("Errore generazione PDF: " + e.message); } finally { setIsGeneratingPdf(false); }
+            docPDF.setFontSize(18);
+            docPDF.text(`Report Ore - ${employeeData.name} ${employeeData.surname}`, 14, 20);
+            docPDF.setFontSize(11);
+            docPDF.text(`Periodo: ${selectedMonth + 1}/${selectedYear}`, 14, 28);
+
+            autoTable(docPDF, {
+                head: [['Data', 'In', 'Out', 'Pausa', 'Totale', 'Cantiere']],
+                body: rows,
+                startY: 35,
+                theme: 'grid',
+                headStyles: { fillColor: [24, 144, 255] }
+            });
+
+            const finalY = docPDF.lastAutoTable.finalY + 10;
+            docPDF.setFont(undefined, 'bold');
+            docPDF.text(`TOTALE MENSILE: ${Math.floor(totalWorkedMins/60)}h ${totalWorkedMins%60}m`, 14, finalY);
+
+            const pdfBase64 = docPDF.output('datauristring').split(',')[1];
+            const fileName = `Report_${employeeData.surname}_${selectedMonth+1}.pdf`;
+
+            // <--- 2. LOGICA MODIFICATA PER IOS & ANDROID (CACHE + SHARE) --->
+            const result = await Filesystem.writeFile({
+                path: fileName,
+                data: pdfBase64,
+                directory: Directory.Cache // Usiamo Cache per lo sharing temporaneo
+            });
+
+            await Share.share({
+                title: 'Report Ore',
+                text: `Report ore mensile di ${employeeData.name} ${employeeData.surname}`,
+                url: result.uri,
+                dialogTitle: 'Condividi Report PDF'
+            });
+
+        } catch (err) {
+            console.error(err);
+            alert("Errore PDF: " + err.message);
+        } finally {
+            setIsGeneratingPdf(false);
+        }
     };
 
     // --- LOGICA SPESE (CORRETTA) ---
@@ -371,18 +462,14 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
         setIsLoadingExpenses(true);
         setShowExpenseHistory(true);
         try {
-            // FIX: Usiamo employeeData.userId (che nel tuo DB è "Hke...")
-            // Se per qualche motivo userId non c'è, usa id come fallback
             const targetUserId = employeeData.userId || employeeData.id;
-
             const q = query(
                 collection(db, "employee_expenses"), 
-                where("userId", "==", targetUserId) // <--- ECCO LA CORREZIONE
+                where("userId", "==", targetUserId)
             );
             const snapshot = await getDocs(q);
-            const expenses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            const expenses = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
             
-            // Ordinamento manuale lato client
             expenses.sort((a, b) => {
                 const dateA = a.date?.toDate() || 0;
                 const dateB = b.date?.toDate() || 0;
@@ -392,7 +479,6 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
             setMyExpenses(expenses);
         } catch (error) {
             console.error("Errore caricamento spese:", error);
-            alert("Errore caricamento spese");
         } finally {
             setIsLoadingExpenses(false);
         }
@@ -414,70 +500,75 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 <div style={styles.headerInner}>
                     <div></div>
                     <div style={styles.headerCenter}>
-                        <img src="/icon-192x192.png" alt="LOGO" style={styles.logo} onError={(e) => { e.target.style.display='none'; }} />
-                        <span style={styles.companyName}>MARCATEMPO</span>
+                        <img src="/logo.png" alt="LOGO" style={styles.logo} onError={(e) => e.target.style.display='none'} />
+                        <span style={styles.companyName}>MARCATEMPO TCS</span>
                     </div>
                     <button style={styles.logoutBtn} onClick={handleLogout}>Esci</button>
                 </div>
             </div>
+
             <div style={styles.body}>
                 <div style={styles.clockCard}>
                     <div style={styles.clockDate}>{currentTime.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
                     <div style={styles.clockTime}>{currentTime.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</div>
                     <div style={styles.employeeName}>{employeeData.name} {employeeData.surname}</div>
                 </div>
-                
-                <div style={{...styles.statusBox, backgroundColor: gpsLoading?'#fffbe6':inRangeArea?'#f6ffed':'#fff1f0', color: gpsLoading?'#d48806':inRangeArea?'#389e0d':'#cf1322', border:`1px solid ${gpsLoading?'#ffe58f':inRangeArea?'#b7eb8f':'#ffa39e'}`}}>
-                    {gpsLoading ? "📡 Ricerca GPS..." : locationError ? `⚠️ ${locationError}` : inRangeArea ? `✅ Zona: ${inRangeArea.name}` : isGpsRequired ? "❌ Fuori Zona" : "ℹ️ GPS Opzionale"}
+
+                <div style={{
+                    ...styles.statusBox, 
+                    backgroundColor: gpsLoading ? '#fffbe6' : inRangeArea ? '#f6ffed' : '#fff1f0',
+                    color: gpsLoading ? '#d48806' : inRangeArea ? '#389e0d' : '#cf1322',
+                    border: `1px solid ${gpsLoading ? '#ffe58f' : inRangeArea ? '#b7eb8f' : '#ffa39e'}`
+                }}>
+                    {gpsLoading ? "📡 Ricerca posizione..." : locationError ? `⚠️ ${locationError}` : inRangeArea ? `✅ Zona: ${inRangeArea.name}` : "❌ Fuori zona"}
                 </div>
 
                 {activeEntry && (
                     <div style={{...styles.compactInfoLine, backgroundColor:'#e6f7ff', borderColor:'#91d5ff', color:'#0050b3'}}>
-                        <div style={styles.infoColLeft}>🟢 Entrata: <strong>{activeEntry.clockInTime.toDate().toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'})}</strong></div>
+                        <div style={styles.infoColLeft}>In: <strong>{activeEntry.clockInTime.toDate().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</strong></div>
                         <div style={styles.infoColCenter}>|</div>
                         <div style={styles.infoColRight}>⏱️ Tot: <strong>{dailyTotalString}</strong></div>
                     </div>
                 )}
 
-                {isOut && lastEntry && (
-                    <div style={{...styles.compactInfoLine, backgroundColor:'#fff1f0', borderColor:'#ffccc7', color:'#cf1322'}}>
-                        <div style={styles.infoColLeft}>🔴 Uscita: <strong>{lastEntry.clockOutTime ? lastEntry.clockOutTime.toDate().toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'}) : '--:--'}</strong></div>
-                        <div style={styles.infoColCenter}>|</div>
-                        <div style={styles.infoColRight}>⏱️ Tot: <strong>{dailyTotalString}</strong></div>
-                    </div>
-                )}
-
-                {isOut && (
+                {isOut ? (
                     <>
                         {!isGpsRequired && (
-                            <select style={styles.select} value={manualAreaId} onChange={(e)=>setManualAreaId(e.target.value)}>
+                            <select style={styles.select} value={manualAreaId} onChange={(e) => setManualAreaId(e.target.value)}>
                                 <option value="">-- Seleziona Cantiere --</option>
                                 {employeeWorkAreas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                             </select>
                         )}
-                        <button style={{...styles.btnBig, ...(isProcessing || (isGpsRequired && !inRangeArea) ? styles.btnDisabled : styles.btnGreen)}} disabled={isProcessing || (isGpsRequired && !inRangeArea)} onClick={() => handleAction('clockIn')}>
-                            <span>🕒</span> TIMBRA ENTRATA
+                        <button 
+                            style={{...styles.btnBig, ...(isProcessing || (isGpsRequired && !inRangeArea) ? styles.btnDisabled : styles.btnGreen)}} 
+                            disabled={isProcessing || (isGpsRequired && !inRangeArea)} 
+                            onClick={() => handleAction('clockIn')}
+                        >
+                            🕒 TIMBRA ENTRATA
                         </button>
                     </>
-                )}
-                
-                {isWorking && (
-                    <div style={{display:'flex', gap:'15px', width:'100%'}}>
-                        <button style={{...styles.btnBig, ...(isProcessing || pauseStatus === 'COMPLETED' ? styles.btnDisabled : styles.btnOrange), flex:1, fontSize:'1rem'}} disabled={isProcessing || pauseStatus === 'COMPLETED'} onClick={() => handleAction('clockPause')}>
-                            {pauseStatus === 'COMPLETED' ? 'PAUSA OK' : '☕ PAUSA'}
-                        </button>
-                        <button style={{...styles.btnBig, ...styles.btnRed, flex:1, fontSize:'1rem'}} disabled={isProcessing} onClick={() => handleAction('clockOut')}>
-                            🚪 USCITA
-                        </button>
+                ) : (
+                    <div style={{width:'100%', display:'flex', flexDirection:'column', gap:'10px'}}>
+                        <div style={{display:'flex', gap:'10px', width:'100%'}}>
+                            <button 
+                                style={{...styles.btnBig, ...(isProcessing || pauseStatus === 'COMPLETED' ? styles.btnDisabled : styles.btnOrange), flex: 1}} 
+                                disabled={isProcessing || pauseStatus === 'COMPLETED'} 
+                                onClick={() => handleAction('clockPause')}
+                            >
+                                {isOnPause ? '▶️ FINE PAUSA' : '☕ PAUSA'}
+                            </button>
+                            <button 
+                                style={{...styles.btnBig, ...styles.btnRed, flex: 1}} 
+                                disabled={isProcessing} 
+                                onClick={() => handleAction('clockOut')}
+                            >
+                                🚪 USCITA
+                            </button>
+                        </div>
                     </div>
                 )}
-                
-                {isOnPause && (
-                    <button style={{...styles.btnBig, ...styles.btnBlue}} disabled={isProcessing} onClick={() => handleAction('clockPause')}>▶️ FINE PAUSA</button>
-                )}
 
-                {/* --- SEZIONE SPESE --- */}
-                <div style={{width:'100%', marginTop:'10px', display:'flex', flexDirection:'column', gap:'10px'}}>
+                <div style={{width:'100%', marginTop:'15px', display:'flex', flexDirection:'column', gap:'10px'}}>
                     <ExpenseModal user={user} employeeData={employeeData} />
                     <button style={{...styles.btnBig, ...styles.btnTeal, padding:'15px', fontSize:'1rem'}} onClick={handleViewExpenses}>
                         📜 I Miei Rimborsi
@@ -485,81 +576,68 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 </div>
 
                 <div style={styles.reportSection}>
-                    <div style={{fontSize:'1rem', fontWeight:'bold', color:'#595959', textAlign:'center'}}>📄 Scarica Report Ore</div>
+                    <div style={{fontWeight:'bold', color:'#595959', textAlign:'center'}}>📄 Report Ore Mensile</div>
                     <div style={styles.selectContainer}>
-                        <select style={styles.select} value={selectedMonth} onChange={(e)=>setSelectedMonth(parseInt(e.target.value))}>
+                        <select style={styles.select} value={selectedMonth} onChange={(e) => setSelectedMonth(parseInt(e.target.value))}>
                             {["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"].map((m,i) => <option key={i} value={i}>{m}</option>)}
                         </select>
-                        <select style={{...styles.select}} value={selectedYear} onChange={(e)=>setSelectedYear(parseInt(e.target.value))}>
+                        <select style={styles.select} value={selectedYear} onChange={(e) => setSelectedYear(parseInt(e.target.value))}>
                             {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
                         </select>
                     </div>
                     <button style={styles.btnReport} onClick={handleExportPDF} disabled={isGeneratingPdf}>
-                        {isGeneratingPdf ? 'GENERAZIONE PDF...' : '⬇️ SCARICA PDF'}
+                        {isGeneratingPdf ? 'GENERAZIONE...' : '⬇️ SCARICA PDF'}
                     </button>
                 </div>
             </div>
-            <div style={styles.footer}>
-                TCS Italia App v2.1<br/>
-                Creato da D. Leoncino
-            </div>
 
-            {/* MODALE STORICO SPESE */}
             {showExpenseHistory && (
                 <>
                     <div style={overlayStyle} onClick={() => setShowExpenseHistory(false)} />
                     <div style={containerStyle}>
                         <div style={modalStyle}>
-                            <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f9fafb' }}>
-                                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 'bold', color: '#111827' }}>💰 I Miei Rimborsi</h3>
-                                <button onClick={() => setShowExpenseHistory(false)} style={{ background: 'none', border: 'none', fontSize: '24px', color: '#9ca3af', cursor: 'pointer' }}>&times;</button>
+                            <div style={{ padding: '16px', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{fontWeight:'bold'}}>💰 I Miei Rimborsi</span>
+                                <button onClick={() => setShowExpenseHistory(false)} style={{border:'none', background:'none', fontSize:'24px'}}>&times;</button>
                             </div>
-                            <div style={{ padding: '24px', overflowY: 'auto', flex: 1 }}>
-                                {isLoadingExpenses ? (
-                                    <p style={{ textAlign: 'center', color: '#6b7280' }}>Caricamento...</p>
-                                ) : myExpenses.length === 0 ? (
-                                    <p style={{ textAlign: 'center', color: '#9ca3af', fontStyle: 'italic' }}>Nessuna spesa registrata.</p>
-                                ) : (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                        {myExpenses.map(expense => (
-                                            <div key={expense.id} style={{ padding: '12px', border: '1px solid #e5e7eb', borderRadius: '8px', backgroundColor: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                                                    <span style={{ fontSize: '0.85rem', color: '#6b7280' }}>
-                                                        {expense.date && expense.date.toDate ? expense.date.toDate().toLocaleDateString() : 'N/D'}
-                                                    </span>
-                                                    <div style={{display:'flex', gap:'5px', alignItems:'center'}}>
-                                                        <span style={{ 
-                                                            fontSize: '0.75rem', fontWeight: 'bold', padding: '2px 8px', borderRadius: '12px', textTransform: 'uppercase',
-                                                            backgroundColor: expense.status === 'approved' ? '#def7ec' : expense.status === 'rejected' ? '#fde8e8' : '#fef3c7',
-                                                            color: expense.status === 'approved' ? '#03543f' : expense.status === 'rejected' ? '#9b1c1c' : '#92400e'
-                                                        }}>
-                                                            {expense.status === 'approved' ? 'Approvato' : expense.status === 'rejected' ? 'Rifiutato' : 'In Attesa'}
-                                                        </span>
-                                                        {expense.status === 'pending' && (
-                                                            <button 
-                                                                onClick={() => handleDeleteExpense(expense.id)}
-                                                                style={{border:'none', background:'transparent', cursor:'pointer', fontSize:'1rem'}}
-                                                            >🗑️</button>
-                                                        )}
+                            <div style={{ padding: '16px', overflowY: 'auto', flex: 1 }}>
+                                {isLoadingExpenses ? <p>Caricamento...</p> : myExpenses.length === 0 ? <p>Nessun rimborso.</p> : (
+                                    <div style={{display:'flex', flexDirection:'column', gap:'10px'}}>
+                                        {myExpenses.map(exp => (
+                                            <div key={exp.id} style={{padding:'12px', border:'1px solid #eee', borderRadius:'8px', backgroundColor:'#fff'}}>
+                                                <div style={{display:'flex', justifyContent:'space-between', fontSize:'0.75rem', color:'#888', marginBottom:'5px'}}>
+                                                    {exp.date?.toDate().toLocaleDateString()}
+                                                    <div style={{display:'flex', gap:'8px', alignItems:'center'}}>
+                                                        <span style={{
+                                                            fontWeight:'bold', 
+                                                            color: exp.status === 'approved' ? 'green' : exp.status === 'rejected' ? 'red' : 'orange'
+                                                        }}>{exp.status?.toUpperCase()}</span>
+                                                        {exp.status === 'pending' && <button onClick={()=>handleDeleteExpense(exp.id)} style={{border:'none', background:'none', color:'red'}}>🗑️</button>}
                                                     </div>
                                                 </div>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                    <span style={{ fontWeight: 'bold', color: '#1f2937', fontSize:'0.95rem' }}>{expense.description || 'Spesa'}</span>
-                                                    <span style={{ fontWeight: 'bold', color: '#4f46e5', fontSize:'1rem' }}>€ {Number(expense.amount).toFixed(2)}</span>
+                                                <div style={{display:'flex', justifyContent:'space-between'}}>
+                                                    <span style={{fontWeight:'500'}}>{exp.description}</span>
+                                                    <strong>€ {Number(exp.amount).toFixed(2)}</strong>
                                                 </div>
                                             </div>
                                         ))}
                                     </div>
                                 )}
                             </div>
-                            <div style={{ padding: '16px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', textAlign:'right' }}>
-                                <button onClick={() => setShowExpenseHistory(false)} style={{ padding: '10px 20px', backgroundColor: '#fff', border: '1px solid #d1d5db', borderRadius: '6px', fontWeight: 'bold' }}>Chiudi</button>
+                            <div style={{padding:'16px', textAlign:'right', borderTop:'1px solid #eee'}}>
+                                <button onClick={() => setShowExpenseHistory(false)} style={{padding:'8px 20px', borderRadius:'6px', border:'1px solid #ccc', background:'#fff'}}>Chiudi</button>
                             </div>
                         </div>
                     </div>
                 </>
             )}
+
+            <div style={styles.footer}>
+                TCS Italia App v2.1<br/>
+                Creato da D. Leoncino
+            </div>
         </div>
     );
 };
+
 export default SimpleEmployeeApp;
