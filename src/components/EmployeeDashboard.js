@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../firebase';
 import { collection, query, where, onSnapshot, orderBy, getDocs, Timestamp, limit, deleteDoc, doc } from 'firebase/firestore'; // <--- AGGIUNTO deleteDoc, doc
 import { getFunctions, httpsCallable } from 'firebase/functions';
