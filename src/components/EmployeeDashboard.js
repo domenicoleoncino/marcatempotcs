@@ -1,6 +1,3 @@
-// File: src/components/EmployeeDashboard.js
-/* eslint-disable no-unused-vars */
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db } from '../firebase';
 import { collection, query, where, onSnapshot, orderBy, getDocs, Timestamp, limit, deleteDoc, doc } from 'firebase/firestore'; // <--- AGGIUNTO deleteDoc, doc
@@ -634,22 +631,26 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     };
 
     // ========================================================
-    // --- 4. GESTIONE STORICO SPESE ---
+    // --- 4. GESTIONE STORICO SPESE (FIX: NOME COLLEZIONE & USERID) ---
     // ========================================================
     const handleViewExpenses = async () => {
         setIsLoadingExpenses(true);
         setShowExpenseHistory(true);
+        
+        // FIX: Usiamo employeeData.userId, che corrisponde al campo nel DB.
+        // Se non esiste, usiamo employeeData.id come fallback.
+        const searchId = employeeData.userId || employeeData.id;
+
         try {
-            // FIX: Niente orderBy lato server per evitare errori indici
             const q = query(
-                collection(db, "expense_requests"), 
-                where("employeeId", "==", employeeData.id)
+                collection(db, "employee_expenses"), 
+                where("userId", "==", searchId) // <--- CORRETTO QUI
             );
             
             const snapshot = await getDocs(q);
             const expenses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             
-            // Ordiniamo lato client
+            // Ordiniamo lato client per sicurezza
             expenses.sort((a, b) => {
                 const dateA = a.date && a.date.toDate ? a.date.toDate() : new Date(0);
                 const dateB = b.date && b.date.toDate ? b.date.toDate() : new Date(0);
@@ -668,7 +669,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     const handleDeleteExpense = async (expenseId) => {
         if(!window.confirm("Sei sicuro di voler eliminare questa richiesta?")) return;
         try {
-            await deleteDoc(doc(db, "expense_requests", expenseId));
+            await deleteDoc(doc(db, "employee_expenses", expenseId));
             // Aggiorna la lista locale rimuovendo l'elemento
             setMyExpenses(prev => prev.filter(e => e.id !== expenseId));
         } catch (error) {

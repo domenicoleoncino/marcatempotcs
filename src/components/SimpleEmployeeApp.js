@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../firebase';
-import { collection, query, where, onSnapshot, orderBy, limit, getDocs, Timestamp, deleteDoc, doc } from 'firebase/firestore'; // <--- AGGIUNTO deleteDoc, doc
+import { collection, query, where, onSnapshot, orderBy, limit, getDocs, Timestamp, deleteDoc, doc } from 'firebase/firestore'; 
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -81,7 +81,6 @@ const styles = {
     clockDate: { color: '#8c8c8c', fontSize: '0.85rem', textTransform: 'capitalize', fontWeight: '500' },
     employeeName: { marginTop: '4px', color: '#262626', fontWeight: '600', fontSize: '0.95rem' },
     
-    // --- INFO LINEA UNICA ---
     compactInfoLine: {
         width: '100%',
         fontSize: '1rem',
@@ -125,7 +124,7 @@ const styles = {
     btnRed: { backgroundColor: '#ff4d4f', backgroundImage: 'linear-gradient(to bottom right, #ff7875, #ff4d4f)' },
     btnOrange: { backgroundColor: '#faad14', backgroundImage: 'linear-gradient(to bottom right, #ffc53d, #faad14)' },
     btnBlue: { backgroundColor: '#1890ff', backgroundImage: 'linear-gradient(to bottom right, #40a9ff, #1890ff)' },
-    btnTeal: { backgroundColor: '#13c2c2', backgroundImage: 'linear-gradient(to bottom right, #36cfc9, #13c2c2)' }, // Nuovo stile per rimborsi
+    btnTeal: { backgroundColor: '#13c2c2', backgroundImage: 'linear-gradient(to bottom right, #36cfc9, #13c2c2)' },
     btnDisabled: { backgroundColor: '#f5f5f5', color: '#b8b8b8', cursor: 'not-allowed', boxShadow: 'none', backgroundImage: 'none', border: '1px solid #d9d9d9' },
     
     reportSection: { 
@@ -148,7 +147,7 @@ const styles = {
     footer: { marginTop: 'auto', textAlign: 'center', padding: '20px', color: '#8c8c8c', fontSize: '0.8rem', lineHeight: '1.5', boxSizing: 'border-box' }
 };
 
-// Stili Inline per Modale e Overlay
+// Modale e Overlay Styles
 const overlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: 99998, backdropFilter: 'blur(4px)' };
 const containerStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' };
 const modalStyle = { backgroundColor: '#ffffff', width: '90%', maxWidth: '500px', maxHeight: '80vh', borderRadius: '12px', overflow: 'hidden', pointerEvents: 'auto', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column' };
@@ -186,7 +185,7 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
     const [rawTodayEntries, setRawTodayEntries] = useState([]);
     const [dailyTotalString, setDailyTotalString] = useState('...');
 
-    // STATI PER STORICO SPESE
+    // STATI STORICO SPESE
     const [showExpenseHistory, setShowExpenseHistory] = useState(false);
     const [myExpenses, setMyExpenses] = useState([]);
     const [isLoadingExpenses, setIsLoadingExpenses] = useState(false);
@@ -203,6 +202,7 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
         return () => clearInterval(timer);
     }, []);
 
+    // Listener Ultima Timbratura
     useEffect(() => {
         if (!employeeData?.id) return;
         const qLast = query(collection(db, "time_entries"), where("employeeId", "==", employeeData.id), orderBy("clockInTime", "desc"), limit(1));
@@ -217,6 +217,7 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
         return () => unsub();
     }, [employeeData]);
 
+    // Listener Statistiche Oggi
     useEffect(() => {
         if (!employeeData?.id || !lastEntry) { setRawTodayEntries([]); return; }
         const lastEntryDate = lastEntry.clockInTime.toDate();
@@ -227,6 +228,7 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
         return () => unsub();
     }, [employeeData, lastEntry]); 
 
+    // Calcolo Totale Ore
     useEffect(() => {
         if (!rawTodayEntries || rawTodayEntries.length === 0) { setDailyTotalString("0h 0m"); return; }
         let totalMillis = 0;
@@ -262,6 +264,7 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
     const isOnPause = pauseStatus === 'ACTIVE';
     const isOut = !activeEntry;
 
+    // GPS Logic
     const employeeWorkAreas = useMemo(() => {
         if (!employeeData || !employeeData.workAreaIds || !allWorkAreas) return [];
         return allWorkAreas.filter(area => employeeData.workAreaIds.includes(area.id));
@@ -283,10 +286,13 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
             setInRangeArea(found); setLocationError(null); setGpsLoading(false);
         };
         const error = () => { setLocationError("Attiva il GPS!"); setInRangeArea(null); setGpsLoading(false); };
-        if (navigator.geolocation) navigator.geolocation.watchPosition(success, error, { enableHighAccuracy: true });
-        else { setLocationError("GPS non supportato"); setGpsLoading(false); }
+        if (navigator.geolocation) {
+            const watchId = navigator.geolocation.watchPosition(success, error, { enableHighAccuracy: true });
+            return () => navigator.geolocation.clearWatch(watchId);
+        } else { setLocationError("GPS non supportato"); setGpsLoading(false); }
     }, [employeeWorkAreas, isGpsRequired]);
 
+    // Azioni Timbratura
     const handleAction = async (action) => {
         setIsProcessing(true);
         try {
@@ -326,6 +332,7 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
         } catch (e) { alert(e.message || "Errore"); } finally { setIsProcessing(false); }
     };
 
+    // --- FUNZIONE EXPORT PDF (CAPACITOR SPECIFICA) ---
     const handleExportPDF = async () => {
         setIsGeneratingPdf(true);
         try {
@@ -359,40 +366,45 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
         } catch (e) { alert("Errore generazione PDF: " + e.message); } finally { setIsGeneratingPdf(false); }
     };
 
-    // --- FUNZIONI SPESE ---
+    // --- LOGICA SPESE (CORRETTA) ---
     const handleViewExpenses = async () => {
         setIsLoadingExpenses(true);
         setShowExpenseHistory(true);
         try {
+            // FIX: Usiamo employeeData.userId (che nel tuo DB è "Hke...")
+            // Se per qualche motivo userId non c'è, usa id come fallback
+            const targetUserId = employeeData.userId || employeeData.id;
+
             const q = query(
-                collection(db, "expense_requests"), 
-                where("employeeId", "==", employeeData.id)
+                collection(db, "employee_expenses"), 
+                where("userId", "==", targetUserId) // <--- ECCO LA CORREZIONE
             );
             const snapshot = await getDocs(q);
             const expenses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             
-            // Ordiniamo lato client per sicurezza
+            // Ordinamento manuale lato client
             expenses.sort((a, b) => {
-                const dateA = a.date && a.date.toDate ? a.date.toDate() : new Date(0);
-                const dateB = b.date && b.date.toDate ? b.date.toDate() : new Date(0);
-                return dateB - dateA; 
+                const dateA = a.date?.toDate() || 0;
+                const dateB = b.date?.toDate() || 0;
+                return dateB - dateA;
             });
 
             setMyExpenses(expenses);
         } catch (error) {
-            console.error("Errore spese:", error);
+            console.error("Errore caricamento spese:", error);
+            alert("Errore caricamento spese");
         } finally {
             setIsLoadingExpenses(false);
         }
     };
 
     const handleDeleteExpense = async (expenseId) => {
-        if(!window.confirm("Eliminare questa richiesta?")) return;
+        if (!window.confirm("Vuoi eliminare questa spesa?")) return;
         try {
-            await deleteDoc(doc(db, "expense_requests", expenseId));
+            await deleteDoc(doc(db, "employee_expenses", expenseId));
             setMyExpenses(prev => prev.filter(e => e.id !== expenseId));
         } catch (error) {
-            alert("Errore durante l'eliminazione.");
+            alert("Errore eliminazione");
         }
     };
 
