@@ -4,6 +4,7 @@ import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getAuth, signInAnonymously } from "firebase/auth";
 import { getFunctions } from "firebase/functions";
+import { getStorage } from "firebase/storage"; // <--- 1. IMPORT AGGIUNTO
 
 // Chiave API (Deve essere sempre la stessa che hai in .env.local e Netlify)
 const FALLBACK_API_KEY = "AIzaSyC59l73xl56aOdHnQ8I3K1VqYbkDVzASjg"; 
@@ -23,6 +24,7 @@ let appInstance = null;
 let dbInstance = null;
 let authInstance = null;
 let functionsInstance = null;
+let storageInstance = null; // <--- 2. VARIABILE AGGIUNTA
 let initializationError = null;
 
 try {
@@ -38,6 +40,7 @@ try {
     dbInstance = getFirestore(appInstance);
     authInstance = getAuth(appInstance);
     functionsInstance = getFunctions(appInstance, 'europe-west1');
+    storageInstance = getStorage(appInstance); // <--- 3. INIZIALIZZAZIONE AGGIUNTA
 
 } catch (e) {
     console.error("Errore durante initializeApp:", e);
@@ -86,6 +89,7 @@ const useFirebase = () => {
         db: dbInstance,
         auth: authInstance,
         functions: functionsInstance,
+        storage: storageInstance, // <--- 4. RETURN NELL'HOOK AGGIUNTO
         isReady,
         error: error || initializationError
     };
@@ -93,5 +97,7 @@ const useFirebase = () => {
 
 // Esporta l'hook e l'errore statico per il componente Dashboard
 export { useFirebase, initializationError as INITIALIZATION_ERROR };
+
 // Esportazioni statiche per i vecchi file (App.js, ecc.)
-export { dbInstance as db, authInstance as auth, functionsInstance as functions };
+// <--- 5. EXPORT FINALE AGGIORNATO:
+export { dbInstance as db, authInstance as auth, functionsInstance as functions, storageInstance as storage };
