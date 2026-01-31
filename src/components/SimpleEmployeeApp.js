@@ -5,7 +5,8 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Filesystem, Directory } from '@capacitor/filesystem';
-// RIMOSSO: import { Share } ... non serve più
+import { Share } from '@capacitor/share'; 
+import { Capacitor } from '@capacitor/core'; // <--- NECESSARIO PER DISTINGUERE IOS DA ANDROID
 import ExpenseModal from './ExpenseModal';
 
 // --- MOTIVI DI MANCATA PAUSA ---
@@ -185,7 +186,7 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
         } catch (e) { alert(e.message); } finally { setIsProcessing(false); }
     };
 
-    // --- FUNZIONE PDF RIPRISTINATA (SALVA IN DOCUMENTI) ---
+    // --- FUNZIONE PDF IBRIDA (ANDROID = DOCUMENTI, IOS = SHARE) ---
     const handleExportPDF = async () => {
         setIsGeneratingPdf(true);
         try {
@@ -237,14 +238,34 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
             const base64Data = pdfOutput.split(',')[1]; 
             const fileName = `Report_${employeeData.surname}_${selectedMonth+1}_${selectedYear}.pdf`;
 
-            // SALVATAGGIO DIRETTO IN DOCUMENTI (Senza Share)
-            const result = await Filesystem.writeFile({
-                path: fileName,
-                data: base64Data,
-                directory: Directory.Documents
-            });
-
-            alert(`✅ PDF Salvato con successo!\nLo trovi nella cartella Documenti del telefono.\nNome: ${fileName}`);
+            // --- QUI LA LOGICA DOPPIA ---
+            if (Capacitor.getPlatform() === 'ios') {
+                // IOS: Salva in CACHE e poi usa SHARE
+                try {
+                    const result = await Filesystem.writeFile({
+                        path: fileName,
+                        data: base64Data,
+                        directory: Directory.Cache // Cache per iOS
+                    });
+                    await Share.share({
+                        title: 'Report Ore',
+                        text: 'Ecco il report ore mensile.',
+                        url: result.uri,
+                        dialogTitle: 'Scarica o Invia PDF'
+                    });
+                } catch (errIOS) {
+                    console.error("Errore Share iOS:", errIOS);
+                    alert("Impossibile condividere il file.");
+                }
+            } else {
+                // ANDROID: Salva DIRETTAMENTE in DOCUMENTI (Come volevi)
+                await Filesystem.writeFile({
+                    path: fileName,
+                    data: base64Data,
+                    directory: Directory.Documents // Documenti per Android
+                });
+                alert(`✅ PDF Salvato!\nLo trovi nella cartella "Documenti" con nome:\n${fileName}`);
+            }
 
         } catch (e) { alert("Errore PDF: " + e.message); } finally { setIsGeneratingPdf(false); }
     };
@@ -272,6 +293,7 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
                     <div style={styles.employeeName}>{employeeData.name} {employeeData.surname}</div>
                 </div>
                 
+                {/* --- BOX GPS (Blu se opzionale) --- */}
                 <div style={{
                     ...styles.statusBox, 
                     backgroundColor: gpsLoading ? '#fffbe6' : !isGpsRequired ? '#e6f7ff' : inRangeArea ? '#f6ffed' : '#fff1f0',
@@ -281,9 +303,19 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
                     {gpsLoading ? "📡 Ricerca GPS..." : !isGpsRequired ? "ℹ️ GPS non richiesto" : locationError ? `⚠️ ${locationError}` : inRangeArea ? `✅ Zona: ${inRangeArea.name}` : "❌ Fuori zona"}
                 </div>
 
+                {/* --- BOX RIEPILOGO MENTRE LAVORI (Blu/Verde) --- */}
                 {activeEntry && (
                     <div style={{...styles.compactInfoLine, backgroundColor:'#e6f7ff', borderColor:'#91d5ff', color:'#0050b3'}}>
                         <div style={styles.infoColLeft}>In: <strong>{activeEntry.clockInTime.toDate().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</strong></div>
+                        <div style={styles.infoColCenter}>|</div>
+                        <div style={styles.infoColRight}>Tot: <strong>{dailyTotalString}</strong></div>
+                    </div>
+                )}
+
+                {/* --- BOX RIEPILOGO DOPO USCITA (Rosso) --- */}
+                {isOut && lastEntry && (
+                    <div style={{...styles.compactInfoLine, backgroundColor:'#fff1f0', borderColor:'#ffccc7', color:'#cf1322'}}>
+                        <div style={styles.infoColLeft}>Uscita: <strong>{lastEntry.clockOutTime ? lastEntry.clockOutTime.toDate().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '--:--'}</strong></div>
                         <div style={styles.infoColCenter}>|</div>
                         <div style={styles.infoColRight}>Tot: <strong>{dailyTotalString}</strong></div>
                     </div>
@@ -356,7 +388,7 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
                     </div>
                 )}
             </div>
-            <div style={styles.footer}>TCS Italia App v2.2<br/>Creato da D. Leoncino</div>
+            <div style={styles.footer}>TCS Italia App v2.3<br/>Creato da D. Leoncino</div>
         </div>
     );
 };
