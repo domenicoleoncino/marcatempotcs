@@ -5,7 +5,7 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Filesystem, Directory } from '@capacitor/filesystem';
-import { Share } from '@capacitor/share'; 
+// RIMOSSO: import { Share } ... non serve più
 import ExpenseModal from './ExpenseModal';
 
 // --- MOTIVI DI MANCATA PAUSA ---
@@ -185,6 +185,7 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
         } catch (e) { alert(e.message); } finally { setIsProcessing(false); }
     };
 
+    // --- FUNZIONE PDF RIPRISTINATA (SALVA IN DOCUMENTI) ---
     const handleExportPDF = async () => {
         setIsGeneratingPdf(true);
         try {
@@ -236,27 +237,14 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
             const base64Data = pdfOutput.split(',')[1]; 
             const fileName = `Report_${employeeData.surname}_${selectedMonth+1}_${selectedYear}.pdf`;
 
-            try {
-                // Scriviamo nella CACHE (Cartella sicura per iOS)
-                const result = await Filesystem.writeFile({
-                    path: fileName,
-                    data: base64Data,
-                    directory: Directory.Cache
-                });
+            // SALVATAGGIO DIRETTO IN DOCUMENTI (Senza Share)
+            const result = await Filesystem.writeFile({
+                path: fileName,
+                data: base64Data,
+                directory: Directory.Documents
+            });
 
-                // Apriamo il menu nativo di condivisione
-                await Share.share({
-                    title: 'Report Ore',
-                    text: 'Ecco il report ore mensile.',
-                    url: result.uri,
-                    dialogTitle: 'Condividi Report PDF'
-                });
-
-            } catch (nativeError) {
-                console.error("Errore Share:", nativeError);
-                // Fallback per Web o se Share fallisce
-                docPDF.save(fileName);
-            }
+            alert(`✅ PDF Salvato con successo!\nLo trovi nella cartella Documenti del telefono.\nNome: ${fileName}`);
 
         } catch (e) { alert("Errore PDF: " + e.message); } finally { setIsGeneratingPdf(false); }
     };
@@ -276,16 +264,7 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
 
     return (
         <div style={styles.container}>
-            <div style={styles.headerOuter}>
-                <div style={styles.headerInner}>
-                    <div></div>
-                    <div style={styles.headerCenter}>
-                        <img src="/icon-192x192.png" style={styles.logo} alt="LOGO" onError={(e) => e.target.style.display='none'} />
-                        <span style={styles.companyName}>MARCATEMPO TCS</span>
-                    </div>
-                    <button style={styles.logoutBtn} onClick={handleLogout}>Esci</button>
-                </div>
-            </div>
+            <div style={styles.headerOuter}><div style={styles.headerInner}><div></div><div style={styles.headerCenter}><img src="/icon-192x192.png" style={styles.logo} alt="LOGO" onError={(e) => e.target.style.display='none'} /><span style={styles.companyName}>MARCATEMPO TCS</span></div><button style={styles.logoutBtn} onClick={handleLogout}>Esci</button></div></div>
             <div style={styles.body}>
                 <div style={styles.clockCard}>
                     <div style={styles.clockDate}>{currentTime.toLocaleDateString()}</div>
@@ -293,7 +272,6 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
                     <div style={styles.employeeName}>{employeeData.name} {employeeData.surname}</div>
                 </div>
                 
-                {/* --- BOX GPS (Blu se opzionale) --- */}
                 <div style={{
                     ...styles.statusBox, 
                     backgroundColor: gpsLoading ? '#fffbe6' : !isGpsRequired ? '#e6f7ff' : inRangeArea ? '#f6ffed' : '#fff1f0',
