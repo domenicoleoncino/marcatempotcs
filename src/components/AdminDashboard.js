@@ -22,20 +22,12 @@ import { saveAs } from 'file-saver';
 const SUPER_ADMIN_EMAIL = "domenico.leoncino@tcsitalia.com"; 
 
 // --- CONFIGURAZIONE LIMITI ---
-const MAX_DEVICE_LIMIT = 2; // Imposta qui il numero massimo di dispositivi consentiti per dipendente
+const MAX_DEVICE_LIMIT = 2; 
 
 // Palette colori per Excel (Aree)
 const AREA_COLORS = [
-    "FFCCCC", // Rosso chiaro
-    "CCFFCC", // Verde chiaro
-    "CCCCFF", // Blu chiaro
-    "FFFFCC", // Giallo chiaro
-    "FFCCFF", // Viola chiaro
-    "CCFFFF", // Ciano chiaro
-    "FFD9CC", // Arancio chiaro
-    "E5CCFF", // Lavanda
-    "D9FFCC", // Lime chiaro
-    "FFE5CC"  // Pesca
+    "FFCCCC", "CCFFCC", "CCCCFF", "FFFFCC", "FFCCFF", 
+    "CCFFFF", "FFD9CC", "E5CCFF", "D9FFCC", "FFE5CC"
 ];
 
 const NotificationPopup = ({ message, type, onClose }) => {
@@ -94,7 +86,6 @@ const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) =>
     const overlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: 99998, backdropFilter: 'blur(4px)' };
     const containerStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' };
     const modalStyle = { backgroundColor: '#ffffff', width: '100%', maxWidth: '500px', maxHeight: '85vh', borderRadius: '12px', overflow: 'hidden', pointerEvents: 'auto', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column' };
-    
     const inputClasses = "block w-full px-3 py-2.5 bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm";
     const labelClasses = "block mb-1 text-xs font-bold text-gray-500 uppercase tracking-wide";
 
@@ -136,6 +127,130 @@ const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) =>
                     <div style={{ padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
                         <button type="button" onClick={onClose} className="px-5 py-2.5 bg-white border border-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-50 transition-colors text-sm shadow-sm">Annulla</button>
                         <button type="submit" form="edit-entry-form" disabled={isLoading} className="px-5 py-2.5 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-colors text-sm shadow-md disabled:opacity-70 disabled:cursor-not-allowed">{isLoading ? 'Salvataggio...' : 'Salva Modifiche'}</button>
+                    </div>
+                </div>
+            </div>
+        </>,
+        document.body
+    );
+};
+
+// --- NUOVO MODALE SICURO PER PREPOSTI (NO FANTASMI) ---
+const AddEmployeeToAreaModal = ({ show, onClose, allEmployees, workAreas, userData, showNotification, onDataUpdate }) => {
+    const [selectedEmpId, setSelectedEmpId] = useState('');
+    const [selectedAreaId, setSelectedAreaId] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
+
+    // 1. Il Preposto vede solo le SUE aree per l'assegnazione
+    const myAreas = useMemo(() => {
+        if (!userData || !userData.managedAreaIds) return [];
+        return workAreas.filter(a => userData.managedAreaIds.includes(a.id));
+    }, [workAreas, userData]);
+
+    // 2. Ordiniamo i dipendenti per nome per trovarli subito
+    const sortedEmployees = useMemo(() => {
+        return [...allEmployees].sort((a, b) => {
+            const nameA = `${a.surname} ${a.name}`.toLowerCase();
+            const nameB = `${b.surname} ${b.name}`.toLowerCase();
+            return nameA.localeCompare(nameB);
+        });
+    }, [allEmployees]);
+
+    if (!show) return null;
+
+    const handleSave = async (e) => {
+        e.preventDefault();
+        if (!selectedEmpId || !selectedAreaId) { 
+            alert("Seleziona sia il dipendente che l'area."); 
+            return; 
+        }
+        
+        setIsSaving(true);
+        try {
+            // MAGIA: Usiamo arrayUnion per aggiungere l'ID dell'area al dipendente ESISTENTE.
+            // NON creiamo nessun nuovo utente, colleghiamo solo quello vero (con l'ID giusto).
+            const employeeRef = doc(db, "employees", selectedEmpId);
+            
+            await updateDoc(employeeRef, {
+                workAreaIds: arrayUnion(selectedAreaId)
+            });
+
+            showNotification("Dipendente collegato correttamente alla squadra!", "success");
+            await onDataUpdate(); // Ricarica i dati per vedere subito il cambiamento
+            onClose();
+            setSelectedEmpId('');
+            setSelectedAreaId('');
+        } catch (error) {
+            console.error("Errore assegnazione:", error);
+            showNotification("Errore: " + error.message, "error");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    // Stili
+    const overlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: 99998, backdropFilter: 'blur(4px)' };
+    const containerStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' };
+    const modalStyle = { backgroundColor: '#ffffff', width: '100%', maxWidth: '500px', borderRadius: '12px', overflow: 'hidden', pointerEvents: 'auto', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column' };
+    const inputClasses = "block w-full px-3 py-2.5 bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm";
+    const labelClasses = "block mb-1 text-xs font-bold text-gray-500 uppercase tracking-wide";
+
+    return ReactDOM.createPortal(
+        <>
+            <div style={overlayStyle} onClick={onClose} />
+            <div style={containerStyle}>
+                <div style={modalStyle}>
+                    <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f0f9ff' }}>
+                        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#0369a1' }}>👥 Aggiungi alla Squadra</h3>
+                        <button onClick={onClose} style={{ border: 'none', background: 'none', fontSize: '24px', cursor: 'pointer', color: '#0369a1' }}>&times;</button>
+                    </div>
+                    <div style={{ padding: '24px' }}>
+                        <form id="add-emp-form" onSubmit={handleSave} className="space-y-5">
+                            <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 mb-4">
+                                <p className="text-sm text-blue-800">
+                                    ℹ️ Cerca nella lista. <br/>
+                                
+                                </p>
+                            </div>
+
+                            <div>
+                                <label className={labelClasses}>1. Chi vuoi aggiungere?</label>
+                                <select 
+                                    value={selectedEmpId} 
+                                    onChange={e => setSelectedEmpId(e.target.value)} 
+                                    className={inputClasses} 
+                                    required
+                                >
+                                    <option value="">-- Cerca Cognome Nome --</option>
+                                    {sortedEmployees.map(emp => (
+                                        <option key={emp.id} value={emp.id}>
+                                            {emp.surname} {emp.name} ({emp.email})
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className={labelClasses}>2. In quale area lavorerà?</label>
+                                <select 
+                                    value={selectedAreaId} 
+                                    onChange={e => setSelectedAreaId(e.target.value)} 
+                                    className={inputClasses} 
+                                    required
+                                >
+                                    <option value="">-- Seleziona Area --</option>
+                                    {myAreas.map(area => (
+                                        <option key={area.id} value={area.id}>{area.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </form>
+                    </div>
+                    <div style={{ padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                        <button type="button" onClick={onClose} className="px-4 py-2 border rounded hover:bg-gray-100">Annulla</button>
+                        <button type="submit" form="add-emp-form" disabled={isSaving} className="px-4 py-2 bg-blue-600 text-white font-bold rounded hover:bg-blue-700 disabled:opacity-50">
+                            {isSaving ? 'Salvataggio...' : 'Conferma Aggiunta'}
+                        </button>
                     </div>
                 </div>
             </div>
@@ -348,7 +463,7 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                                 <div className="flex flex-wrap gap-2 w-full mt-1">
                                                     {currentUserRole === 'admin' && (<><button onClick={() => openModal('assignArea', emp)} className="text-xs text-blue-600 hover:text-blue-800 font-semibold underline decoration-blue-200 hover:decoration-blue-800">🌍Aree</button><button onClick={() => openModal('editEmployee', emp)} className="text-xs text-green-600 hover:text-green-800 font-semibold underline decoration-green-200 hover:decoration-green-800">✏️Modifica</button><button onClick={() => openModal('deleteEmployee', emp)} className="text-xs text-red-600 hover:text-red-800 font-semibold underline decoration-red-200 hover:decoration-red-800">🗑️Elimina</button></>)}
                                                     {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (<button onClick={() => openModal('resetDevice', emp)} disabled={emp.deviceIds?.length === 0} className="text-xs text-yellow-600 hover:text-yellow-800 font-semibold disabled:text-gray-400 underline decoration-yellow-200 hover:decoration-yellow-800">📱Reset Device</button>)}
-                                                    {currentUserRole === 'preposto' && (<button onClick={() => openModal('assignEmployeeToPrepostoArea', emp)} className="text-xs text-blue-600 hover:text-blue-800 font-semibold underline">🌍Gestisci Aree</button>)}
+                                                    {currentUserRole === 'preposto' && (<button onClick={() => openModal('prepostoAddEmployeeToAreas')} className="text-xs text-blue-600 hover:text-blue-800 font-semibold underline">🌍Gestisci Aree</button>)}
                                                 </div>
                                                 {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (<div className="flex gap-2 mt-1 w-full pt-2 border-t border-gray-100"><button onClick={() => openModal('manualEntryForm', emp)} className="flex-1 text-xs px-2 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded hover:bg-indigo-100 transition-colors">+ 🕒 Ore</button><button onClick={() => openModal('absenceEntryForm', emp)} className="flex-1 text-xs px-2 py-1 bg-teal-50 text-teal-700 border border-teal-200 rounded hover:bg-teal-100 transition-colors">+ 👀 Giust.</button></div>)}
                                             </div>
@@ -791,6 +906,9 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const [notification, setNotification] = useState(null); 
     const [entryToEdit, setEntryToEdit] = useState(null);
 
+    // --- NUOVO STATO PER MODALE PREPOSTO (NO FANTASMI) ---
+    const [showAddEmployeeModal, setShowAddEmployeeModal] = useState(false);
+
     // STATO PER MODALE FORMS DEDICATO
     const [showAddFormModal, setShowAddFormModal] = useState(false);
 
@@ -1117,6 +1235,13 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
     // HANDLERS MODALI
     const openModal = useCallback((type, item = null) => {
+        // --- MODIFICA FONDAMENTALE PER PREPOSTO (PREVIENE FANTASMI) ---
+        if (type === 'prepostoAddEmployeeToAreas') {
+            setShowAddEmployeeModal(true); // Apri il NOSTRO popup nuovo sicuro
+            return; // STOP! Non aprire AdminModal
+        }
+        // ----------------------------------------------------------------
+
         if (type === 'newForm') {
             setShowAddFormModal(true); 
         } else {
@@ -1199,7 +1324,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         } catch (error) { const displayMessage = error.message.includes(":") ? error.message.split(":")[1].trim() : error.message; showNotification(`Errore generazione report: ${displayMessage || 'Errore Server.'}`, 'error'); console.error(error); }
         finally { if (isMounted) setIsLoading(false); }
         return () => { isMounted = false; };
-    }, [dateRange, reportAreaFilter, reportEmployeeFilter, allEmployees, allWorkAreas, showNotification, currentUserRole, userData]); // CORRETTO: Aggiunte dipendenze currentUserRole e userData
+    }, [dateRange, reportAreaFilter, reportEmployeeFilter, allEmployees, allWorkAreas, showNotification, currentUserRole, userData]); 
 
     const handleReviewSkipBreak = useCallback(async (entryId, decision) => {
         if (!entryId || !decision) return;
@@ -1462,6 +1587,17 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 currentUserRole={currentUserRole}
                 userData={userData}
                 showNotification={showNotification}
+            />
+
+            {/* --- NUOVO MODALE SICURO PER AGGIUNTA DIPENDENTI --- */}
+            <AddEmployeeToAreaModal 
+                show={showAddEmployeeModal}
+                onClose={() => setShowAddEmployeeModal(false)}
+                allEmployees={allEmployees}
+                workAreas={allWorkAreas}
+                userData={userData}
+                showNotification={showNotification}
+                onDataUpdate={fetchData}
             />
         </div>
     );
