@@ -216,8 +216,8 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                     await createAdm({ ...formData, createdBy: user.uid });
                     break;
                 
-                // --- OPERAZIONI SPECIALI (RECUPERO / ASSENZE) ---
-                case 'manualEntryForm': // Recupero Dimenticanza (Aggiunta Manuale al DB)
+                // --- OPERAZIONI SPECIALI ---
+                case 'manualEntryForm':
                      const startDateTime = new Date(`${formData.date}T${formData.startTime}`);
                      const endDateTime = new Date(`${formData.date}T${formData.endTime}`);
                      if (endDateTime <= startDateTime) throw new Error("L'uscita deve essere dopo l'entrata.");
@@ -227,7 +227,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                          status: 'clocked-out', isManual: true, note: 'Recupero dimenticanza (Admin)', pauses: []
                      });
                      break;
-                case 'absenceEntryForm': // Inserimento Massivo Assenze
+                case 'absenceEntryForm':
                      const start = new Date(formData.startDate); const end = new Date(formData.endDate);
                      if (end < start) throw new Error("Data fine precedente a data inizio.");
                      const batch = writeBatch(db); const tRef = collection(db, "time_entries");
@@ -246,17 +246,35 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                      await batch.commit();
                      break;
 
-                // --- MODIFICHE ESISTENTI ---
+                // --- MODIFICHE ---
                 case 'editEmployee':
                     if (!formData.name || !formData.surname) throw new Error('Nome/Cognome obbligatori.');
                     await updateDoc(doc(db, "employees", item.id), {
                         name: formData.name, surname: formData.surname, controlloGpsRichiesto: formData.controlloGpsRichiesto
                     });
                     break;
+                
+                // --- CANCELLAZIONE SICURA (FIX) ---
                 case 'deleteEmployee':
-                    const deleteUser = httpsCallable(functions, 'deleteUserAndEmployee');
-                    await deleteUser({ userId: item.userId });
+                    if (item.userId) {
+                        // Ha un account Auth: usiamo la funzione Cloud
+                        const deleteUser = httpsCallable(functions, 'deleteUserAndEmployee');
+                        await deleteUser({ userId: item.userId });
+                    } else {
+                        // NON ha un account Auth: cancelliamo solo il documento nel DB
+                        console.warn("Nessun userId trovato per il dipendente. Procedo con eliminazione solo documento.");
+                        await deleteDoc(doc(db, "employees", item.id));
+                    }
                     break;
+                case 'deleteAdmin':
+                    if (item.id) { // Qui item.id è solitamente l'ID del documento users
+                         const dAdmin = httpsCallable(functions, 'deleteUserAndEmployee');
+                         await dAdmin({ userId: item.id });
+                    } else {
+                        throw new Error("ID utente mancante.");
+                    }
+                    break;
+
                 case 'resetDevice':
                     await updateDoc(doc(db, "employees", item.id), { deviceIds: [] });
                     break;
@@ -285,10 +303,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                 case 'prepostoAddEmployeeToAreas': 
                     const pAssign = httpsCallable(functions, 'prepostoAssignEmployeeToArea');
                     await pAssign({ employeeId: item?.id || formData.selectedEmployee, areaIds: formData.selectedPrepostoAreas || [] });
-                    break;
-                case 'deleteAdmin':
-                    const dAdmin = httpsCallable(functions, 'deleteUserAndEmployee');
-                    await dAdmin({ userId: item.id });
                     break;
                 case 'manualClockIn':
                 case 'adminClockIn': 
