@@ -1111,6 +1111,8 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         return () => { isMounted = false; unsubscribeActive(); unsubscribePending(); };
     }, [allEmployees, allWorkAreas, adminEmployeeProfile, currentUserRole, userData, showNotification]);
 
+    // ... codice precedente ...
+
     useEffect(() => {
         let isMounted = true; 
         const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
@@ -1120,12 +1122,20 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             let totalMinutes = 0; const now = new Date();
             snapshot.docs.forEach(doc => {
                 const entry = doc.data(); if (!entry.clockInTime) return;
+                
+                // --- CORREZIONE LOGICA PREPOSTO ---
                 if (currentUserRole === 'preposto') {
                      const managedAreaIds = userData?.managedAreaIds || []; 
-                     if (managedAreaIds.length === 0) return; 
-                     const employee = allEmployees.find(emp => emp.id === entry.employeeId);
-                     if (!employee || !employee.workAreaIds?.some(waId => managedAreaIds.includes(waId))) return; 
+                     
+                     // PRIMA (Errato): Controllava se il dipendente fa parte della tua lista (ma poteva lavorare altrove)
+                     // const employee = allEmployees.find(emp => emp.id === entry.employeeId);
+                     // if (!employee || !employee.workAreaIds?.some(waId => managedAreaIds.includes(waId))) return; 
+
+                     // ORA (Corretto): Controlla se la TIMBRATURA è stata fatta in una TUA area
+                     if (!entry.workAreaId || !managedAreaIds.includes(entry.workAreaId)) return;
                  }
+                 // ----------------------------------
+
                 const clockIn = entry.clockInTime.toDate();
                 const clockOut = entry.clockOutTime ? entry.clockOutTime.toDate() : (entry.status === 'clocked-in' ? now : clockIn);
                 const pauseDurationMs = (entry.pauses || []).reduce((acc, p) => {
@@ -1141,7 +1151,9 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             setTotalDayHours((totalMinutes / 60).toFixed(2));
         }, (error) => { if (isMounted) { console.error("Errore listener ore totali:", error); showNotification("Errore aggiornamento ore totali.", 'error'); } });
         return () => { isMounted = false; unsubscribe(); };
-    }, [currentUserRole, userData, allEmployees, showNotification]);
+    }, [currentUserRole, userData, showNotification]); // Rimosso allEmployees dalle dipendenze perché non serve più
+
+    // ... resto del codice ...
 
     const handleAdminClockIn = useCallback(async (areaId, timestamp, note) => {
         if (!adminEmployeeProfile) return showNotification("Profilo dipendente non trovato.", 'error');
