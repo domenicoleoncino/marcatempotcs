@@ -21,7 +21,7 @@ const LoginScreen = () => {
         try {
             await signInWithEmailAndPassword(auth, email, password);
         } catch (err) {
-            console.error("ERRORE DETTAGLIATO DA FIREBASE:", err); // Stampa l'errore completo in console
+            console.error("ERRORE DETTAGLIATO DA FIREBASE:", err); 
 
             switch (err.code) {
                 case 'auth/user-not-found':
@@ -52,32 +52,26 @@ const LoginScreen = () => {
         }
         
         try {
-            // Utilizzo di un piccolo timeout per il feedback UX
             await new Promise(resolve => setTimeout(resolve, 500)); 
             await sendPasswordResetEmail(auth, email);
-            setSuccessMessage('Email di recupero inviata! Controlla la tua posta.');
+            
+            // Messaggio semplice qui, il dettaglio SPAM è nel render sotto
+            setSuccessMessage('Email di recupero inviata!'); 
         } catch (err) {
             setError('Impossibile inviare l\'email. Verifica l\'indirizzo sia corretto.');
         }
     };
 
     return (
-        // Uso classi Tailwind per simulare la centratura responsive richiesta:
-        // min-h-screen: copre tutta l'altezza dello schermo (centratura verticale)
-        // p-4: padding generale.
         <div className="min-h-screen flex flex-col justify-center items-center bg-gray-100 p-4">
             
-            {/* Contenitore Logico / Card con Max Width su Desktop/Tablet (max-w-md per 448px) */}
             <div className="w-full max-w-md sm:max-w-lg">
                 
-                {/* Contenitore Logo e Nome Azienda */}
                 <div className="flex flex-col items-center justify-center mb-6 text-center">
-                    <CompanyLogo /> {/* Assicurati che CompanyLogo centri il suo contenuto */}
+                    <CompanyLogo /> 
                     <p className="text-xs text-gray-600 mt-2">Created D Leoncino</p>
-                   
                 </div>
 
-                {/* Form Card (bg-white, shadow, rounded) */}
                 <div className="bg-white p-8 rounded-xl shadow-2xl border border-gray-200">
                     <h2 className="text-2xl font-bold text-center text-gray-800 mb-6">Accesso Marcatempo</h2>
                     
@@ -107,7 +101,6 @@ const LoginScreen = () => {
                             />
                         </div>
                         
-                        {/* Area Recupero Password */}
                         <div className="text-right">
                             <button 
                                 type="button" 
@@ -119,9 +112,18 @@ const LoginScreen = () => {
                             </button>
                         </div>
 
-                        {/* MESSAGGI DI FEEDBACK (errore o successo) */}
+                        {/* MESSAGGIO ERRORE */}
                         {error && <p className="text-sm text-red-700 text-center bg-red-100 p-2 rounded-lg font-medium">{error}</p>}
-                        {successMessage && <p className="text-sm text-green-700 text-center bg-green-100 p-2 rounded-lg font-medium">{successMessage}</p>}
+                        
+                        {/* MESSAGGIO SUCCESSO CON AVVISO SPAM */}
+                        {successMessage && (
+                            <div className="text-center bg-green-50 p-3 rounded-lg border border-green-200">
+                                <p className="text-sm text-green-700 font-bold mb-1">✅ {successMessage}</p>
+                                <p className="text-xs text-green-800 bg-green-100 p-2 rounded border border-green-300 inline-block">
+                                    ⚠️ <b>ATTENZIONE:</b> Se non la trovi, controlla la cartella <b>SPAM</b> o <b>Posta Indesiderata</b>!
+                                </p>
+                            </div>
+                        )}
 
                         <div>
                             <button 
@@ -135,7 +137,6 @@ const LoginScreen = () => {
                     </form>
                 </div>
                  
-                 {/* AVVISO DI COPYRIGHT */}
                  <p className="text-center text-xs text-gray-500 mt-6">
                      &copy; {new Date().getFullYear()} TCS Italia S.r.l. Tutti i diritti riservati.
                  </p>

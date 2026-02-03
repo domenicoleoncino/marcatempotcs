@@ -135,21 +135,20 @@ const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) =>
     );
 };
 
-// --- NUOVO MODALE SICURO PER PREPOSTI (NO FANTASMI) ---
+// --- NUOVO MODALE SICURO PER PREPOSTI ---
 const AddEmployeeToAreaModal = ({ show, onClose, allEmployees, workAreas, userData, showNotification, onDataUpdate }) => {
     const [selectedEmpId, setSelectedEmpId] = useState('');
     const [selectedAreaId, setSelectedAreaId] = useState('');
     const [isSaving, setIsSaving] = useState(false);
 
-    // 1. Il Preposto vede solo le SUE aree per l'assegnazione
     const myAreas = useMemo(() => {
         if (!userData || !userData.managedAreaIds) return [];
         return workAreas.filter(a => userData.managedAreaIds.includes(a.id));
     }, [workAreas, userData]);
 
-    // 2. Ordiniamo i dipendenti per nome per trovarli subito
     const sortedEmployees = useMemo(() => {
-        return [...allEmployees].sort((a, b) => {
+        // Mostra solo dipendenti NON cancellati nella ricerca
+        return [...allEmployees].filter(e => !e.isDeleted).sort((a, b) => {
             const nameA = `${a.surname} ${a.name}`.toLowerCase();
             const nameB = `${b.surname} ${b.name}`.toLowerCase();
             return nameA.localeCompare(nameB);
@@ -167,16 +166,12 @@ const AddEmployeeToAreaModal = ({ show, onClose, allEmployees, workAreas, userDa
         
         setIsSaving(true);
         try {
-            // MAGIA: Usiamo arrayUnion per aggiungere l'ID dell'area al dipendente ESISTENTE.
-            // NON creiamo nessun nuovo utente, colleghiamo solo quello vero (con l'ID giusto).
             const employeeRef = doc(db, "employees", selectedEmpId);
-            
             await updateDoc(employeeRef, {
                 workAreaIds: arrayUnion(selectedAreaId)
             });
-
             showNotification("Dipendente collegato correttamente alla squadra!", "success");
-            await onDataUpdate(); // Ricarica i dati per vedere subito il cambiamento
+            await onDataUpdate(); 
             onClose();
             setSelectedEmpId('');
             setSelectedAreaId('');
@@ -188,7 +183,6 @@ const AddEmployeeToAreaModal = ({ show, onClose, allEmployees, workAreas, userDa
         }
     };
 
-    // Stili
     const overlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: 99998, backdropFilter: 'blur(4px)' };
     const containerStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' };
     const modalStyle = { backgroundColor: '#ffffff', width: '100%', maxWidth: '500px', borderRadius: '12px', overflow: 'hidden', pointerEvents: 'auto', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column' };
@@ -209,48 +203,29 @@ const AddEmployeeToAreaModal = ({ show, onClose, allEmployees, workAreas, userDa
                             <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 mb-4">
                                 <p className="text-sm text-blue-800">
                                     ℹ️ Cerca nella lista. <br/>
-                                
                                 </p>
                             </div>
-
                             <div>
                                 <label className={labelClasses}>1. Chi vuoi aggiungere?</label>
-                                <select 
-                                    value={selectedEmpId} 
-                                    onChange={e => setSelectedEmpId(e.target.value)} 
-                                    className={inputClasses} 
-                                    required
-                                >
+                                <select value={selectedEmpId} onChange={e => setSelectedEmpId(e.target.value)} className={inputClasses} required>
                                     <option value="">-- Cerca Cognome Nome --</option>
                                     {sortedEmployees.map(emp => (
-                                        <option key={emp.id} value={emp.id}>
-                                            {emp.surname} {emp.name} ({emp.email})
-                                        </option>
+                                        <option key={emp.id} value={emp.id}>{emp.surname} {emp.name} ({emp.email})</option>
                                     ))}
                                 </select>
                             </div>
-
                             <div>
                                 <label className={labelClasses}>2. In quale area lavorerà?</label>
-                                <select 
-                                    value={selectedAreaId} 
-                                    onChange={e => setSelectedAreaId(e.target.value)} 
-                                    className={inputClasses} 
-                                    required
-                                >
+                                <select value={selectedAreaId} onChange={e => setSelectedAreaId(e.target.value)} className={inputClasses} required>
                                     <option value="">-- Seleziona Area --</option>
-                                    {myAreas.map(area => (
-                                        <option key={area.id} value={area.id}>{area.name}</option>
-                                    ))}
+                                    {myAreas.map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}
                                 </select>
                             </div>
                         </form>
                     </div>
                     <div style={{ padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                         <button type="button" onClick={onClose} className="px-4 py-2 border rounded hover:bg-gray-100">Annulla</button>
-                        <button type="submit" form="add-emp-form" disabled={isSaving} className="px-4 py-2 bg-blue-600 text-white font-bold rounded hover:bg-blue-700 disabled:opacity-50">
-                            {isSaving ? 'Salvataggio...' : 'Conferma Aggiunta'}
-                        </button>
+                        <button type="submit" form="add-emp-form" disabled={isSaving} className="px-4 py-2 bg-blue-600 text-white font-bold rounded hover:bg-blue-700 disabled:opacity-50">{isSaving ? 'Salvataggio...' : 'Conferma Aggiunta'}</button>
                     </div>
                 </div>
             </div>
@@ -400,7 +375,7 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
     );
 };
 
-const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortConfig, requestSort, searchTerm, setSearchTerm, handleResetEmployeeDevice, adminEmployeeId, handleEmployeePauseClick }) => { 
+const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortConfig, requestSort, searchTerm, setSearchTerm, handleResetEmployeeDevice, adminEmployeeId, handleEmployeePauseClick, showArchived, setShowArchived }) => { 
     const getSortIndicator = (key) => {
         if (!sortConfig || sortConfig.key !== key) return '';
         return sortConfig.direction === 'ascending' ? ' ▲' : ' ▼';
@@ -409,6 +384,15 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-gray-200 pb-4">
                 <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-800 tracking-tight">👥 Gestione Dipendenti</h1>
+                {/* --- TOGGLE ARCHIVIO --- */}
+                <div className="flex items-center">
+                    <button 
+                        onClick={() => setShowArchived(!showArchived)}
+                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${showArchived ? 'bg-orange-500 text-white hover:bg-orange-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                    >
+                        {showArchived ? '📂 Nascondi Archiviati' : '📂 Mostra Archiviati'}
+                    </button>
+                </div>
             </div>
             <div className="max-w-md">
                 <div className="relative">
@@ -431,13 +415,17 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                 const isSelfClockIn = emp.id === adminEmployeeId;
                                 const clockInType = isSelfClockIn ? 'manualClockIn' : 'adminClockIn'; 
                                 const clockOutType = isSelfClockIn ? 'manualClockOut' : 'adminClockOut'; 
+                                
+                                // Gestione Archiviati (Riga Rossa/Grigia)
+                                const rowClass = emp.isDeleted ? "bg-red-50 hover:bg-red-100 transition-colors" : "hover:bg-blue-50/30 transition-colors";
+
                                 return ( 
-                                    <tr key={emp.id} className="hover:bg-blue-50/30 transition-colors">
+                                    <tr key={emp.id} className={rowClass}>
                                         <td className="px-6 py-4 whitespace-nowrap">
-                                            {/* VISUALIZZAZIONE NOME CON ICONA DI AVVISO (MANTENUTA) */}
                                             <div className="flex items-center gap-2">
-                                                <div className="text-sm font-bold text-gray-900">{emp.name} {emp.surname}</div>
-                                                {emp.deviceIds && emp.deviceIds.length > MAX_DEVICE_LIMIT && (
+                                                <div className={`text-sm font-bold ${emp.isDeleted ? 'text-red-700 line-through' : 'text-gray-900'}`}>{emp.name} {emp.surname}</div>
+                                                {emp.isDeleted && <span className="px-2 py-0.5 text-xs font-bold text-white bg-red-500 rounded">ARCHIVIATO</span>}
+                                                {!emp.isDeleted && emp.deviceIds && emp.deviceIds.length > MAX_DEVICE_LIMIT && (
                                                     <div className="relative group cursor-help">
                                                         <span className="text-lg">⚠️</span>
                                                         <span className="absolute left-0 bottom-full mb-1 w-max px-2 py-1 text-xs text-white bg-red-600 rounded shadow-lg hidden group-hover:block z-50">
@@ -448,25 +436,41 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                             </div>
                                             <div className="text-xs text-gray-500 break-all">{emp.email}</div>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap"><span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-bold rounded-full border ${emp.activeEntry ? (emp.activeEntry.status === 'In Pausa' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' : 'bg-green-50 text-green-700 border-green-200') : 'bg-gray-100 text-gray-600 border-gray-200'}`}>{emp.activeEntry ? emp.activeEntry.status : 'Non al Lavoro'}</span></td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            {emp.isDeleted ? (
+                                                 <span className="px-2.5 py-0.5 inline-flex text-xs leading-5 font-bold rounded-full bg-red-100 text-red-600 border border-red-200">Disattivato</span>
+                                            ) : (
+                                                 <span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-bold rounded-full border ${emp.activeEntry ? (emp.activeEntry.status === 'In Pausa' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' : 'bg-green-50 text-green-700 border-green-200') : 'bg-gray-100 text-gray-600 border-gray-200'}`}>{emp.activeEntry ? emp.activeEntry.status : 'Non al Lavoro'}</span>
+                                            )}
+                                        </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 max-w-xs truncate" title={emp.workAreaNames?.join(', ')}>{emp.workAreaNames?.join(', ') || 'Nessuna'}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                            <div className="flex flex-col items-start gap-2">
-                                                {emp.activeEntry ? (
-                                                    <div className="flex gap-1 w-full">
-                                                        <button onClick={() => openModal(clockOutType, emp)} disabled={emp.activeEntry.status === 'In Pausa'} className={`flex-1 px-3 py-1.5 text-xs text-white rounded-md shadow-sm transition-colors ${emp.activeEntry.status === 'In Pausa' ? 'bg-gray-400 cursor-not-allowed' : 'bg-yellow-500 hover:bg-yellow-600'}`}>Uscita</button>
-                                                        <button onClick={() => handleEmployeePauseClick(emp)} disabled={!emp.activeEntry || emp.activeEntry.status === 'In Pausa' || emp.activeEntry.pauses?.some(p => p.start && p.end)} className={`flex-1 px-3 py-1.5 text-xs text-white rounded-md shadow-sm transition-colors ${!emp.activeEntry || emp.activeEntry.status === 'In Pausa' || emp.activeEntry.pauses?.some(p => p.start && p.end) ? 'bg-gray-400 cursor-not-allowed' : 'bg-orange-500 hover:bg-orange-600'}`}>Pausa</button>
+                                            {emp.isDeleted ? (
+                                                // --- AZIONI PER ARCHIVIATI (SOLO RIPRISTINO) ---
+                                                currentUserRole === 'admin' && (
+                                                    <button onClick={() => openModal('restoreEmployee', emp)} className="px-3 py-1.5 text-xs text-white bg-green-600 hover:bg-green-700 rounded shadow font-bold transition-colors">
+                                                        ♻️ Ripristina
+                                                    </button>
+                                                )
+                                            ) : (
+                                                // --- AZIONI NORMALI ---
+                                                <div className="flex flex-col items-start gap-2">
+                                                    {emp.activeEntry ? (
+                                                        <div className="flex gap-1 w-full">
+                                                            <button onClick={() => openModal(clockOutType, emp)} disabled={emp.activeEntry.status === 'In Pausa'} className={`flex-1 px-3 py-1.5 text-xs text-white rounded-md shadow-sm transition-colors ${emp.activeEntry.status === 'In Pausa' ? 'bg-gray-400 cursor-not-allowed' : 'bg-yellow-500 hover:bg-yellow-600'}`}>Uscita</button>
+                                                            <button onClick={() => handleEmployeePauseClick(emp)} disabled={!emp.activeEntry || emp.activeEntry.status === 'In Pausa' || emp.activeEntry.pauses?.some(p => p.start && p.end)} className={`flex-1 px-3 py-1.5 text-xs text-white rounded-md shadow-sm transition-colors ${!emp.activeEntry || emp.activeEntry.status === 'In Pausa' || emp.activeEntry.pauses?.some(p => p.start && p.end) ? 'bg-gray-400 cursor-not-allowed' : 'bg-orange-500 hover:bg-orange-600'}`}>Pausa</button>
+                                                        </div>
+                                                    ) : (
+                                                        <button onClick={() => openModal(clockInType, emp)} className="w-full px-3 py-1.5 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 shadow-sm transition-colors">▶️Timbra Entrata</button>
+                                                    )}
+                                                    <div className="flex flex-wrap gap-2 w-full mt-1">
+                                                        {currentUserRole === 'admin' && (<><button onClick={() => openModal('assignArea', emp)} className="text-xs text-blue-600 hover:text-blue-800 font-semibold underline decoration-blue-200 hover:decoration-blue-800">🌍Aree</button><button onClick={() => openModal('editEmployee', emp)} className="text-xs text-green-600 hover:text-green-800 font-semibold underline decoration-green-200 hover:decoration-green-800">✏️Modifica</button><button onClick={() => openModal('deleteEmployee', emp)} className="text-xs text-red-600 hover:text-red-800 font-semibold underline decoration-red-200 hover:decoration-red-800">🗑️Archivia</button></>)}
+                                                        {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (<button onClick={() => openModal('resetDevice', emp)} disabled={emp.deviceIds?.length === 0} className="text-xs text-yellow-600 hover:text-yellow-800 font-semibold disabled:text-gray-400 underline decoration-yellow-200 hover:decoration-yellow-800">📱Reset Device</button>)}
+                                                        {currentUserRole === 'preposto' && (<button onClick={() => openModal('prepostoAddEmployeeToAreas')} className="text-xs text-blue-600 hover:text-blue-800 font-semibold underline">🌍Gestisci Aree</button>)}
                                                     </div>
-                                                ) : (
-                                                    <button onClick={() => openModal(clockInType, emp)} className="w-full px-3 py-1.5 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 shadow-sm transition-colors">▶️Timbra Entrata</button>
-                                                )}
-                                                <div className="flex flex-wrap gap-2 w-full mt-1">
-                                                    {currentUserRole === 'admin' && (<><button onClick={() => openModal('assignArea', emp)} className="text-xs text-blue-600 hover:text-blue-800 font-semibold underline decoration-blue-200 hover:decoration-blue-800">🌍Aree</button><button onClick={() => openModal('editEmployee', emp)} className="text-xs text-green-600 hover:text-green-800 font-semibold underline decoration-green-200 hover:decoration-green-800">✏️Modifica</button><button onClick={() => openModal('deleteEmployee', emp)} className="text-xs text-red-600 hover:text-red-800 font-semibold underline decoration-red-200 hover:decoration-red-800">🗑️Elimina</button></>)}
-                                                    {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (<button onClick={() => openModal('resetDevice', emp)} disabled={emp.deviceIds?.length === 0} className="text-xs text-yellow-600 hover:text-yellow-800 font-semibold disabled:text-gray-400 underline decoration-yellow-200 hover:decoration-yellow-800">📱Reset Device</button>)}
-                                                    {currentUserRole === 'preposto' && (<button onClick={() => openModal('prepostoAddEmployeeToAreas')} className="text-xs text-blue-600 hover:text-blue-800 font-semibold underline">🌍Gestisci Aree</button>)}
+                                                    {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (<div className="flex gap-2 mt-1 w-full pt-2 border-t border-gray-100"><button onClick={() => openModal('manualEntryForm', emp)} className="flex-1 text-xs px-2 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded hover:bg-indigo-100 transition-colors">+ 🕒 Ore</button><button onClick={() => openModal('absenceEntryForm', emp)} className="flex-1 text-xs px-2 py-1 bg-teal-50 text-teal-700 border border-teal-200 rounded hover:bg-teal-100 transition-colors">+ 👀 Giust.</button></div>)}
                                                 </div>
-                                                {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (<div className="flex gap-2 mt-1 w-full pt-2 border-t border-gray-100"><button onClick={() => openModal('manualEntryForm', emp)} className="flex-1 text-xs px-2 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded hover:bg-indigo-100 transition-colors">+ 🕒 Ore</button><button onClick={() => openModal('absenceEntryForm', emp)} className="flex-1 text-xs px-2 py-1 bg-teal-50 text-teal-700 border border-teal-200 rounded hover:bg-teal-100 transition-colors">+ 👀 Giust.</button></div>)}
-                                            </div>
+                                            )}
                                         </td>
                                     </tr>
                                 );
@@ -599,7 +603,6 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
     
     // --- FUNZIONE EXPORT EXCEL PAGHE (Centrata + Colori + Mese/Anno) ---
     const handleExportPayrollExcel = () => {
-        // Controllo libreria
         if (typeof utils === 'undefined' || typeof writeFile === 'undefined') { 
             showNotification("Libreria esportazione non caricata o errata.", 'error'); 
             return; 
@@ -609,16 +612,13 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
             return; 
         }
 
-        // DEFINIZIONE STILE CENTRALE COMUNE
         const centerStyle = { vertical: 'center', horizontal: 'center' };
         
-        // 1. Mappa dei colori
         const areaColorMap = {};
         allWorkAreas.forEach((area, index) => {
             areaColorMap[area.id] = AREA_COLORS[index % AREA_COLORS.length];
         });
 
-        // 2. Generazione date
         const start = new Date(dateRange.start);
         const end = new Date(dateRange.end);
         const dateArray = [];
@@ -628,7 +628,6 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
             current.setDate(current.getDate() + 1);
         }
 
-        // 3. Aggregazione Dati
         const empData = {};
         const areaStats = {}; 
 
@@ -662,30 +661,21 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
             areaStats[areaName] += hours;
         });
 
-        // --- Calcolo Etichetta Mese Anno ---
         const startObj = new Date(dateRange.start);
         const monthName = startObj.toLocaleString('it-IT', { month: 'long' });
         const headerLabel = `${monthName.charAt(0).toUpperCase() + monthName.slice(1)} ${startObj.getFullYear().toString().slice(-2)}`;
 
-        // 4. Creazione Matrice Dati
-        
-        // RIGA 1: Intestazione Mese (Centrato e Grassetto)
         const headerRow1 = [{ v: headerLabel, t: 's', s: { font: { bold: true }, alignment: centerStyle } }]; 
         
-        // RIGA 2: Intestazione "DIPENDENTE" (Centrato)
         const headerRow2 = [{ v: "DIPENDENTE", t: 's', s: { alignment: centerStyle } }]; 
         
         const daysOfWeek = ['D', 'L', 'M', 'M', 'G', 'V', 'S'];
 
-        // Loop per le colonne dei giorni (Numeri e Lettere)
         dateArray.forEach(d => {
-            // Riga 1: Numeri (1, 2, 3...) - Centrati
             headerRow1.push({ v: d.getDate(), t: 'n', s: { alignment: centerStyle } });
-            // Riga 2: Lettere (L, M, M...) - Centrati
             headerRow2.push({ v: daysOfWeek[d.getDay()], t: 's', s: { alignment: centerStyle } });
         });
         
-        // Colonna TOTALE (Centrato)
         headerRow1.push({ v: "TOTALE", t: 's', s: { font: { bold: true }, alignment: centerStyle } });
         headerRow2.push({ v: "", t: 's', s: { alignment: centerStyle } });
 
@@ -694,7 +684,6 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
         const sortedEmployees = Object.values(empData).sort((a,b) => a.name.localeCompare(b.name));
         
         sortedEmployees.forEach(emp => {
-            // Nome Dipendente (Centrato)
             const row = [{ v: emp.name, t: 's', s: { alignment: centerStyle } }];
             
             dateArray.forEach(d => {
@@ -706,25 +695,21 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
                         t: 'n',
                         s: {
                             fill: { fgColor: { rgb: areaColorMap[dayData.areaId] || "FFFFFF" } },
-                            alignment: centerStyle // AGGIUNTO ALLINEAMENTO QUI
+                            alignment: centerStyle 
                         }
                     };
                     row.push(cell); 
                 } else {
-                    // Cella vuota ma con stile (opzionale, per mantenere allineamento se necessario)
                     row.push({ v: "", t: 's', s: { alignment: centerStyle } });
                 }
             });
-            // Totale Riga (Centrato)
             row.push({ v: Number(emp.total.toFixed(2)), t: 'n', s: { alignment: centerStyle, font: { bold: true } } });
             sheetData.push(row);
         });
 
-        // Spaziatura
         sheetData.push([]);
         sheetData.push([]);
 
-        // Riepilogo Aree (Intestazioni Centrate)
         sheetData.push([
             { v: "RIEPILOGO PER AREA", t: 's', s: { font: { bold: true }, alignment: centerStyle } },
             { v: "TOT", t: 's', s: { font: { bold: true }, alignment: centerStyle } }
@@ -734,13 +719,11 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
             const areaObj = allWorkAreas.find(a => a.name === areaName);
             const color = areaObj ? (areaColorMap[areaObj.id] || "FFFFFF") : "FFFFFF";
             
-            // Nome Area (Centrato con sfondo colorato)
             const cellName = {
                 v: areaName,
                 t: 's',
                 s: { fill: { fgColor: { rgb: color } }, font: { bold: true }, alignment: centerStyle }
             };
-            // Valore Ore (Centrato)
             const cellVal = {
                 v: Number(areaStats[areaName].toFixed(2)),
                 t: 'n',
@@ -751,9 +734,8 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
         
         const ws = utils.aoa_to_sheet(sheetData);
         
-        // Larghezza colonne (Aumentiamo leggermente la colonna nomi per farli stare comodi)
         const wscols = [{wch: 30}]; 
-        dateArray.forEach(() => wscols.push({wch: 5})); // Leggermente più larghe per i numeri centrati
+        dateArray.forEach(() => wscols.push({wch: 5})); 
         wscols.push({wch: 12}); 
         ws['!cols'] = wscols;
 
@@ -860,13 +842,10 @@ const ActionHeader = ({ view, currentUserRole, openModal }) => {
     let text = null;
     const btnClass = "px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition-all transform hover:-translate-y-0.5 w-full sm:w-auto text-sm";
     
-    // Logica Bottoni Esistente
     if (view === 'employees' && currentUserRole === 'admin') { text = '+👤 Crea Nuovo Dipendente'; button = <button onClick={() => openModal('newEmployee')} className={btnClass}>{text}</button>; } 
     else if (view === 'areas' && currentUserRole === 'admin') { text = '+🌍 Aggiungi Area'; button = <button onClick={() => openModal('newArea')} className={btnClass}>{text}</button>; }
     else if (view === 'admins' && currentUserRole === 'admin') { text = '+👮Crea Nuovo Admin'; button = <button onClick={() => openModal('newAdmin')} className={btnClass}>{text}</button>; }
     else if (view === 'employees' && currentUserRole === 'preposto') { text = '+👤 Aggiungi Dipendente alle Mie Aree'; button = <button onClick={() => openModal('prepostoAddEmployeeToAreas')} className={btnClass}>{text}</button>; }
-    
-    // NUOVO BOTTONE PER VISTA FORMS
     else if (view === 'forms') { text = '+🔗 Aggiungi Modulo Forms'; button = <button onClick={() => openModal('newForm')} className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-md transition-all transform hover:-translate-y-0.5 w-full sm:w-auto text-sm">{text}</button>; }
 
     if (!button) return null;
@@ -885,8 +864,11 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const [admins, setAdmins] = useState([]);
     const [activeEmployeesDetails, setActiveEmployeesDetails] = useState([]);
     const [reports, setReports] = useState([]);
-    const [forms, setForms] = useState([]); // NUOVO STATO FORMS
+    const [forms, setForms] = useState([]);
     
+    // STATO PER FILTRARE GLI ARCHIVIATI
+    const [showArchived, setShowArchived] = useState(false);
+
     const [showModal, setShowModal] = useState(false);
     const [modalType, setModalType] = useState('');
     const [selectedItem, setSelectedItem] = useState(null);
@@ -906,16 +888,12 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const [notification, setNotification] = useState(null); 
     const [entryToEdit, setEntryToEdit] = useState(null);
 
-    // --- NUOVO STATO PER MODALE PREPOSTO (NO FANTASMI) ---
     const [showAddEmployeeModal, setShowAddEmployeeModal] = useState(false);
-
-    // STATO PER MODALE FORMS DEDICATO
     const [showAddFormModal, setShowAddFormModal] = useState(false);
 
     const currentUserRole = userData?.role;
     const superAdminEmail = SUPER_ADMIN_EMAIL; 
 
-    // Wrapper per cambiare vista
     const handleSwitchView = (newView) => {
         setView(newView);
     };
@@ -944,11 +922,10 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         setIsLoading(true);
         
         try {
-            // RECUPERO DATI BASE + FORMS
             const [areasSnap, empsSnap, formsSnap] = await Promise.all([
                 getDocs(collection(db, "work_areas")),
                 getDocs(collection(db, "employees")),
-                getDocs(collection(db, "area_forms")) // NUOVA QUERY
+                getDocs(collection(db, "area_forms"))
             ]);
             
             if (!isMounted) return;
@@ -956,7 +933,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             const allAreasList = areasSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             const allEmployeesList = empsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             
-            // FILTRO FORMS PER PREPOSTO (vede solo quelli delle sue aree o tutti se admin)
             let allFormsList = formsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             if (role === 'preposto') {
                 const managedIds = userData?.managedAreaIds || [];
@@ -966,7 +942,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             setAllWorkAreas(allAreasList);
             setWorkAreasWithHours(allAreasList.map(a => ({...a, totalHours: 'N/D'})));
             setAllEmployees(allEmployeesList); 
-            setForms(allFormsList); // SETTO STATO FORMS
+            setForms(allFormsList);
 
             if (role === 'preposto' || (role === 'admin' && user.email !== superAdminEmail)) {
                  const q = query(collection(db, "employees"), where("userId", "==", user.uid));
@@ -1006,10 +982,11 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         if (user && userData) fetchData();
     }, [user, userData, fetchData]); 
 
-    // --- NUOVO: Controllo Dispositivi all'avvio (Popup attivo) ---
     useEffect(() => {
-        if (allEmployees.length > 0) {
-            const violators = allEmployees.filter(e => e.deviceIds && e.deviceIds.length > MAX_DEVICE_LIMIT);
+        // --- FILTRARE GLI ARCHIVIATI DAL CONTROLLO DISPOSITIVI ---
+        const activeOnly = allEmployees.filter(e => !e.isDeleted);
+        if (activeOnly.length > 0) {
+            const violators = activeOnly.filter(e => e.deviceIds && e.deviceIds.length > MAX_DEVICE_LIMIT);
             if (violators.length > 0) {
                 setTimeout(() => {
                     showNotification(`ATTENZIONE: ${violators.length} dipendenti hanno superato il limite di ${MAX_DEVICE_LIMIT} dispositivi! Controlla la lista.`, 'error');
@@ -1019,7 +996,18 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     }, [allEmployees, showNotification]);
 
     const sortedAndFilteredEmployees = useMemo(() => {
-        const employeesWithDetails = managedEmployees.map(emp => ({
+        // --- FILTRAGGIO ARCHIVIATI ---
+        // Se showArchived è true, mostra SOLO i cancellati.
+        // Se false (default), mostra SOLO gli attivi.
+        let baseList = managedEmployees;
+        
+        if (showArchived) {
+            baseList = baseList.filter(emp => emp.isDeleted);
+        } else {
+            baseList = baseList.filter(emp => !emp.isDeleted);
+        }
+
+        const employeesWithDetails = baseList.map(emp => ({
             ...emp,
             workAreaNames: (emp.workAreaIds || []).map(id => {
                 const area = allWorkAreas.find(a => a.id === id);
@@ -1046,7 +1034,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
              });
         }
         return filterableItems;
-    }, [managedEmployees, activeEmployeesDetails, searchTerm, allWorkAreas, sortConfig]);
+    }, [managedEmployees, activeEmployeesDetails, searchTerm, allWorkAreas, sortConfig, showArchived]); // AGGIUNTO showArchived
 
     const visibleWorkAreas = useMemo(() => {
         if (currentUserRole === 'admin') return workAreasWithHours;
@@ -1087,7 +1075,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                     if (currentUserRole === 'preposto') {
                          const managedAreaIds = userData?.managedAreaIds || []; 
                          if (managedAreaIds.length === 0) return false; 
-                         // MODIFICA QUI: Il dipendente è visibile solo se sta timbrando in un'area gestita dal preposto
                          return managedAreaIds.includes(detail.workAreaId);
                     }
                     return false; 
@@ -1111,8 +1098,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         return () => { isMounted = false; unsubscribeActive(); unsubscribePending(); };
     }, [allEmployees, allWorkAreas, adminEmployeeProfile, currentUserRole, userData, showNotification]);
 
-    // ... codice precedente ...
-
     useEffect(() => {
         let isMounted = true; 
         const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
@@ -1123,18 +1108,10 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             snapshot.docs.forEach(doc => {
                 const entry = doc.data(); if (!entry.clockInTime) return;
                 
-                // --- CORREZIONE LOGICA PREPOSTO ---
                 if (currentUserRole === 'preposto') {
                      const managedAreaIds = userData?.managedAreaIds || []; 
-                     
-                     // PRIMA (Errato): Controllava se il dipendente fa parte della tua lista (ma poteva lavorare altrove)
-                     // const employee = allEmployees.find(emp => emp.id === entry.employeeId);
-                     // if (!employee || !employee.workAreaIds?.some(waId => managedAreaIds.includes(waId))) return; 
-
-                     // ORA (Corretto): Controlla se la TIMBRATURA è stata fatta in una TUA area
                      if (!entry.workAreaId || !managedAreaIds.includes(entry.workAreaId)) return;
                  }
-                 // ----------------------------------
 
                 const clockIn = entry.clockInTime.toDate();
                 const clockOut = entry.clockOutTime ? entry.clockOutTime.toDate() : (entry.status === 'clocked-in' ? now : clockIn);
@@ -1151,9 +1128,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             setTotalDayHours((totalMinutes / 60).toFixed(2));
         }, (error) => { if (isMounted) { console.error("Errore listener ore totali:", error); showNotification("Errore aggiornamento ore totali.", 'error'); } });
         return () => { isMounted = false; unsubscribe(); };
-    }, [currentUserRole, userData, showNotification]); // Rimosso allEmployees dalle dipendenze perché non serve più
-
-    // ... resto del codice ...
+    }, [currentUserRole, userData, showNotification]); 
 
     const handleAdminClockIn = useCallback(async (areaId, timestamp, note) => {
         if (!adminEmployeeProfile) return showNotification("Profilo dipendente non trovato.", 'error');
@@ -1208,7 +1183,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         
         setIsActionLoading(true);
         try {
-            // FIX: Inserimento pausa diretto da Client (senza Cloud Function) per affidabilità
             const now = new Date();
             const startPause = new Date(now.getTime() - (pauseDurationInMinutes * 60000));
             
@@ -1232,7 +1206,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         }
     }, [allWorkAreas, user, showNotification]);
 
-    // NUOVA FUNZIONE: ELIMINA MODULO
     const handleDeleteForm = async (formId) => {
         if (!window.confirm("Sei sicuro di voler eliminare questo modulo?")) return;
         try {
@@ -1245,14 +1218,11 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         }
     };
 
-    // HANDLERS MODALI
     const openModal = useCallback((type, item = null) => {
-        // --- MODIFICA FONDAMENTALE PER PREPOSTO (PREVIENE FANTASMI) ---
         if (type === 'prepostoAddEmployeeToAreas') {
-            setShowAddEmployeeModal(true); // Apri il NOSTRO popup nuovo sicuro
-            return; // STOP! Non aprire AdminModal
+            setShowAddEmployeeModal(true); 
+            return; 
         }
-        // ----------------------------------------------------------------
 
         if (type === 'newForm') {
             setShowAddFormModal(true); 
@@ -1275,7 +1245,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         } catch (error) { console.error("Errore reset dispositivo:", error); showNotification(`Errore reset dispositivo: ${error.message}`, 'error'); } finally { setIsActionLoading(false); }
     }, [fetchData, showNotification]);
     
-    // ... (generateReport, handleReviewSkipBreak, handleSaveEntryEdit, handleExportXml rimangono uguali) ...
     const generateReport = useCallback(async () => {
         if (!dateRange.start || !dateRange.end) return showNotification("Seleziona date valide.", 'info');
         setIsLoading(true);
@@ -1288,12 +1257,9 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             
             let fetchedEntries = result.data.reports;
 
-            // --- FILTRO AGGIUNTIVO PER PREPOSTI ---
             if (currentUserRole === 'preposto') {
                 const managedIds = userData?.managedAreaIds || [];
                 fetchedEntries = fetchedEntries.filter(entry => {
-                    // Se è un'assenza la manteniamo (il dipendente fa parte del gruppo)
-                    // Se è una timbratura, controlliamo che sia stata fatta in un'area gestita da questo preposto
                     if (entry.isAbsence) return true; 
                     return managedIds.includes(entry.workAreaId);
                 });
@@ -1462,7 +1428,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                              <button onClick={() => handleSwitchView('dashboard')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'dashboard' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>🏠Dashboard</button>
                              <button onClick={() => handleSwitchView('employees')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'employees' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>👥Gestione Dipendenti</button>
                              <button onClick={() => handleSwitchView('areas')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'areas' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>📍GestioneAree</button>
-                             {/* MODIFICA: Moduli Forms disabilitato per ora */}
                              <button disabled className="py-2 px-3 sm:border-b-2 text-sm font-medium border-transparent text-gray-300 cursor-not-allowed" title="In arrivo...">📋Moduli Forms</button>
                              {currentUserRole === 'admin' && <button onClick={() => handleSwitchView('admins')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'admins' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>👮Gestione Admin</button>}
                              {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (
@@ -1506,11 +1471,13 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                         handleResetEmployeeDevice={handleResetEmployeeDevice} 
                         adminEmployeeId={adminEmployeeProfile?.id} 
                         handleEmployeePauseClick={handleEmployeePauseClick} 
+                        // NUOVI PROPS PER GESTIONE ARCHIVIO
+                        showArchived={showArchived}
+                        setShowArchived={setShowArchived}
                     />}
                     
                     {view === 'areas' && <AreaManagementView workAreas={visibleWorkAreas} openModal={openModal} currentUserRole={currentUserRole} />}
                     
-                    {/* NUOVA VISTA FORMS */}
                     {view === 'forms' && <FormsManagementView forms={forms} workAreas={allWorkAreas} openModal={openModal} onDeleteForm={handleDeleteForm} />}
 
                     {view === 'admins' && currentUserRole === 'admin' && <AdminManagementView admins={admins} openModal={openModal} user={user} superAdminEmail={superAdminEmail} currentUserRole={currentUserRole} onDataUpdate={fetchData} />}

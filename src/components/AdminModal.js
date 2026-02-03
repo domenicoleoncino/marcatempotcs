@@ -4,7 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { db } from '../firebase';
-import { doc, updateDoc, deleteDoc, addDoc, collection, Timestamp, writeBatch } from 'firebase/firestore';
+import { doc, updateDoc, deleteDoc, addDoc, collection, Timestamp, writeBatch, query, where, getDocs } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
 const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, allEmployees, userData, showNotification, onAdminApplyPause }) => {
@@ -12,12 +12,16 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
     const [formData, setFormData] = useState({});
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    
+    // STATO PER GESTIRE LA SCELTA TRA ARCHIVIA E ELIMINA TOTALE
+    const [isHardDelete, setIsHardDelete] = useState(false);
 
     // --- EFFECT: Inizializzazione Dati ---
     useEffect(() => {
         setFormData({});
         setError('');
         setIsLoading(false);
+        setIsHardDelete(false); // Reset della scelta
 
         const now = new Date();
         const yyyy = now.getFullYear();
@@ -38,7 +42,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
         else if (type === 'newAdmin') {
             setFormData({ name: '', surname: '', email: '', password: '', phone: '', role: 'preposto', controlloGpsRichiesto: true });
         }
-        else if (type === 'manualEntryForm') { // Recupero Dimenticanza
+        else if (type === 'manualEntryForm') { 
              setFormData({
                  employeeId: item ? item.id : '',
                  workAreaId: '',
@@ -47,7 +51,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                  endTime: '17:00'
              });
         }
-        else if (type === 'absenceEntryForm') { // Giustificativi
+        else if (type === 'absenceEntryForm') { 
              setFormData({
                  employeeId: item ? item.id : '',
                  startDate: todayDate,
@@ -63,7 +67,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
              setFormData({ pauseDuration: item.pauseDuration || 0 });
         }
         else if (item) {
-            // Logica esistente per edit/delete...
             if (['adminClockIn', 'manualClockIn', 'manualClockOut', 'adminClockOut'].includes(type)) {
                 const employeeId = item.id; 
                 let availableAreas = [];
@@ -93,7 +96,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                 setFormData({
                     name: item.name,
                     surname: item.surname,
-                    email: item.email, // Solo lettura
+                    email: item.email, 
                     controlloGpsRichiesto: item.controlloGpsRichiesto ?? true
                 });
             } else if (type === 'editArea') {
@@ -121,7 +124,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
 
     const functions = getFunctions(undefined, 'europe-west1');
 
-    // --- HANDLER CAMBIAMENTI ---
     const handleChange = (e) => {
         const { name, value, type, checked } = e.target;
         if (type === 'checkbox') {
@@ -140,7 +142,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
         }
     };
 
-    // --- STILI COMUNI (Design System) ---
     const inputStyle = {
         display: 'block', width: '100%', padding: '10px 12px', fontSize: '14px', lineHeight: '1.5',
         color: '#374151', backgroundColor: '#fff', backgroundImage: 'none', border: '1px solid #d1d5db',
@@ -148,7 +149,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
     };
     const labelStyle = { display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '4px' };
 
-    // --- HELPER DI RENDER ---
     const renderFieldLocal = (label, name, inputType = 'text', options = [], required = true, disabled = false, helpText = '') => (
         <div className="mb-4">
             <label htmlFor={name} style={labelStyle}>{label}</label>
@@ -254,20 +254,61 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                     });
                     break;
                 
-                // --- CANCELLAZIONE SICURA (FIX) ---
+                // --- GESTIONE CANCELLAZIONE (ARCHIVIA vs ELIMINA TUTTO) ---
                 case 'deleteEmployee':
-                    if (item.userId) {
-                        // Ha un account Auth: usiamo la funzione Cloud
-                        const deleteUser = httpsCallable(functions, 'deleteUserAndEmployee');
-                        await deleteUser({ userId: item.userId });
+                    if (isHardDelete) {
+                        // --- OPZIONE 1: ELIMINAZIONE TOTALE (PULIZIA) ---
+                        // Cancella TUTTE le timbrature per evitare record "Sconosciuti"
+                        const entriesQuery = query(collection(db, "time_entries"), where("employeeId", "==", item.id));
+                        const snapshot = await getDocs(entriesQuery);
+                        
+                        // Usiamo batch multipli se ci sono più di 500 record
+                        const deleteBatch = writeBatch(db);
+                        let count = 0;
+                        let batches = [deleteBatch];
+
+                        snapshot.docs.forEach((docSnapshot) => {
+                            if (count >= 400) { 
+                                batches.push(writeBatch(db));
+                                count = 0;
+                            }
+                            batches[batches.length - 1].delete(docSnapshot.ref);
+                            count++;
+                        });
+
+                        // Esegui cancellazione timbrature
+                        for (const b of batches) {
+                            await b.commit();
+                        }
+
+                        // Cancella utente/dipendente
+                        if (item.userId) {
+                            const deleteUser = httpsCallable(functions, 'deleteUserAndEmployee');
+                            await deleteUser({ userId: item.userId });
+                        } else {
+                            await deleteDoc(doc(db, "employees", item.id));
+                        }
+
                     } else {
-                        // NON ha un account Auth: cancelliamo solo il documento nel DB
-                        console.warn("Nessun userId trovato per il dipendente. Procedo con eliminazione solo documento.");
-                        await deleteDoc(doc(db, "employees", item.id));
+                        // --- OPZIONE 2: ARCHIVIAZIONE (STANDARD) ---
+                        // Mantiene storico e nome, blocca solo l'accesso
+                        await updateDoc(doc(db, "employees", item.id), {
+                            isDeleted: true,
+                            deviceIds: [],
+                            deletedAt: Timestamp.now()
+                        });
                     }
                     break;
+
+                case 'restoreEmployee':
+                    await updateDoc(doc(db, "employees", item.id), {
+                        isDeleted: false,      
+                        deletedAt: null
+                    });
+                    break;
+
                 case 'deleteAdmin':
-                    if (item.id) { // Qui item.id è solitamente l'ID del documento users
+                    if (item.id) { 
                          const dAdmin = httpsCallable(functions, 'deleteUserAndEmployee');
                          await dAdmin({ userId: item.id });
                     } else {
@@ -339,7 +380,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
         }
     };
 
-    // --- CONTENUTO DINAMICO ---
     const renderModalBody = () => {
         const employeeName = item?.name ? `${item.name} ${item.surname}` : 'Utente';
         const roleOptions = [{value: 'preposto', label: 'Preposto'}, {value: 'admin', label: 'Admin'}];
@@ -351,23 +391,48 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
         ];
 
         switch (type) {
-            // --- CREAZIONE ---
             case 'newEmployee':
-                return <>{renderFieldLocal('Nome', 'name')}{renderFieldLocal('Cognome', 'surname')}{renderFieldLocal('Email', 'email', 'email')}{renderFieldLocal('Password (min 6)', 'password', 'text')}{renderSingleCheckboxLocal('Controllo GPS', 'controlloGpsRichiesto')}</>;
+                return (
+                    <>
+                        <div style={{ padding: '10px', backgroundColor: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '6px', marginBottom: '15px' }}>
+                            <p style={{ margin: 0, fontSize: '13px', color: '#c2410c', fontWeight: 'bold' }}>⚠️ ATTENZIONE SPAM</p>
+                            <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#9a3412' }}>
+                                Le email automatiche (es. reset password) finiscono spesso nella <b>Posta Indesiderata/SPAM</b>. Avvisa il dipendente di controllare lì!
+                            </p>
+                        </div>
+                        {renderFieldLocal('Nome', 'name')}
+                        {renderFieldLocal('Cognome', 'surname')}
+                        {renderFieldLocal('Email', 'email', 'email')}
+                        {renderFieldLocal('Password (min 6)', 'password', 'text')}
+                        {renderSingleCheckboxLocal('Controllo GPS', 'controlloGpsRichiesto')}
+                    </>
+                );
             case 'newArea':
                 return <>{renderFieldLocal('Nome Area', 'name')}{renderFieldLocal('☕Pausa (min)', 'pauseDuration', 'number')}{renderFieldLocal('Latitudine', 'latitude', 'number')}{renderFieldLocal('Longitudine', 'longitude', 'number')}{renderFieldLocal('🧭Raggio (metri)(inserire almeno 100)', 'radius', 'number')}</>;
             case 'newAdmin':
-                return <>{renderFieldLocal('Nome', 'name')}{renderFieldLocal('Cognome', 'surname')}{renderFieldLocal('Email', 'email', 'email')}{renderFieldLocal('Password', 'password')}{renderFieldLocal('Telefono (Opz)', 'phone')}{renderFieldLocal('Ruolo', 'role', 'select', roleOptions)}{renderSingleCheckboxLocal('Controllo GPS', 'controlloGpsRichiesto')}</>;
-            
-            // --- MODIFICHE ---
+                return (
+                    <>
+                        <div style={{ padding: '10px', backgroundColor: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '6px', marginBottom: '15px' }}>
+                            <p style={{ margin: 0, fontSize: '13px', color: '#c2410c', fontWeight: 'bold' }}>⚠️ ATTENZIONE SPAM</p>
+                            <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#9a3412' }}>
+                                Avvisa l'utente di controllare la cartella <b>SPAM</b> per la mail di benvenuto.
+                            </p>
+                        </div>
+                        {renderFieldLocal('Nome', 'name')}
+                        {renderFieldLocal('Cognome', 'surname')}
+                        {renderFieldLocal('Email', 'email', 'email')}
+                        {renderFieldLocal('Password', 'password')}
+                        {renderFieldLocal('Telefono (Opz)', 'phone')}
+                        {renderFieldLocal('Ruolo', 'role', 'select', roleOptions)}
+                        {renderSingleCheckboxLocal('Controllo GPS', 'controlloGpsRichiesto')}
+                    </>
+                );
             case 'editEmployee':
                 return <>{renderFieldLocal('Nome', 'name')}{renderFieldLocal('Cognome', 'surname')}{renderFieldLocal('Email (Non modificabile)', 'email', 'email', [], false, true)}{renderSingleCheckboxLocal('Controllo GPS', 'controlloGpsRichiesto')}</>;
             case 'editArea':
                 return <>{renderFieldLocal('Nome', 'name')}{renderFieldLocal('Pausa (min)', 'pauseDuration', 'number')}{renderFieldLocal('Lat', 'latitude', 'number')}{renderFieldLocal('Lon', 'longitude', 'number')}{renderFieldLocal('Raggio', 'radius', 'number')}</>;
             case 'editAreaPauseOnly':
                 return <>{renderFieldLocal('Minuti Pausa', 'pauseDuration', 'number')}</>;
-            
-            // --- ASSEGNAZIONI ---
             case 'assignArea':
                 return renderCheckboxes('Aree Assegnate', 'selectedAreas', workAreas);
             case 'assignPrepostoAreas':
@@ -379,9 +444,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
             case 'assignEmployeeToPrepostoArea':
                 const pAreas = workAreas.filter(wa => userData?.managedAreaIds?.includes(wa.id));
                 return renderCheckboxes('Aree Competenza', 'selectedPrepostoAreas', pAreas);
-            
-            // --- TIMBRATURE SPECIALI ---
-            case 'manualEntryForm': // Recupero Dimenticanza
+            case 'manualEntryForm':
                 const allEmpOpts = allEmployees.map(e => ({ value: e.id, label: `${e.name} ${e.surname}` }));
                 const allAreaOpts = (userData.role === 'admin' ? workAreas : workAreas.filter(wa => userData.managedAreaIds?.includes(wa.id))).map(a => ({ value: a.id, label: a.name }));
                 return (
@@ -395,7 +458,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                          </div>
                     </>
                 );
-            case 'absenceEntryForm': // Giustificativi
+            case 'absenceEntryForm':
                 const empOptsAbs = allEmployees.map(e => ({ value: e.id, label: `${e.name} ${e.surname}` }));
                 return (
                     <>
@@ -408,8 +471,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                         {renderFieldLocal('Note', 'note')}
                     </>
                 );
-
-            // --- LIVE CLOCK ---
             case 'manualClockIn':
             case 'adminClockIn':
             case 'manualClockOut':
@@ -431,9 +492,51 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                         </div>
                     </>
                 );
-
-            // --- CANCELLAZIONI ---
             case 'deleteEmployee':
+                return (
+                    <div className="text-center py-6">
+                        <div style={{ fontSize: '40px', marginBottom: '10px' }}>📁</div>
+                         <p style={{fontSize: '18px', color: '#1f2937', marginBottom: '10px'}}>
+                             Vuoi <b>{isHardDelete ? 'ELIMINARE DEFINITIVAMENTE' : 'ARCHIVIARE'}</b> il dipendente <br/>
+                             <span style={{fontWeight: 'bold', fontSize: '20px'}}>{item?.name || employeeName}</span>?
+                         </p>
+                         
+                         <p style={{fontSize: '14px', color: isHardDelete ? '#b91c1c' : '#b45309', backgroundColor: isHardDelete ? '#fee2e2' : '#fffbeb', display: 'inline-block', padding: '8px 12px', borderRadius: '4px', border: `1px solid ${isHardDelete ? '#fecaca' : '#fcd34d'}`}}>
+                             {isHardDelete 
+                                ? "⚠️ ATTENZIONE: Verranno cancellati ANCHE LE TIMBRATURE STORICHE e i totali ore. Non apparirà più 'Sconosciuto', ma i dati saranno persi per sempre."
+                                : "ℹ️ Il dipendente non potrà più accedere all'App, ma lo storico delle presenze rimarrà salvato (consigliato)."
+                             }
+                         </p>
+
+                         {/* CHECKBOX ELIMINAZIONE TOTALE */}
+                         <div style={{marginTop: '20px', textAlign: 'left', backgroundColor: '#f3f4f6', padding: '10px', borderRadius: '6px', border: '1px solid #e5e7eb'}}>
+                             <label style={{display: 'flex', alignItems: 'center', cursor: 'pointer'}}>
+                                 <input 
+                                    type="checkbox" 
+                                    checked={isHardDelete} 
+                                    onChange={(e) => setIsHardDelete(e.target.checked)}
+                                    style={{width: '20px', height: '20px', marginRight: '10px', cursor: 'pointer'}}
+                                 />
+                                 <span style={{fontSize: '14px', fontWeight: 'bold', color: '#374151'}}>
+                                     Voglio eliminare definitivamente e cancellare tutto lo storico
+                                 </span>
+                             </label>
+                         </div>
+                    </div>
+                );
+            case 'restoreEmployee':
+                return (
+                    <div className="text-center py-6">
+                        <div style={{ fontSize: '40px', marginBottom: '10px' }}>♻️</div>
+                         <p style={{fontSize: '18px', color: '#1f2937', marginBottom: '10px'}}>
+                             Vuoi <b>RIATTIVARE</b> il dipendente <br/>
+                             <span style={{fontWeight: 'bold', fontSize: '20px'}}>{item?.name || employeeName}</span>?
+                         </p>
+                         <p style={{fontSize: '14px', color: '#15803d', backgroundColor: '#dcfce7', display: 'inline-block', padding: '8px 12px', borderRadius: '4px', border: '1px solid #86efac'}}>
+                             Il dipendente potrà nuovamente accedere e timbrare.
+                         </p>
+                    </div>
+                );
             case 'deleteArea':
             case 'deleteAdmin':
             case 'resetDevice':
@@ -463,6 +566,9 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
         if(type === 'absenceEntryForm') return 'Inserimento Assenza';
         if(type === 'prepostoAddEmployeeToAreas') return 'Aggiungi Dipendente alle tue Aree';
         
+        if(type === 'deleteEmployee') return isHardDelete ? 'Elimina Definitivamente' : 'Archivia Dipendente'; 
+        if(type === 'restoreEmployee') return 'Riattiva Dipendente'; 
+        
         if(type.includes('delete')) return 'Conferma Eliminazione';
         if(type.includes('Clock')) return 'Timbratura Manuale';
         if(type.includes('assign')) return 'Assegnazione';
@@ -470,7 +576,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
         return 'Conferma Azione';
     };
 
-    // --- RENDER PORTAL ---
     return ReactDOM.createPortal(
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'ui-sans-serif, system-ui, sans-serif' }}>
             <div onClick={() => setShowModal(false)} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: 100000 }} />
@@ -478,7 +583,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                 <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', backgroundColor: '#f9fafb', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
                         <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#111827' }}>{getTitle()}</h3>
-                        {/* Sezione NOME DIPENDENTE AGGIUNTA QUI */}
                         {['assignArea', 'assignPrepostoAreas', 'assignEmployeeToPrepostoArea', 'editEmployee', 'manualEntryForm', 'absenceEntryForm'].includes(type) && item && (
                             <div style={{ marginTop: '4px', fontSize: '13px', color: '#6b7280' }}>
                                 Dipendente: <span style={{ fontWeight: 'bold', color: '#374151' }}>{item.name} {item.surname}</span>
@@ -495,8 +599,8 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                 </div>
                 <div style={{ padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
                     <button type="button" onClick={() => setShowModal(false)} style={{ padding: '10px 20px', backgroundColor: '#fff', border: '1px solid #d1d5db', borderRadius: '6px', color: '#374151', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>Annulla</button>
-                    <button type="submit" form="modal-form" disabled={isLoading} style={{ padding: '10px 20px', backgroundColor: type.includes('delete') ? '#dc2626' : '#2563eb', border: 'none', borderRadius: '6px', color: '#fff', fontWeight: '600', fontSize: '14px', cursor: isLoading ? 'not-allowed' : 'pointer', opacity: isLoading ? 0.7 : 1, boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)' }}>
-                        {isLoading ? 'Attendi...' : (type.includes('delete') ? 'Elimina definitivamente' : 'Salva')}
+                    <button type="submit" form="modal-form" disabled={isLoading} style={{ padding: '10px 20px', backgroundColor: (type.includes('delete') || isHardDelete) ? '#dc2626' : (type === 'restoreEmployee' ? '#16a34a' : '#2563eb'), border: 'none', borderRadius: '6px', color: '#fff', fontWeight: '600', fontSize: '14px', cursor: isLoading ? 'not-allowed' : 'pointer', opacity: isLoading ? 0.7 : 1, boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)' }}>
+                        {isLoading ? 'Attendi...' : (type === 'deleteEmployee' ? (isHardDelete ? 'Elimina Definitivamente' : 'Archivia') : (type === 'restoreEmployee' ? 'Ripristina' : (type.includes('delete') ? 'Elimina definitivamente' : 'Salva')))}
                     </button>
                 </div>
             </div>
