@@ -1,46 +1,34 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { db } from '../firebase';
-import { collection, query, where, onSnapshot, orderBy, getDocs, Timestamp, limit, deleteDoc, doc } from 'firebase/firestore'; // <--- AGGIUNTO deleteDoc, doc
+import { db, storage } from '../firebase';
+import { collection, query, where, onSnapshot, orderBy, getDocs, Timestamp, limit, deleteDoc, doc, addDoc } from 'firebase/firestore'; 
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import CompanyLogo from './CompanyLogo';
-import ExpenseModal from './ExpenseModal'; 
-
-// === IMPORTAZIONI PER PDF ===
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-// ===========================================
-// --- CONFIGURAZIONE BLOCCO RIENTRO ---
-// ===========================================
-const MIN_REENTRY_DELAY_MINUTES = 30; // Tempo minimo di attesa (in minuti) tra Uscita e nuova Entrata
+const MIN_REENTRY_DELAY_MINUTES = 30; 
 
-// ===========================================
-// --- 1. FUNZIONE UTILITY DEVICE ID ---
-// ===========================================
 function getOrGenerateDeviceId() {
     let deviceId = localStorage.getItem('marcatempoDeviceId'); 
-    
     if (!deviceId) {
-        // Genera un ID pseudo-univoco
         deviceId = (Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)).toUpperCase();
         localStorage.setItem('marcatempoDeviceId', deviceId);
     }
     return deviceId;
 }
 
-// Funzione distanza GPS
 function getDistanceInMeters(lat1, lon1, lat2, lon2) {
-    const R = 6371e3; // Raggio Terra in metri
+    const R = 6371e3; 
     const p1 = lat1 * Math.PI / 180;
     const p2 = lat2 * Math.PI / 180;
     const deltaP = (lat2 - lat1) * Math.PI / 180;
     const deltaL = (lon2 - lon1) * Math.PI / 180;
     const a = Math.sin(deltaP / 2) * Math.sin(deltaP / 2) + Math.cos(p1) * Math.cos(p2) * Math.sin(deltaL / 2) * Math.sin(deltaL / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c; // Distanza in metri
+    return R * c; 
 }
 
-// === MOTIVI DI MANCATA PAUSA STRUTTURATI E SEMPLIFICATI ===
 const PAUSE_REASONS = [
     { code: '01', reason: 'Mancata pausa per intervento urgente.' },
     { code: '02', reason: 'Mancata pausa per ore non complete.' },
@@ -48,8 +36,99 @@ const PAUSE_REASONS = [
     { code: '04', reason: 'Altro... (specificare).' }
 ];
 
+// --- MODALE INTERNO CORRETTO (STOP PROPAGATION FIX) ---
+const AddExpenseModalInternal = ({ show, onClose, user, employeeData }) => {
+    const [amount, setAmount] = useState('');
+    const [description, setDescription] = useState('');
+    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+    const [paymentMethod, setPaymentMethod] = useState('Contanti');
+    const [note, setNote] = useState('');
+    const [file, setFile] = useState(null);
+    const [isSaving, setIsSaving] = useState(false);
+
+    if (!show) return null;
+
+    const handleSave = async (e) => {
+        e.preventDefault();
+        if (!amount || !description || !date) { alert("Compila i campi obbligatori."); return; }
+        setIsSaving(true);
+        try {
+            let receiptUrl = null;
+            if (file) {
+                if (!storage) throw new Error("Storage non inizializzato.");
+                const fileRef = ref(storage, `expenses/${user.uid}/${Date.now()}_${file.name}`);
+                const snapshot = await uploadBytes(fileRef, file);
+                receiptUrl = await getDownloadURL(snapshot.ref);
+            }
+            await addDoc(collection(db, "expenses"), {
+                amount: parseFloat(amount),
+                description: description,
+                paymentMethod: paymentMethod,
+                note: note,
+                date: Timestamp.fromDate(new Date(date)),
+                userId: user.uid,
+                userName: employeeData ? `${employeeData.name} ${employeeData.surname}` : user.email,
+                userRole: 'employee',
+                receiptUrl: receiptUrl,
+                status: 'pending',
+                createdAt: Timestamp.now()
+            });
+            alert("Spesa registrata correttamente!");
+            setAmount(''); setDescription(''); setNote(''); setFile(null); setPaymentMethod('Contanti');
+            onClose();
+        } catch (error) {
+            console.error(error); alert("Errore salvataggio: " + error.message);
+        } finally { setIsSaving(false); }
+    };
+
+    const overlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: 99998, backdropFilter: 'blur(4px)' };
+    const containerStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' };
+    const modalStyle = { backgroundColor: '#ffffff', width: '100%', maxWidth: '500px', borderRadius: '12px', overflow: 'hidden', pointerEvents: 'auto', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column' };
+    const inputClasses = "block w-full px-3 py-2.5 bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm";
+
+    return (
+        <div style={overlayStyle} onClick={onClose}>
+            <div style={containerStyle}>
+                {/* [FIX] stopPropagation aggiunto qui */}
+                <div 
+                    style={modalStyle}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#ecfdf5' }}>
+                        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#047857' }}>💰 Registra Nuova Spesa</h3>
+                        <button onClick={onClose} style={{ border: 'none', background: 'none', fontSize: '24px', cursor: 'pointer', color: '#047857' }}>&times;</button>
+                    </div>
+                    <div style={{ padding: '24px' }}>
+                        <form onSubmit={handleSave} className="space-y-4">
+                            <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Data</label><input type="date" value={date} onChange={e => setDate(e.target.value)} className={inputClasses} required /></div>
+                            <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Importo (€)</label><input type="number" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" className={inputClasses} required /></div>
+                            <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Descrizione</label><input type="text" value={description} onChange={e => setDescription(e.target.value)} placeholder="Es. Carburante" className={inputClasses} required /></div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Metodo di Pagamento</label>
+                                <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} className={inputClasses}>
+                                    <option value="Contanti">Contanti (Miei)</option>
+                                    <option value="Carta Personale">Carta Personale</option>
+                                    <option value="Carta Aziendale">Carta Aziendale</option>
+                                    <option value="Telepass">Telepass</option>
+                                    <option value="Buono Carburante">Buono Carburante</option>
+                                    <option value="Altro">Altro</option>
+                                </select>
+                            </div>
+                            <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Allegato (Foto/File)</label><input type="file" accept="image/*,.pdf" onChange={e => setFile(e.target.files[0])} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100" /></div>
+                            <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Note</label><textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Opzionale" className={`${inputClasses} resize-y min-h-[80px]`} /></div>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
+                                <button type="button" onClick={onClose} className="px-4 py-2 border rounded hover:bg-gray-100 text-sm">Annulla</button>
+                                <button type="submit" disabled={isSaving} className="px-4 py-2 bg-green-600 text-white font-bold rounded hover:bg-green-700 disabled:opacity-50 text-sm">{isSaving ? 'Caricamento...' : 'Conferma'}</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) => {
-    // Stati Generali
     const [currentTime, setCurrentTime] = useState(new Date());
     const [activeEntry, setActiveEntry] = useState(null);
     const [todaysEntries, setTodaysEntries] = useState([]);
@@ -59,78 +138,42 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     const [locationError, setLocationError] = useState(null);
     const [inRangeArea, setInRangeArea] = useState(null); 
     const [manualAreaId, setManualAreaId] = useState(''); 
-    
-    // STATO Device ID
     const [deviceId, setDeviceId] = useState(null);
-
-    // Stati per report PDF
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const [isGenerating, setIsGenerating] = useState(false);
-
-    // === GESTIONE MODULI MS FORMS (STATI) ===
     const [showFormsModal, setShowFormsModal] = useState(false);
     const [availableForms, setAvailableForms] = useState([]);
     const [isLoadingForms, setIsLoadingForms] = useState(false);
     const [selectedAreaForForms, setSelectedAreaForForms] = useState('');
-
-    // === GESTIONE STORICO SPESE (STATI NUOVI) ===
+    const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
     const [showExpenseHistory, setShowExpenseHistory] = useState(false);
     const [myExpenses, setMyExpenses] = useState([]);
     const [isLoadingExpenses, setIsLoadingExpenses] = useState(false);
 
-    // Funzioni Cloud Firebase
     const functions = getFunctions(undefined, 'europe-west1');
     const clockIn = httpsCallable(functions, 'clockEmployeeIn');
     const clockOut = httpsCallable(functions, 'clockEmployeeOut');
     const applyAutoPauseEmployee = httpsCallable(functions, 'applyAutoPauseEmployee');
 
-    // === FUNZIONE HELPER AUDIO ===
     const playSound = (fileName) => {
         const audioPath = `/sounds/${fileName}.mp3`;
-        try {
-            const audio = new Audio(audioPath);
-            audio.play().catch(e => {
-                console.warn(`Riproduzione audio fallita per ${fileName} (blocco browser):`, e);
-            });
-        } catch (e) {
-            console.warn("Errore creazione oggetto Audio:", e);
-        }
+        try { const audio = new Audio(audioPath); audio.play().catch(e => { console.warn(`Audio fallito:`, e); }); } catch (e) { console.warn("Errore Audio:", e); }
     };
 
-    // Aggiorna ora corrente
-    useEffect(() => {
-        const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-        playSound('app_open');
-        return () => clearInterval(timer);
-    }, []);
+    useEffect(() => { const timer = setInterval(() => setCurrentTime(new Date()), 1000); playSound('app_open'); return () => clearInterval(timer); }, []);
+    useEffect(() => { const currentDeviceId = getOrGenerateDeviceId(); setDeviceId(currentDeviceId); }, []); 
 
-    // INIZIALIZZAZIONE DEVICE ID
-    useEffect(() => {
-        const currentDeviceId = getOrGenerateDeviceId();
-        setDeviceId(currentDeviceId); 
-    }, []); 
-
-    // Filtra aree assegnate al dipendente
     const employeeWorkAreas = useMemo(() => {
         if (!employeeData || !employeeData.workAreaIds || !allWorkAreas) return [];
         return allWorkAreas.filter(area => employeeData.workAreaIds.includes(area.id));
     }, [employeeData, allWorkAreas]);
 
-    // Leggi il flag GPS dai dati del dipendente
     const isGpsRequired = employeeData?.controlloGpsRichiesto ?? true;
 
-    // Logica GPS
     useEffect(() => {
-        if (employeeWorkAreas.length === 0 || !isGpsRequired || !deviceId) {
-            setLocationError(null);
-            setInRangeArea(null);
-            return; 
-        }
-
-        let isMounted = true;
-        let watchId = null;
-
+        if (employeeWorkAreas.length === 0 || !isGpsRequired || !deviceId) { setLocationError(null); setInRangeArea(null); return; }
+        let isMounted = true; let watchId = null;
         const handlePositionSuccess = (position) => {
             if (!isMounted) return;
             const { latitude, longitude } = position.coords;
@@ -138,589 +181,158 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             for (const area of employeeWorkAreas) {
                 if (area.latitude && area.longitude && area.radius) {
                     const distance = getDistanceInMeters(latitude, longitude, area.latitude, area.longitude);
-                    if (distance <= area.radius) {
-                        foundArea = area;
-                        break;
-                    }
+                    if (distance <= area.radius) { foundArea = area; break; }
                 }
             }
-            setInRangeArea(foundArea);
-            setLocationError(null);
+            setInRangeArea(foundArea); setLocationError(null);
         };
-
-        const handlePositionError = (error) => {
-            if (!isMounted) return;
-            console.error("Errore Geolocalizzazione:", error);
-            let message = "Impossibile recuperare la posizione.";
-            
-            if (error.code === error.PERMISSION_DENIED) {
-                 message = "Permesso di geolocalizzazione negato. Aggiorna i permessi del browser o riavvia la pagina.";
-                 setInRangeArea(null);
-                 setLocationError(message);
-                 if (watchId !== null) {
-                      navigator.geolocation.clearWatch(watchId);
-                      watchId = null;
-                 }
-                 return;
-            }
-            else if (error.code === error.POSITION_UNAVAILABLE) message = "Posizione non disponibile.";
-            else if (error.code === error.TIMEOUT) message = "Timeout nel recuperare la posizione.";
-            
-            setLocationError(message + " Controlla permessi e segnale.");
-            setInRangeArea(null);
-        };
-        
-        if (navigator.geolocation) {
-             watchId = navigator.geolocation.watchPosition(
-                 handlePositionSuccess,
-                 handlePositionError,
-                 { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-             );
-        } else {
-             setLocationError("La geolocalizzazione non è supportata.");
-        }
-
-        return () => {
-            isMounted = false;
-            if (watchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(watchId);
-        };
+        const handlePositionError = (error) => { if (!isMounted) return; setLocationError("Errore GPS: " + error.message); setInRangeArea(null); };
+        if (navigator.geolocation) { watchId = navigator.geolocation.watchPosition(handlePositionSuccess, handlePositionError, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }); } else { setLocationError("GPS non supportato."); }
+        return () => { isMounted = false; if (watchId !== null) navigator.geolocation.clearWatch(watchId); };
     }, [employeeWorkAreas, isGpsRequired, deviceId]);
 
-    // CALCOLO STATO PAUSA
     const pauseStatus = useMemo(() => {
         const pauses = activeEntry?.pauses || [];
-        let isActive = false;
-        let isCompleted = false;
-
-        for (const p of pauses) {
-            if (p.start && p.end) {
-                isCompleted = true;
-            } else if (p.start && !p.end) {
-                isActive = true;
-                break;
-            }
-        }
-
-        if (isActive) return 'ACTIVE';
-        if (isCompleted) return 'COMPLETED';
-        return 'NONE';
+        let isActive = false; let isCompleted = false;
+        for (const p of pauses) { if (p.start && p.end) { isCompleted = true; } else if (p.start && !p.end) { isActive = true; break; } }
+        if (isActive) return 'ACTIVE'; if (isCompleted) return 'COMPLETED'; return 'NONE';
     }, [activeEntry]);
-
     const isInPause = pauseStatus === 'ACTIVE'; 
-    
-    // Logica di Reset del flag di tentativo pausa
-    useEffect(() => {
-        if (!isInPause && isPauseAttempted) {
-             setIsPauseAttempted(false);
-        }
-    }, [isInPause, isPauseAttempted]);
+    useEffect(() => { if (!isInPause && isPauseAttempted) { setIsPauseAttempted(false); } }, [isInPause, isPauseAttempted]);
 
-    // Listener Firestore
     useEffect(() => {
-        if (!user?.uid || !employeeData?.id || !Array.isArray(allWorkAreas)) {
-             setActiveEntry(null);
-             setTodaysEntries([]);
-             setWorkAreaName('');
-             return;
-        }
-        
+        if (!user?.uid || !employeeData?.id) { setActiveEntry(null); setTodaysEntries([]); setWorkAreaName(''); return; }
         let isMounted = true; 
-        
-        const qActive = query(collection(db, "time_entries"),
-                               where("employeeId", "==", employeeData.id),
-                               where("status", "==", "clocked-in"),
-                               limit(1));
-        
+        const qActive = query(collection(db, "time_entries"), where("employeeId", "==", employeeData.id), where("status", "==", "clocked-in"), limit(1));
         const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
-        const qTodays = query(collection(db, "time_entries"),
-                               where("employeeId", "==", employeeData.id),
-                               where("clockInTime", ">=", Timestamp.fromDate(startOfDay)),
-                               orderBy("clockInTime", "desc"));
-
-        let unsubscribeActive, unsubscribeTodays;
-
-        unsubscribeActive = onSnapshot(qActive, (snapshot) => {
-            if (!isMounted) return;
-            if (!snapshot.empty) {
-                const entryData = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
-                setActiveEntry(entryData);
-                const area = allWorkAreas.find(a => a.id === entryData.workAreaId);
-                setWorkAreaName(area ? area.name : 'Sconosciuta');
-            } else {
-                setActiveEntry(null);
-                setWorkAreaName('');
-            }
-        }, (error) => {
-            if (isMounted) console.error("Errore listener timbratura attiva:", error);
-        });
-
-        unsubscribeTodays = onSnapshot(qTodays, (snapshot) => {
-            if (!isMounted) return;
-            setTodaysEntries(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        }, (error) => {
-            if (isMounted) console.error("Errore listener timbratura odierna:", error);
-        });
-        
-        return () => {
-             isMounted = false;
-             unsubscribeActive();
-             unsubscribeTodays();
-        };
+        const qTodays = query(collection(db, "time_entries"), where("employeeId", "==", employeeData.id), where("clockInTime", ">=", Timestamp.fromDate(startOfDay)), orderBy("clockInTime", "desc"));
+        const unsubscribeActive = onSnapshot(qActive, (snapshot) => { if (isMounted && !snapshot.empty) { const entryData = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() }; setActiveEntry(entryData); const area = allWorkAreas.find(a => a.id === entryData.workAreaId); setWorkAreaName(area ? area.name : 'Sconosciuta'); } else { setActiveEntry(null); setWorkAreaName(''); } });
+        const unsubscribeTodays = onSnapshot(qTodays, (snapshot) => { if (isMounted) setTodaysEntries(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))); });
+        return () => { isMounted = false; unsubscribeActive(); unsubscribeTodays(); };
     }, [user?.uid, employeeData?.id, allWorkAreas]);
 
-
-    // --- GESTIONE AZIONI TIMBRATURA/PAUSA ---
     const handleAction = async (action) => {
-        if (isProcessing) return;
-        setIsProcessing(true);
-        setLocationError(null);
-
-        if (!deviceId) {
-            alert("ID dispositivo non disponibile. Ricarica la pagina.");
-            setIsProcessing(false);
-            return;
-        }
-
+        if (isProcessing) return; setIsProcessing(true); setLocationError(null);
+        if (!deviceId) { alert("ID dispositivo non disponibile."); setIsProcessing(false); return; }
         try {
             let result;
-            const currentActiveEntry = activeEntry;
-            const isGpsRequiredCheck = isGpsRequired; 
-            const currentLat = inRangeArea?.latitude;
-            const currentLon = inRangeArea?.longitude;
-
             if (action === 'clockIn') {
-                if (todaysEntries.length > 0) {
-                    const lastEntry = todaysEntries[0]; 
-                    if (lastEntry.clockOutTime) {
-                        const lastOutDate = lastEntry.clockOutTime.toDate();
-                        const now = new Date();
-                        const diffMs = now - lastOutDate;
-                        const diffMins = Math.floor(diffMs / 60000); 
-
-                        if (diffMins < MIN_REENTRY_DELAY_MINUTES) {
-                            const remaining = MIN_REENTRY_DELAY_MINUTES - diffMins;
-                            alert(`⛔ BLOCCO SICUREZZA: Non puoi timbrare subito dopo l'uscita.\n\nDevi attendere ancora ${remaining} minuti.`);
-                            setIsProcessing(false);
-                            return; 
-                        }
-                    }
+                if (todaysEntries.length > 0 && todaysEntries[0].clockOutTime) {
+                    const diffMins = Math.floor((new Date() - todaysEntries[0].clockOutTime.toDate()) / 60000); 
+                    if (diffMins < MIN_REENTRY_DELAY_MINUTES) { alert(`⛔ Attendi ancora ${MIN_REENTRY_DELAY_MINUTES - diffMins} minuti.`); setIsProcessing(false); return; }
                 }
-
-                let areaIdToClockIn = null;
-                let note = ''; 
-
-                if (isGpsRequiredCheck) {
-                    if (!inRangeArea) throw new Error("Devi essere all'interno di un'area rilevata per timbrare l'entrata.");
-                    areaIdToClockIn = inRangeArea.id;
-                } else {
-                    areaIdToClockIn = manualAreaId;
-                    
-                    if (!areaIdToClockIn) {
-                        throw new Error("Seleziona un'area di lavoro per la timbratura manuale.");
-                    }
-
-                    const selectedArea = employeeWorkAreas.find(a => a.id === areaIdToClockIn);
-                    note = `Entrata Manuale su Area: ${selectedArea ? selectedArea.name : 'Sconosciuta'}`;
-                }
-                
-                result = await clockIn({ 
-                    areaId: areaIdToClockIn, 
-                    note: note, 
-                    deviceId: deviceId,
-                    isGpsRequired: isGpsRequiredCheck,
-                    currentLat: inRangeArea?.latitude,
-                    currentLon: inRangeArea?.longitude
-                }); 
-                
-                if (result.data.success) {
-                    setActiveEntry({
-                        id: 'pending_' + Date.now(),
-                        workAreaId: areaIdToClockIn,
-                        clockInTime: Timestamp.now(), 
-                        pauses: [],
-                        status: 'clocked-in'
-                    });
-                    const area = allWorkAreas.find(a => a.id === areaIdToClockIn);
-                    setWorkAreaName(area ? area.name : 'Sconosciuta');
-                    playSound('clock_in'); 
-                    setManualAreaId(''); 
-                } else if (result.data.message) {
-                     alert(result.data.message);
-                }
-                
+                const areaId = isGpsRequired ? inRangeArea?.id : manualAreaId;
+                if (!areaId) throw new Error(isGpsRequired ? "Entra in un'area." : "Seleziona area.");
+                result = await clockIn({ areaId, note: isGpsRequired ? '' : 'Manuale', deviceId, isGpsRequired, currentLat: inRangeArea?.latitude, currentLon: inRangeArea?.longitude });
+                if (result.data.success) { playSound('clock_in'); setManualAreaId(''); }
             } else if (action === 'clockOut') {
-                if (!currentActiveEntry) throw new Error("Nessuna timbratura attiva da chiudere.");
-
-                let finalReasonCode = null;
-                let finalNoteText = '';
-                const currentArea = allWorkAreas.find(a => a.id === currentActiveEntry.workAreaId);
+                let finalReasonCode = null; let finalNoteText = '';
+                const currentArea = allWorkAreas.find(a => a.id === activeEntry.workAreaId);
                 const pauseDuration = currentArea?.pauseDuration || 0;
                 
                 if (pauseDuration > 0 && pauseStatus !== 'COMPLETED') { 
-                    const reasonOptions = PAUSE_REASONS.map((r, i) => `${i + 1} - ${r.reason}`).join('\n');
-                    const confirmExit = window.confirm(
-                        `ATTENZIONE: La tua area prevede una pausa di ${pauseDuration} minuti, ma non risulta sia stata completata.\n\nVuoi uscire senza pausa? Clicca OK per selezionare il motivo.`
-                    );
-
-                    if (confirmExit) {
-                        const selectedCode = window.prompt(
-                            `Seleziona il numero del motivo (da 1 a ${PAUSE_REASONS.length}):\n\n${reasonOptions}`
-                        );
-                        const selectedIndex = parseInt(selectedCode) - 1; 
-                        const selectedReason = PAUSE_REASONS[selectedIndex];
-                        
-                        if (!selectedReason) {
-                            throw new Error("Selezione motivo non valida o mancante. Uscita annullata.");
-                        }
-                        finalReasonCode = selectedReason.code;
-
-                        if (selectedReason.code === '04') { 
-                            finalNoteText = window.prompt("Hai selezionato 'Altro'. Specifica il motivo (OBBLIGATORIO):");
-                            if (!finalNoteText || finalNoteText.trim() === '') {
-                                throw new Error("La specifica è obbligatoria per il motivo 'Altro'. Uscita annullata.");
-                            }
-                        } else {
-                            finalNoteText = selectedReason.reason; 
-                        }
-                    } else {
-                        throw new Error("Uscita annullata.");
-                    }
+                    if(window.confirm("Attenzione: Pausa non rilevata. Vuoi uscire senza pausa?")) {
+                        const reasonCode = window.prompt(`Inserisci codice motivo (1-4):\n${PAUSE_REASONS.map((r,i)=>`${i+1}: ${r.reason}`).join('\n')}`);
+                        if(!reasonCode) { setIsProcessing(false); return; }
+                        finalReasonCode = PAUSE_REASONS[parseInt(reasonCode)-1]?.code || '04';
+                        if(finalReasonCode === '04') finalNoteText = window.prompt("Specifica il motivo:");
+                    } else { setIsProcessing(false); return; }
                 }
-
-                if (isGpsRequiredCheck) {
-                     if (!inRangeArea) throw new Error("Devi essere all'interno di un'area rilevata per timbrare l'uscita.");
-                }
-
-                result = await clockOut({ 
-                    note: finalNoteText, 
-                    pauseSkipReason: finalReasonCode, 
-                    deviceId: deviceId,
-                    isGpsRequired: isGpsRequiredCheck, 
-                    currentLat: currentLat, 
-                    currentLon: currentLon 
-                }); 
-                
-                if (result.data.success) {
-                    playSound('clock_out'); 
-                    let successMessage = result.data.message || 'Timbratura di uscita registrata.';
-                    if (finalReasonCode) {
-                        successMessage += '\n\n⚠️ NOTA IMPORTANTE: Hai dichiarato di non aver fatto pausa. La richiesta è IN ATTESA DI APPROVAZIONE dal tuo responsabile.\nFino all\'approvazione, le ore di pausa verranno scalate cautelativamente.';
-                    }
-                    alert(successMessage);
-                    return;
-                } else if (result.data.message) {
-                    alert(result.data.message);
-                }
-                
-            } else if (action === 'clockPause') { 
-                if (!currentActiveEntry) throw new Error("Devi avere una timbratura attiva.");
-                
-                if (pauseStatus !== 'NONE') { 
-                    throw new Error(pauseStatus === 'COMPLETED' 
-                        ? "Hai già effettuato la pausa in questo turno." 
-                        : "Pausa già attiva o tentativo in corso. Attendere l'aggiornamento.");
-                }
-
-                const currentArea = allWorkAreas.find(a => a.id === currentActiveEntry.workAreaId);
-                const pauseDuration = currentArea?.pauseDuration;
-
-                if (pauseDuration && pauseDuration > 0) {
-                    setIsPauseAttempted(true); 
-                    playSound('pause_start'); 
-
-                    result = await applyAutoPauseEmployee({ 
-                        timeEntryId: currentActiveEntry.id, 
-                        durationMinutes: pauseDuration,
-                        deviceId: deviceId,
-                    }); 
-                } else {
-                    throw new Error(`Nessuna pausa predefinita (>0 min) per l'area "${currentArea?.name || 'sconosciuta'}".`);
-                }
-            } else { 
-                throw new Error("Azione non riconosciuta.");
+                result = await clockOut({ deviceId, isGpsRequired, note: finalNoteText, currentLat: inRangeArea?.latitude, currentLon: inRangeArea?.longitude, pauseSkipReason: finalReasonCode });
+                if (result.data.success) playSound('clock_out');
+            } else if (action === 'clockPause') {
+                const area = allWorkAreas.find(a => a.id === activeEntry.workAreaId);
+                if (!area?.pauseDuration) throw new Error("Nessuna pausa prevista.");
+                setIsPauseAttempted(true); playSound('pause_start');
+                result = await applyAutoPauseEmployee({ timeEntryId: activeEntry.id, durationMinutes: area.pauseDuration, deviceId });
             }
-
-            if ((action === 'clockPause' || action === 'clockOut') && result?.data?.message) {
-                if (!result.data.success) alert(result.data.message);
-            }
-
-        } catch (error) {
-            console.error(`Errore durante ${action}:`, error);
-            const displayMessage = error.message.includes(":") ? error.message.split(":")[1].trim() : error.message;
-            alert(`Errore: ${displayMessage || 'Si è verificato un problema.'}`);
-        } finally {
-            setIsProcessing(false);
-        }
+            if (result?.data?.message && !result.data.success) alert(result.data.message);
+        } catch (error) { alert("Errore: " + error.message); } finally { setIsProcessing(false); }
     };
 
-
-    // ========================================================
-    // --- 2. FUNZIONE GENERAZIONE PDF ---
-    // ========================================================
     const handleExportPDF = async () => {
         setIsGenerating(true);
-
-        if (!employeeData || !employeeData.id) {
-             alert("Errore: Dati del dipendente non caricati. Ricarica la pagina.");
-             setIsGenerating(false);
-             return;
-        }
-        
         try {
             const startDate = new Date(selectedYear, selectedMonth, 1);
-            const nextMonth = selectedMonth === 11 ? 0 : selectedMonth + 1;
-            const nextYear = selectedMonth === 11 ? selectedYear + 1 : selectedYear;
-            const endDate = new Date(nextYear, nextMonth, 1); 
-
-            // Query Firestore
-            const q = query(
-                collection(db, "time_entries"),
-                where("employeeId", "==", employeeData.id), 
-                where("clockInTime", ">=", Timestamp.fromDate(startDate)),
-                where("clockInTime", "<", Timestamp.fromDate(endDate)),
-                orderBy("clockInTime", "asc")
-            );
-
-            const querySnapshot = await getDocs(q);
-            if (querySnapshot.empty) {
-                alert("Nessuna timbratura trovata per il periodo selezionato.");
-                setIsGenerating(false);
-                return;
-            }
-
-            const tableRows = [];
-            let totalWorkedMinutes = 0;
-
-            querySnapshot.forEach(entryDoc => {
-                const data = entryDoc.data();
-                const clockIn = data.clockInTime.toDate();
-                const clockOut = data.clockOutTime ? data.clockOutTime.toDate() : null;
-                const area = allWorkAreas.find(a => a.id === data.workAreaId);
-
-                let pauseDurationMinutes = 0;
-                if (data.pauses && data.pauses.length > 0) {
-                    data.pauses.forEach(p => {
-                        if (p.start && p.end) {
-                            const startMillis = p.start.toMillis ? p.start.toMillis() : new Date(p.start).getTime();
-                            const endMillis = p.end.toMillis ? p.end.toMillis() : new Date(p.end).getTime();
-                            pauseDurationMinutes += Math.round((endMillis - startMillis) / 60000); 
-                        }
-                    });
-                }
-
-                let totalHoursFormatted = "In corso";
-                if (clockOut) {
-                    const totalEntryMinutes = Math.round((clockOut.getTime() - clockIn.getTime()) / 60000);
-                    const workedMinutes = totalEntryMinutes - pauseDurationMinutes;
-                    if (workedMinutes > 0) totalWorkedMinutes += workedMinutes;
-                    
-                    const hours = Math.floor(workedMinutes / 60);
-                    const minutes = Math.floor(workedMinutes % 60);
-                    totalHoursFormatted = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-                }
-
-                // Riga Tabella PDF
-                tableRows.push([
-                    clockIn.toLocaleDateString('it-IT'),
-                    clockIn.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
-                    clockOut ? clockOut.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '---',
-                    pauseDurationMinutes > 0 ? `${pauseDurationMinutes} min` : '-',
-                    totalHoursFormatted,
-                    data.isManual ? 'Manuale' : (area ? area.name : 'GPS')
-                ]);
-            });
-
-            // Calcolo Totale Finale
-            const finalTotalH = Math.floor(totalWorkedMinutes / 60);
-            const finalTotalM = totalWorkedMinutes % 60;
-            const finalTotalString = `${finalTotalH.toString().padStart(2, '0')}:${finalTotalM.toString().padStart(2, '0')}`;
-
-            // --- CREAZIONE PDF ---
-            const doc = new jsPDF();
-            const monthsNames = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
-            const monthName = monthsNames[selectedMonth];
-
-            // 1. Aggiunta Logo
-            try {
-                const img = new Image();
-                img.src = '/icon-192x192.png'; 
-                doc.addImage(img, 'PNG', 14, 10, 30, 30); 
-            } catch (e) {
-                console.warn("Logo non trovato o errore caricamento immagine:", e);
-                doc.setFontSize(10);
-                doc.text("Azienda", 14, 20);
-            }
-
-            // 2. Intestazione Testo
-            doc.setFontSize(16);
-            doc.text(`Report Ore: ${monthName} ${selectedYear}`, 60, 20);
+            const endDate = new Date(selectedMonth === 11 ? selectedYear + 1 : selectedYear, selectedMonth === 11 ? 0 : selectedMonth + 1, 1); 
+            const q = query(collection(db, "time_entries"), where("employeeId", "==", employeeData.id), where("clockInTime", ">=", Timestamp.fromDate(startDate)), where("clockInTime", "<", Timestamp.fromDate(endDate)), orderBy("clockInTime", "asc"));
+            const snapshot = await getDocs(q);
+            if (snapshot.empty) { alert("Nessun dato."); setIsGenerating(false); return; }
             
-            doc.setFontSize(12);
-            doc.text(`Dipendente: ${employeeData.name} ${employeeData.surname}`, 60, 28);
-            doc.text(`Data Stampa: ${new Date().toLocaleDateString('it-IT')}`, 60, 34);
-
-            // 3. Generazione Tabella
-            autoTable(doc, {
-                head: [['Data', 'Entrata', 'Uscita', 'Pausa', 'Totale', 'Note']],
-                body: tableRows,
-                startY: 50,
-                theme: 'striped',
-                headStyles: { fillColor: [41, 128, 185] }, 
-                styles: { fontSize: 10, cellPadding: 3 },
+            const rows = []; let totalMins = 0;
+            snapshot.forEach(docSnap => {
+                const d = docSnap.data(); 
+                const start = d.clockInTime.toDate(); 
+                const end = d.clockOutTime ? d.clockOutTime.toDate() : null; 
+                let pMins = 0;
+                if (d.pauses) d.pauses.forEach(p => { if (p.start && p.end) pMins += Math.round((p.end.toMillis() - p.start.toMillis()) / 60000); });
+                let diff = end ? Math.round((end - start) / 60000) - pMins : 0;
+                if (diff > 0) totalMins += diff;
+                rows.push([start.toLocaleDateString(), start.toLocaleTimeString(), end ? end.toLocaleTimeString() : '--', pMins, diff > 0 ? `${Math.floor(diff/60)}h ${diff%60}m` : '-']);
             });
 
-            // 4. Piè di pagina: Solo il Totale
-            const finalY = doc.lastAutoTable.finalY + 10;
-            doc.setFontSize(12);
-            doc.setFont(undefined, 'bold');
-            doc.text(`TOTALE ORE LAVORATE: ${finalTotalString}`, 14, finalY);
-
-            // 5. Salvataggio
-            doc.save(`Report_${employeeData.surname}_${monthName}_${selectedYear}.pdf`);
-
-        } catch (error) {
-            console.error("Errore generazione PDF:", error);
-            alert("Si è verificato un errore durante la generazione del PDF.");
-        } finally {
-            setIsGenerating(false);
-        }
+            const doc = new jsPDF();
+            doc.text(`Report: ${selectedMonth+1}/${selectedYear}`, 14, 20);
+            autoTable(doc, { head: [['Data','In','Out','Pausa','Tot']], body: rows, startY: 30 });
+            doc.text(`TOTALE: ${Math.floor(totalMins/60)}h ${totalMins%60}m`, 14, doc.lastAutoTable.finalY + 10);
+            doc.save(`Report.pdf`);
+        } catch (e) { alert("Errore PDF: " + e.message); } finally { setIsGenerating(false); }
     };
 
-    // ========================================================
-    // --- 3. GESTIONE MODULI MS FORMS ---
-    // ========================================================
-    
     const fetchAreaForms = async (areaIdToFetch) => {
-        if (!areaIdToFetch) {
-            setAvailableForms([]);
-            return;
-        }
         setIsLoadingForms(true);
         try {
             const q = query(collection(db, "area_forms"), where("workAreaId", "==", areaIdToFetch));
             const snapshot = await getDocs(q);
-            const forms = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setAvailableForms(forms);
-        } catch (error) {
-            console.error("Errore caricamento moduli:", error);
-            alert("Errore caricamento moduli/questionari.");
-        } finally {
-            setIsLoadingForms(false);
-        }
+            setAvailableForms(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        } catch (error) { console.error(error); } finally { setIsLoadingForms(false); }
     };
-
     const handleOpenFormsModal = () => {
-        let defaultAreaId = '';
-        if (activeEntry && activeEntry.workAreaId) {
-            defaultAreaId = activeEntry.workAreaId;
-        } else if (employeeWorkAreas.length === 1) {
-            defaultAreaId = employeeWorkAreas[0].id;
-        }
-
-        setSelectedAreaForForms(defaultAreaId);
-        if (defaultAreaId) fetchAreaForms(defaultAreaId);
-        else setAvailableForms([]);
-
+        const areaId = activeEntry?.workAreaId || (employeeWorkAreas.length === 1 ? employeeWorkAreas[0].id : '');
+        setSelectedAreaForForms(areaId);
+        if(areaId) fetchAreaForms(areaId); else setAvailableForms([]);
         setShowFormsModal(true);
     };
 
-    const handleAreaChangeForForms = (e) => {
-        const newAreaId = e.target.value;
-        setSelectedAreaForForms(newAreaId);
-        fetchAreaForms(newAreaId);
-    };
-
-    // ========================================================
-    // --- 4. GESTIONE STORICO SPESE (FIX: NOME COLLEZIONE & USERID) ---
-    // ========================================================
     const handleViewExpenses = async () => {
-        setIsLoadingExpenses(true);
-        setShowExpenseHistory(true);
-        
-        // FIX: Usiamo employeeData.userId, che corrisponde al campo nel DB.
-        // Se non esiste, usiamo employeeData.id come fallback.
-        const searchId = employeeData.userId || employeeData.id;
-
+        setIsLoadingExpenses(true); setShowExpenseHistory(true);
         try {
-            const q = query(
-                collection(db, "employee_expenses"), 
-                where("userId", "==", searchId) // <--- CORRETTO QUI
-            );
-            
+            const targetId = user.uid; 
+            const q = query(collection(db, "expenses"), where("userId", "==", targetId));
             const snapshot = await getDocs(q);
             const expenses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            
-            // Ordiniamo lato client per sicurezza
-            expenses.sort((a, b) => {
-                const dateA = a.date && a.date.toDate ? a.date.toDate() : new Date(0);
-                const dateB = b.date && b.date.toDate ? b.date.toDate() : new Date(0);
-                return dateB - dateA; 
-            });
-
+            expenses.sort((a, b) => (b.date?.toDate() || 0) - (a.date?.toDate() || 0));
             setMyExpenses(expenses);
-        } catch (error) {
-            console.error("Errore caricamento storico spese:", error);
-        } finally {
-            setIsLoadingExpenses(false);
-        }
+        } catch (error) { console.error(error); } finally { setIsLoadingExpenses(false); }
     };
 
-    // --- NUOVA FUNZIONE PER ELIMINARE SPESA IN ATTESA ---
-    const handleDeleteExpense = async (expenseId) => {
-        if(!window.confirm("Sei sicuro di voler eliminare questa richiesta?")) return;
+    const handleDeleteExpense = async (id) => {
+        if(!window.confirm("Eliminare questa spesa?")) return;
         try {
-            await deleteDoc(doc(db, "employee_expenses", expenseId));
-            // Aggiorna la lista locale rimuovendo l'elemento
-            setMyExpenses(prev => prev.filter(e => e.id !== expenseId));
-        } catch (error) {
-            console.error("Errore eliminazione spesa:", error);
-            alert("Errore durante l'eliminazione.");
-        }
+            await deleteDoc(doc(db, "expenses", id));
+            setMyExpenses(p => p.filter(e => e.id !== id));
+        } catch (e) { alert("Errore: " + e.message); }
     };
 
     const overlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: 99998, backdropFilter: 'blur(4px)' };
     const containerStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' };
     const modalStyle = { backgroundColor: '#ffffff', width: '100%', maxWidth: '500px', maxHeight: '85vh', borderRadius: '12px', overflow: 'hidden', pointerEvents: 'auto', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column' };
-    const inputClasses = "block w-full px-3 py-2.5 bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm";
 
-
-    if (!employeeData) return <div className="min-h-screen flex items-center justify-center">Caricamento dipendente...</div>;
+    if (!employeeData) return <div className="min-h-screen flex items-center justify-center">Caricamento...</div>;
 
     const months = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
     const years = [new Date().getFullYear(), new Date().getFullYear() - 1]; 
 
-    const renderDeviceMessage = () => {
-        const MAX_DEVICES = 2; 
-        const currentDeviceIds = employeeData.deviceIds || [];
-        const currentDeviceCount = currentDeviceIds.length;
-        const isCurrentDeviceAuthorized = currentDeviceIds.includes(deviceId);
-        const isLimitReached = currentDeviceCount >= MAX_DEVICES;
+    return (
+        <div className="p-4 max-w-lg mx-auto font-sans bg-gray-50 min-h-screen flex flex-col">
+            <CompanyLogo />
+            
+            <div className="text-center my-4 p-4 bg-white rounded-lg shadow-sm">
+                <p>Dipendente: <span className="font-semibold">{employeeData.name} {employeeData.surname}</span></p>
+                <p className="text-4xl font-bold">{currentTime.toLocaleTimeString('it-IT')}</p>
+                {activeEntry && <p className="text-green-600 font-bold mt-2">Area Attuale: {workAreaName}</p>}
+            </div>
 
-        if (currentDeviceCount === 0 || isCurrentDeviceAuthorized) {
-            return (
-                <div className={`p-4 mb-4 rounded-lg shadow-sm bg-blue-100 border-l-4 border-blue-500 text-blue-700 text-center`} role="alert"> 
-                    <p className="font-bold">Stato Dispositivo: {currentDeviceCount} / {MAX_DEVICES} registrati</p>
-                    {isLimitReached ? <p className="text-xs font-semibold mt-1">Limite raggiunto. Per reset contattare Admin.</p> : <p className="text-xs font-semibold mt-1">Dispositivo autorizzato.</p>}
-                </div>
-            );
-        }
-        if (isLimitReached && !isCurrentDeviceAuthorized) {
-             return (
-                 <div className={`p-4 mb-4 rounded-lg shadow-sm bg-red-100 border-l-4 border-red-500 text-red-700 text-center`} role="alert">
-                     <p className="font-bold">❌ TIMBRATURA BLOCCATA</p>
-                     <p className="text-sm font-semibold mt-1">Limite dispositivi raggiunto.</p>
-                 </div>
-             );
-        }
-        return null;
-    }; 
-    
-    const GpsAreaStatusBlock = () => {
-        if (employeeWorkAreas.length === 0) {
-            if (isGpsRequired) return <div className="bg-white p-4 rounded-lg shadow-md mb-6"><p className="text-sm text-red-500 mt-2 text-center">❌ Controllo GPS richiesto ma nessuna area assegnata.</p></div>
-            else return null; 
-        }
-        return (
             <div className="bg-white p-4 rounded-lg shadow-md mb-6">
                 <h2 className="text-xl font-bold mb-3 text-center">Stato Posizione</h2>
                 {isGpsRequired ? (
@@ -731,305 +343,100 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                         )}
                     </>
                 ) : (
-                    <>
-                        {employeeWorkAreas.length > 0 ? (
-                            <p className="text-base text-blue-600 font-semibold mt-2 text-center">GPS non richiesto.</p>
-                        ) : <p className="text-sm text-red-500 font-semibold mt-2 text-center">❌ Non sei assegnato a nessuna area.</p>}
-                    </>
+                    <p className="text-base text-blue-600 font-semibold mt-2 text-center">GPS non richiesto.</p>
                 )}
             </div>
-        );
-    };
 
-    return (
-        <div className="p-4 max-w-lg mx-auto font-sans bg-gray-50 min-h-screen flex flex-col">
-            <CompanyLogo />
-            {renderDeviceMessage()}
-
-            <div className="text-center my-4 p-4 bg-white rounded-lg shadow-sm">
-                <p>Dipendente: <span className="font-semibold">{employeeData.name} {employeeData.surname}</span></p>
-                <p className="text-4xl font-bold">{currentTime.toLocaleTimeString('it-IT')}</p>
-                <p className="text-lg text-gray-500">{currentTime.toLocaleDateString('it-IT', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-            </div>
-
-            <GpsAreaStatusBlock />
-            
             <div className="bg-white p-4 rounded-lg shadow-md mb-6">
-                <h2 className="text-xl font-bold mb-3 preposto-center text-center">Azioni Rapide</h2>
-                {activeEntry ? ( 
+                <h2 className="text-xl font-bold mb-3 text-center">Azioni Rapide</h2>
+                {!activeEntry ? (
                     <div>
-                        <p className="text-center text-green-600 font-semibold text-lg mb-4">Timbratura ATTIVA su: <span className="font-bold">{workAreaName}</span></p>
-                        <div className="grid grid-cols-3 gap-3">
-                            <button
-                                onClick={() => handleAction('clockPause')} 
-                                disabled={isProcessing || pauseStatus !== 'NONE' || !deviceId || (employeeData.deviceIds?.length >= 2 && !employeeData.deviceIds?.includes(deviceId))} 
-                                className={`w-full font-bold rounded-lg shadow-lg transition-colors py-4 text-white ${
-                                    pauseStatus !== 'NONE' ? 'bg-gray-400' : 'bg-orange-500 hover:bg-orange-600' 
-                                } disabled:opacity-50 disabled:cursor-not-allowed`}
-                            >
-                                <div className="text-2xl leading-none">🟡</div>
-                                <span className="text-sm block mt-1">{pauseStatus === 'ACTIVE' ? 'PAUSA ATTIVA' : pauseStatus === 'COMPLETED' ? 'PAUSA EFFETTUATA' : 'TIMBRA PAUSA'}</span>
-                            </button>
-                            <div className={`w-full font-bold rounded-lg shadow-lg text-white text-center py-4 ${isInPause ? 'bg-orange-600' : 'bg-green-600'}`}>
-                                <div className="text-2xl leading-none">🟢</div>
-                                <span className="text-sm block mt-1">{isInPause ? 'IN PAUSA' : 'IN CORSO'}</span>
-                            </div>
-                            <button
-                                onClick={() => handleAction('clockOut')}
-                                disabled={isProcessing || (isGpsRequired && !inRangeArea) || !deviceId || (employeeData.deviceIds?.length >= 2 && !employeeData.deviceIds?.includes(deviceId))}
-                                className={`w-full font-bold rounded-lg shadow-lg text-white transition-colors py-4 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed`}
-                            >
-                                <div className="text-2xl leading-none">🔴</div>
-                                <span className="text-sm block mt-1">TIMBRA USCITA</span>
-                            </button>
-                        </div>
-                    </div>
-                ) : ( 
-                    <div>
-                        <p className="text-center text-red-600 font-semibold text-lg">Timbratura NON ATTIVA</p>
-                        {!isGpsRequired && (
-                            <div className="mb-4">
-                                <label htmlFor="manualArea" className="block text-sm font-medium text-gray-700 mb-1">Seleziona Area di Lavoro:</label>
-                                <select id="manualArea" value={manualAreaId} onChange={(e) => setManualAreaId(e.target.value)} className="p-2 border border-gray-300 rounded-md w-full text-sm bg-white">
-                                    <option value="">-- Seleziona un'area --</option>
-                                    {employeeWorkAreas.map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}
-                                </select>
-                            </div>
+                         {!isGpsRequired && (
+                            <select value={manualAreaId} onChange={(e) => setManualAreaId(e.target.value)} className="w-full p-2 border rounded mb-2">
+                                <option value="">-- Seleziona Area --</option>
+                                {employeeWorkAreas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                            </select>
                         )}
-                        <button
-                            onClick={() => handleAction('clockIn')}
-                            disabled={
-                                isProcessing || 
-                                (isGpsRequired && !inRangeArea) || 
-                                (!isGpsRequired && !manualAreaId) || 
-                                (!isGpsRequired && employeeWorkAreas.length === 0 && manualAreaId === "") ||
-                                (!deviceId) || 
-                                (employeeData.deviceIds?.length >= 2 && !employeeData.deviceIds?.includes(deviceId))
-                            }
-                            className={`w-full mt-4 text-2xl font-bold py-6 px-4 rounded-lg shadow-lg text-white transition-colors bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed`}
-                        >
-                            🟢 TIMBRA ENTRATA
-                        </button>
+                        <button onClick={() => handleAction('clockIn')} className="w-full py-6 bg-green-600 text-white font-bold rounded shadow text-xl">🟢 ENTRATA</button>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                        <button onClick={() => handleAction('clockPause')} className="py-4 bg-orange-500 text-white font-bold rounded shadow">🟡 PAUSA</button>
+                        <button onClick={() => handleAction('clockOut')} className="py-4 bg-red-600 text-white font-bold rounded shadow">🔴 USCITA</button>
                     </div>
                 )}
             </div>
 
-            {/* === SEZIONE: SPESE E RIMBORSI === */}
             <div className="bg-white p-4 rounded-lg shadow-md mb-6">
                  <h2 className="text-xl font-bold mb-3 text-center">Spese e Rimborsi</h2>
-                 <p className="text-sm text-gray-500 mb-4 text-center">Hai sostenuto una spesa? Carica lo scontrino.</p>
-                 
                  <div className="flex flex-col gap-3">
-                     <ExpenseModal user={user} employeeData={employeeData} />
-                     <button 
-                        onClick={handleViewExpenses}
-                        className="w-full py-2 px-4 bg-teal-600 text-white font-bold rounded-lg shadow hover:bg-teal-700 transition-colors flex items-center justify-center gap-2 text-sm"
-                     >
-                        📜 I miei Rimborsi
-                     </button>
+                     <button onClick={() => setShowAddExpenseModal(true)} className="w-full py-2 bg-green-600 text-white font-bold rounded shadow">💰 Registra Spesa</button>
+                     <button onClick={handleViewExpenses} className="w-full py-2 bg-teal-600 text-white font-bold rounded shadow">📜 Storico</button>
                  </div>
             </div>
 
-            {/* === MODULI MS FORMS === */}
             <div className="bg-white p-4 rounded-lg shadow-md mb-6">
-                 <h2 className="text-xl font-bold mb-3 text-center">Modulistica</h2>
-                 <p className="text-sm text-gray-500 mb-4 text-center">Accedi ai questionari se caposquadra per la tua area.</p>
-                 <button 
-                    onClick={handleOpenFormsModal}
-                    className="w-full py-3 px-4 bg-indigo-600 text-white font-bold rounded-lg shadow hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2"
-                 >
-                    📋 Moduli e Questionari
-                 </button>
+                 <button onClick={handleOpenFormsModal} className="w-full py-3 bg-indigo-600 text-white font-bold rounded shadow">📋 Moduli</button>
             </div>
             
             <div className="bg-white p-4 rounded-lg shadow-md mb-6">
-                <h2 className="text-xl font-bold mb-3 text-center">Timbrature di Oggi</h2>
-                <div className="space-y-2 max-h-40 overflow-y-auto">
-                    {todaysEntries.length > 0 ? todaysEntries.map(entry => (
-                        <div key={entry.id} className="text-sm border-b pb-1 last:border-b-0">
-                            <p className="text-center">
-                                <span className="font-medium">Entrata:</span> {entry.clockInTime.toDate().toLocaleTimeString('it-IT', { hour:'2-digit', minute:'2-digit' })}
-                                <span className="ml-2 font-medium">Uscita:</span> {entry.clockOutTime ? entry.clockOutTime.toDate().toLocaleTimeString('it-IT', { hour:'2-digit', minute:'2-digit' }) : '...'}
-                            </p>
-                        </div>
-                    )) : <p className="text-sm text-gray-500 text-center">Nessuna timbratura trovata per oggi.</p>}
-                </div>
-            </div>
-
-            {/* === BOX REPORT PDF === */}
-            <div className="bg-white p-4 rounded-lg shadow-md mb-6">
                 <h2 className="text-xl font-bold mb-3 text-center">Report Mensile PDF</h2>
                 <div className="grid grid-cols-2 gap-4 mb-4">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700">Mese</label>
-                        <select value={selectedMonth} onChange={(e) => setSelectedMonth(parseInt(e.target.value))} className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white">
-                            {months.map((month, index) => (<option key={index} value={index}>{month}</option>))}
-                        </select>
-                    </div>
-                    <div>
-                         <label className="block text-sm font-medium text-gray-700">Anno</label>
-                        <select value={selectedYear} onChange={(e) => setSelectedYear(parseInt(e.target.value))} className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white">
-                            {years.map(year => (<option key={year} value={year}>{year}</option>))}
-                        </select>
+                    <select value={selectedMonth} onChange={(e) => setSelectedMonth(parseInt(e.target.value))} className="border p-2 rounded">{months.map((m, i) => <option key={i} value={i}>{m}</option>)}</select>
+                    <select value={selectedYear} onChange={(e) => setSelectedYear(parseInt(e.target.value))} className="border p-2 rounded">{years.map(y => <option key={y} value={y}>{y}</option>)}</select>
+                </div>
+                <button onClick={handleExportPDF} disabled={isGenerating} className="w-full py-3 bg-red-600 text-white font-bold rounded shadow">{isGenerating ? 'Generazione...' : 'Scarica PDF'}</button>
+            </div>
+            
+            <button onClick={handleLogout} className="w-full mt-auto px-4 py-2 bg-gray-500 text-white rounded-lg">Logout</button>
+
+            {showFormsModal && (
+                <div style={overlayStyle} onClick={() => setShowFormsModal(false)}>
+                    <div style={{...containerStyle, pointerEvents:'none'}}>
+                        <div style={{...modalStyle, pointerEvents:'auto', padding:'20px'}}>
+                            <h3>Moduli {selectedAreaForForms && '(Area Selezionata)'}</h3>
+                            {isLoadingForms ? <p>Caricamento...</p> : availableForms.map(f => <a key={f.id} href={f.url} target="_blank" rel="noreferrer" className="block p-3 border mb-2 rounded bg-gray-50">{f.title} ↗️</a>)}
+                            <button onClick={() => setShowFormsModal(false)} className="mt-4 p-2 bg-gray-200 rounded w-full">Chiudi</button>
+                        </div>
                     </div>
                 </div>
-                <button
-                    onClick={handleExportPDF}
-                    disabled={isGenerating}
-                    className="w-full text-lg font-bold py-3 px-4 rounded-lg shadow-md text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    {isGenerating ? 'Generazione...' : 'Scarica Report PDF'}
-                </button>
-            </div>
-
-            <button onClick={handleLogout} className="w-full mt-auto px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600">Logout</button>
-
-            {/* MODALE FORMS */}
-            {showFormsModal && (
-                <>
-                    <div style={overlayStyle} onClick={() => setShowFormsModal(false)} />
-                    <div style={containerStyle}>
-                        <div style={modalStyle}>
-                            <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', backgroundColor: '#f9fafb' }}>
-                                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#111827' }}>📋 Moduli e Questionari</h3>
-                                <button onClick={() => setShowFormsModal(false)} style={{ background: 'none', border: 'none', fontSize: '24px', color: '#9ca3af', cursor: 'pointer', lineHeight: '1' }}>&times;</button>
-                            </div>
-                            <div style={{ padding: '24px', overflowY: 'auto' }}>
-                                <div style={{ marginBottom: '20px' }}>
-                                    <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', fontWeight: 'bold', color: '#6b7280', textTransform: 'uppercase' }}>Area di Lavoro:</label>
-                                    {activeEntry ? (
-                                        <div style={{ padding: '10px 12px', backgroundColor: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: '6px', color: '#374151', fontWeight: '600' }}>
-                                            📍 {allWorkAreas.find(a => a.id === activeEntry.workAreaId)?.name || 'Area Attuale'}
-                                        </div>
-                                    ) : (
-                                        <select 
-                                            value={selectedAreaForForms} 
-                                            onChange={handleAreaChangeForForms}
-                                            className={inputClasses}
-                                        >
-                                            <option value="">-- Seleziona Area --</option>
-                                            {employeeWorkAreas.map(area => (
-                                                <option key={area.id} value={area.id}>{area.name}</option>
-                                            ))}
-                                        </select>
-                                    )}
-                                </div>
-                                {isLoadingForms ? (
-                                    <p style={{ textAlign: 'center', color: '#6b7280' }}>Caricamento moduli...</p>
-                                ) : (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                        {availableForms.length > 0 ? (
-                                            availableForms.map(form => (
-                                                <a 
-                                                    key={form.id} 
-                                                    href={form.url} 
-                                                    target="_blank" 
-                                                    rel="noopener noreferrer"
-                                                    style={{ display: 'block', padding: '16px', backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px', textDecoration: 'none', boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)', transition: 'background-color 0.2s' }}
-                                                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f9fafb'}
-                                                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#fff'}
-                                                >
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                        <div>
-                                                            <h4 style={{ margin: 0, fontWeight: 'bold', color: '#1f2937', fontSize: '15px' }}>{form.title}</h4>
-                                                            {form.description && <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#6b7280' }}>{form.description}</p>}
-                                                        </div>
-                                                        <span style={{ fontSize: '18px', color: '#4f46e5' }}>↗️</span>
-                                                    </div>
-                                                </a>
-                                            ))
-                                        ) : (
-                                            selectedAreaForForms ? 
-                                                <p style={{ textAlign: 'center', color: '#6b7280', fontStyle: 'italic', padding: '16px', backgroundColor: '#f9fafb', borderRadius: '6px' }}>Nessun modulo disponibile per questa area.</p>
-                                                : 
-                                                <p style={{ textAlign: 'center', color: '#9ca3af', fontStyle: 'italic' }}>Seleziona un'area per vedere i moduli.</p>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                            <div style={{ padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end' }}>
-                                <button 
-                                    onClick={() => setShowFormsModal(false)}
-                                    style={{ padding: '10px 20px', backgroundColor: '#fff', border: '1px solid #d1d5db', borderRadius: '6px', color: '#374151', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer' }}
-                                >
-                                    Chiudi
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </>
             )}
 
-            {/* MODALE STORICO SPESE (AGGIORNATO CON DELETE) */}
+            <AddExpenseModalInternal 
+                show={showAddExpenseModal} 
+                onClose={() => setShowAddExpenseModal(false)} 
+                user={user} 
+                employeeData={employeeData} 
+            />
+
             {showExpenseHistory && (
-                <>
-                    <div style={overlayStyle} onClick={() => setShowExpenseHistory(false)} />
-                    <div style={containerStyle}>
-                        <div style={modalStyle}>
-                            <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', backgroundColor: '#f9fafb' }}>
-                                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#111827' }}>💰 I Miei Rimborsi</h3>
-                                <button onClick={() => setShowExpenseHistory(false)} style={{ background: 'none', border: 'none', fontSize: '24px', color: '#9ca3af', cursor: 'pointer', lineHeight: '1' }}>&times;</button>
-                            </div>
-                            <div style={{ padding: '24px', overflowY: 'auto' }}>
-                                {isLoadingExpenses ? (
-                                    <p style={{ textAlign: 'center', color: '#6b7280' }}>Caricamento spese...</p>
-                                ) : myExpenses.length === 0 ? (
-                                    <p style={{ textAlign: 'center', color: '#9ca3af', fontStyle: 'italic' }}>Non hai ancora inviato richieste di rimborso.</p>
-                                ) : (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                        {myExpenses.map(expense => (
-                                            <div key={expense.id} style={{ padding: '12px', border: '1px solid #e5e7eb', borderRadius: '8px', backgroundColor: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                                                    <span style={{ fontSize: '12px', color: '#6b7280' }}>
-                                                        {expense.date && expense.date.toDate ? expense.date.toDate().toLocaleDateString() : 'Data N/D'}
-                                                    </span>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                        <span style={{ 
-                                                            fontSize: '11px', fontWeight: 'bold', padding: '2px 8px', borderRadius: '12px', textTransform: 'uppercase',
-                                                            backgroundColor: expense.status === 'approved' ? '#def7ec' : expense.status === 'rejected' ? '#fde8e8' : '#fef3c7',
-                                                            color: expense.status === 'approved' ? '#03543f' : expense.status === 'rejected' ? '#9b1c1c' : '#92400e'
-                                                        }}>
-                                                            {expense.status === 'approved' ? 'Approvato' : expense.status === 'rejected' ? 'Rifiutato' : 'In Attesa'}
-                                                        </span>
-                                                        {/* PULSANTE DELETE SOLO SE PENDING */}
-                                                        {expense.status === 'pending' && (
-                                                            <button 
-                                                                onClick={() => handleDeleteExpense(expense.id)}
-                                                                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: '#ef4444' }}
-                                                                title="Elimina richiesta inviata per errore"
-                                                            >
-                                                                🗑️
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                    <span style={{ fontWeight: 'bold', color: '#1f2937' }}>{expense.description || 'Spesa Generica'}</span>
-                                                    <span style={{ fontWeight: 'bold', color: '#4f46e5' }}>€ {Number(expense.amount).toFixed(2)}</span>
-                                                </div>
-                                                {expense.imageUrl && (
-                                                    <div style={{ marginTop: '8px', textAlign: 'right' }}>
-                                                        <a href={expense.imageUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: '12px', color: '#2563eb', textDecoration: 'underline' }}>
-                                                            📎 Vedi Scontrino
-                                                        </a>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        ))}
+                <div style={overlayStyle} onClick={() => setShowExpenseHistory(false)}>
+                    <div style={{...containerStyle, pointerEvents:'none'}}>
+                        <div 
+                            style={{...modalStyle, pointerEvents:'auto', padding:'20px'}}
+                            onClick={(e) => e.stopPropagation()} 
+                        >
+                            <h3>I Miei Rimborsi</h3>
+                            <div style={{flex:1, overflowY:'auto', margin:'10px 0'}}>
+                                {isLoadingExpenses ? <p>Caricamento...</p> : myExpenses.length === 0 ? <p>Nessuna spesa.</p> : myExpenses.map(e => (
+                                    <div key={e.id} className="border-b p-2 flex justify-between items-center">
+                                        <div>
+                                            <div className="text-xs text-gray-500">{e.date?.toDate().toLocaleDateString()}</div>
+                                            <div className="font-bold">{e.description}</div>
+                                            <div className="text-xs text-gray-500 italic">Pagato: {e.paymentMethod}</div>
+                                            {e.receiptUrl && <a href={e.receiptUrl} target="_blank" rel="noreferrer" className="text-blue-500 text-xs underline">📎 Vedi File</a>}
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="font-bold text-blue-600">€ {e.amount}</div>
+                                            <button onClick={() => handleDeleteExpense(e.id)} className="text-red-500 ml-2">🗑️</button>
+                                        </div>
                                     </div>
-                                )}
+                                ))}
                             </div>
-                            <div style={{ padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end' }}>
-                                <button 
-                                    onClick={() => setShowExpenseHistory(false)}
-                                    style={{ padding: '10px 20px', backgroundColor: '#fff', border: '1px solid #d1d5db', borderRadius: '6px', color: '#374151', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer' }}
-                                >
-                                    Chiudi
-                                </button>
-                            </div>
+                            <button onClick={() => setShowExpenseHistory(false)} className="mt-4 p-2 bg-gray-200 rounded w-full">Chiudi</button>
                         </div>
                     </div>
-                </>
+                </div>
             )}
         </div>
     );

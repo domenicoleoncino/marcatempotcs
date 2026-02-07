@@ -2,12 +2,13 @@
 /* global __firebase_config, __initial_auth_token, __app_id */
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import ReactDOM from 'react-dom';
-import { db } from '../firebase';
+import { db, storage } from '../firebase'; // Assicurati che storage sia esportato in firebase.js
 import {
     collection, getDocs, query, where,
     Timestamp, onSnapshot, updateDoc, doc, limit,
-    addDoc, writeBatch, deleteDoc, arrayUnion
+    addDoc, writeBatch, deleteDoc, arrayUnion, orderBy
 } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import CompanyLogo from './CompanyLogo';
 import AdminModal from './AdminModal'; 
@@ -52,6 +53,178 @@ const NotificationPopup = ({ message, type, onClose }) => {
 // ===========================================
 // --- 2. SOTTO-COMPONENTI (MODALE & VISTE) ---
 // ===========================================
+
+// --- MODALE PER AGGIUNGERE NUOVA SPESA (MANCANTE NEL CODICE PRECEDENTE) ---
+const AddExpenseModal = ({ show, onClose, user, userData, showNotification }) => {
+    const [amount, setAmount] = useState('');
+    const [description, setDescription] = useState('');
+    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+    const [note, setNote] = useState('');
+    const [file, setFile] = useState(null); 
+    const [isSaving, setIsSaving] = useState(false);
+
+    if (!show) return null;
+
+    const handleSave = async (e) => {
+        e.preventDefault();
+        if (!amount || !description || !date) { 
+            alert("Importo, descrizione e data sono obbligatori."); 
+            return; 
+        }
+
+        setIsSaving(true);
+        try {
+            let receiptUrl = null;
+
+            if (file) {
+                if (!storage) throw new Error("Firebase Storage non è inizializzato.");
+                const fileRef = ref(storage, `expenses/${user.uid}/${Date.now()}_${file.name}`);
+                const snapshot = await uploadBytes(fileRef, file);
+                receiptUrl = await getDownloadURL(snapshot.ref);
+            }
+
+            await addDoc(collection(db, "expenses"), {
+                amount: parseFloat(amount),
+                description: description,
+                note: note,
+                date: Timestamp.fromDate(new Date(date)),
+                userId: user.uid,
+                userName: userData?.name ? `${userData.name} ${userData.surname}` : user.email,
+                userRole: userData?.role || 'unknown',
+                receiptUrl: receiptUrl, 
+                status: 'pending',
+                createdAt: Timestamp.now()
+            });
+
+            showNotification("Spesa registrata con successo!", "success");
+            setAmount(''); setDescription(''); setNote(''); setFile(null); 
+            setDate(new Date().toISOString().split('T')[0]);
+            onClose();
+        } catch (error) {
+            console.error("Errore salvataggio spesa:", error);
+            showNotification("Errore: " + error.message, "error");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const overlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: 99998, backdropFilter: 'blur(4px)' };
+    const containerStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' };
+    const modalStyle = { backgroundColor: '#ffffff', width: '100%', maxWidth: '500px', borderRadius: '12px', overflow: 'hidden', pointerEvents: 'auto', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column' };
+    const inputClasses = "block w-full px-3 py-2.5 bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm";
+    const labelClasses = "block mb-1 text-xs font-bold text-gray-500 uppercase tracking-wide";
+
+    return ReactDOM.createPortal(
+        <>
+            <div style={overlayStyle} onClick={onClose} />
+            <div style={containerStyle}>
+                <div style={modalStyle}>
+                    <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#ecfdf5' }}>
+                        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#047857' }}>💰 Registra Nuova Spesa</h3>
+                        <button onClick={onClose} style={{ border: 'none', background: 'none', fontSize: '24px', cursor: 'pointer', color: '#047857' }}>&times;</button>
+                    </div>
+                    <div style={{ padding: '24px' }}>
+                        <form id="add-expense-form" onSubmit={handleSave} className="space-y-4">
+                            <div><label className={labelClasses}>Data Spesa</label><input type="date" value={date} onChange={e => setDate(e.target.value)} className={inputClasses} required /></div>
+                            <div>
+                                <label className={labelClasses}>Importo (€)</label>
+                                <input type="number" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" className={inputClasses} required />
+                            </div>
+                            <div>
+                                <label className={labelClasses}>Descrizione</label>
+                                <input type="text" value={description} onChange={e => setDescription(e.target.value)} placeholder="Es. Carburante, Pranzo..." className={inputClasses} required />
+                            </div>
+                            <div>
+                                <label className={labelClasses}>Allegato (Foto/File) - Opzionale</label>
+                                <input 
+                                    type="file" 
+                                    onChange={e => setFile(e.target.files[0])} 
+                                    accept="image/*,.pdf"
+                                    className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100"
+                                />
+                                {file && <p className="text-xs text-green-600 mt-1">File selezionato: {file.name}</p>}
+                            </div>
+                            <div>
+                                <label className={labelClasses}>Note (Opzionale)</label>
+                                <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Dettagli aggiuntivi..." className={`${inputClasses} resize-y min-h-[80px]`} />
+                            </div>
+                        </form>
+                    </div>
+                    <div style={{ padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                        <button type="button" onClick={onClose} className="px-4 py-2 border rounded hover:bg-gray-100 text-sm font-semibold">Annulla</button>
+                        <button type="submit" form="add-expense-form" disabled={isSaving} className="px-4 py-2 bg-green-600 text-white font-bold rounded hover:bg-green-700 disabled:opacity-50 text-sm">{isSaving ? 'Caricamento...' : 'Conferma Spesa'}</button>
+                    </div>
+                </div>
+            </div>
+        </>,
+        document.body
+    );
+};
+
+// --- MODALE PER GESTIRE/SALDARE LA SPESA (ADMIN) ---
+const ProcessExpenseModal = ({ show, onClose, expense, onConfirm, isProcessing }) => {
+    const [adminPaymentMethod, setAdminPaymentMethod] = useState('Rimborso in Busta Paga');
+    const [adminNote, setAdminNote] = useState('');
+
+    if (!show || !expense) return null;
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        onConfirm(expense.id, adminPaymentMethod, adminNote);
+    };
+
+    const overlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: 99998, backdropFilter: 'blur(4px)' };
+    const containerStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' };
+    const modalStyle = { backgroundColor: '#ffffff', width: '100%', maxWidth: '500px', borderRadius: '12px', overflow: 'hidden', pointerEvents: 'auto', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column' };
+    const inputClasses = "block w-full px-3 py-2.5 bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm";
+
+    return ReactDOM.createPortal(
+        <>
+            <div style={overlayStyle} onClick={onClose} />
+            <div style={containerStyle}>
+                <div style={modalStyle}>
+                    <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f0fdf4' }}>
+                        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#166534' }}>✅ Chiudi e Archivia Spesa</h3>
+                        <button onClick={onClose} style={{ border: 'none', background: 'none', fontSize: '24px', cursor: 'pointer', color: '#166534' }}>&times;</button>
+                    </div>
+                    <div style={{ padding: '24px' }}>
+                        <div className="mb-4 text-sm text-gray-600 bg-gray-50 p-3 rounded border border-gray-200">
+                            <p><strong>Dipendente:</strong> {expense.userName}</p>
+                            <p><strong>Importo:</strong> € {parseFloat(expense.amount).toFixed(2)}</p>
+                            <p><strong>Pagato con:</strong> {expense.paymentMethod || 'N/D'}</p>
+                        </div>
+                        <form id="process-expense-form" onSubmit={handleSubmit} className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Come hai rimborsato/chiuso questa spesa?</label>
+                                <select value={adminPaymentMethod} onChange={e => setAdminPaymentMethod(e.target.value)} className={inputClasses}>
+                                    <option value="Rimborso in Busta Paga">Rimborso in Busta Paga</option>
+                                    <option value="Bonifico Effettuato">Bonifico Effettuato</option>
+                                    <option value="Rimborso Cassa (Contanti)">Rimborso Cassa (Contanti)</option>
+                                    <option value="Nessun Rimborso (Carta Aziendale)">Nessun Rimborso (Carta Aziendale)</option>
+                                    <option value="Non Rimborsabile (Rifiutata)">Non Rimborsabile (Rifiutata)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Note Amministratore</label>
+                                <textarea 
+                                    value={adminNote} 
+                                    onChange={e => setAdminNote(e.target.value)} 
+                                    placeholder="Es. Inserito nella busta di Marzo..." 
+                                    className={`${inputClasses} resize-y min-h-[80px]`} 
+                                />
+                            </div>
+                        </form>
+                    </div>
+                    <div style={{ padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                        <button type="button" onClick={onClose} className="px-4 py-2 border rounded hover:bg-gray-100 text-sm">Annulla</button>
+                        <button type="submit" form="process-expense-form" disabled={isProcessing} className="px-4 py-2 bg-green-600 text-white font-bold rounded hover:bg-green-700 disabled:opacity-50 text-sm">{isProcessing ? 'Salvataggio...' : 'Conferma e Archivia'}</button>
+                    </div>
+                </div>
+            </div>
+        </>,
+        document.body
+    );
+};
 
 const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) => {
     const formatDateForInput = (dateStr) => {
@@ -371,6 +544,114 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
                     </div>
                 </div>
             )}
+        </div>
+    );
+};
+
+// --- NUOVA VISTA SPESE AGGIORNATA (CON ARCHIVIO) ---
+const ExpensesView = ({ expenses, onProcessExpense }) => {
+    const [showArchived, setShowArchived] = useState(false);
+
+    // Filtra in base allo stato
+    const displayedExpenses = expenses.filter(exp => {
+        const isClosed = exp.status === 'closed' || exp.status === 'paid';
+        return showArchived ? isClosed : !isClosed;
+    });
+
+    return (
+        <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-gray-200 pb-4">
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-800 tracking-tight">💰 Gestione Spese</h1>
+                <button 
+                    onClick={() => setShowArchived(!showArchived)}
+                    className={`px-4 py-2 rounded-lg text-sm font-bold shadow transition-colors ${showArchived ? 'bg-gray-600 text-white hover:bg-gray-700' : 'bg-blue-100 text-blue-700 hover:bg-blue-200 border border-blue-300'}`}
+                >
+                    {showArchived ? '🔙 Torna alle Spese Attive' : '📂 Mostra Archivio'}
+                </button>
+            </div>
+            
+            {!showArchived && (
+                <div className="bg-yellow-50 text-yellow-800 px-4 py-2 rounded-lg text-sm border border-yellow-200">
+                    ⚠️ <strong>SPESEIN ATTESA</strong>. Clicca su "Gestisci" per saldarle e archiviarle.
+                </div>
+            )}
+
+            <div className="bg-white shadow-lg rounded-xl overflow-hidden border border-gray-100">
+                <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-blue-50">
+                            <tr>
+                                <th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Data</th>
+                                <th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Dipendente</th>
+                                <th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Dettagli Spesa</th>
+                                <th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Pagato Con</th>
+                                <th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Allegato</th>
+                                <th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Importo</th>
+                                <th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Azioni</th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                            {displayedExpenses.map(exp => {
+                                let formattedDate = 'N/D';
+                                if (exp.date && exp.date.toDate) {
+                                    formattedDate = exp.date.toDate().toLocaleDateString('it-IT');
+                                } else if (exp.date) {
+                                    formattedDate = new Date(exp.date).toLocaleDateString('it-IT');
+                                }
+                                const isPreposto = exp.userRole === 'preposto';
+                                return (
+                                    <tr key={exp.id} className="hover:bg-blue-50/30 transition-colors">
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{formattedDate}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                            <div className="font-bold text-gray-900">{exp.userName || exp.userId}</div>
+                                            {isPreposto && <span className="text-xs text-blue-600 border border-blue-200 bg-blue-50 px-1 rounded">Preposto</span>}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-normal text-sm text-gray-600 max-w-xs">
+                                            <div className="font-semibold">{exp.description}</div>
+                                            <div className="text-xs italic text-gray-500">{exp.note}</div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                                            <span className="bg-gray-100 px-2 py-1 rounded border border-gray-200 text-xs">
+                                                {exp.paymentMethod || 'Non specificato'}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                            {exp.receiptUrl ? (
+                                                <a href={exp.receiptUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-800 underline flex items-center gap-1">
+                                                    📎 Vedi File
+                                                </a>
+                                            ) : (
+                                                <span className="text-gray-400 text-xs">Nessun file</span>
+                                            )}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-green-600">€ {parseFloat(exp.amount).toFixed(2)}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                            {!showArchived ? (
+                                                <button 
+                                                    onClick={() => onProcessExpense(exp)}
+                                                    className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded shadow text-xs font-bold"
+                                                >
+                                                    ✅ Gestisci
+                                                </button>
+                                            ) : (
+                                                <div className="text-xs text-gray-500">
+                                                    <div>Chiuso: {exp.adminPaymentMethod}</div>
+                                                    {exp.adminNote && <div className="italic">Note: {exp.adminNote}</div>}
+                                                </div>
+                                            )}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                    {displayedExpenses.length === 0 && (
+                        <div className="p-8 text-center text-gray-500">
+                            {showArchived ? "Nessuna spesa in archivio." : "Nessuna nuova spesa da approvare."}
+                        </div>
+                    )}
+                </div>
+            </div>
         </div>
     );
 };
@@ -836,7 +1117,7 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
     );
 };
 
-const ActionHeader = ({ view, currentUserRole, openModal }) => { 
+const ActionHeader = ({ view, currentUserRole, openModal, onOpenAddExpense }) => { 
     if (currentUserRole !== 'admin' && currentUserRole !== 'preposto') return null;
     let button = null;
     let text = null;
@@ -847,6 +1128,12 @@ const ActionHeader = ({ view, currentUserRole, openModal }) => {
     else if (view === 'admins' && currentUserRole === 'admin') { text = '+👮Crea Nuovo Admin'; button = <button onClick={() => openModal('newAdmin')} className={btnClass}>{text}</button>; }
     else if (view === 'employees' && currentUserRole === 'preposto') { text = '+👤 Aggiungi Dipendente alle Mie Aree'; button = <button onClick={() => openModal('prepostoAddEmployeeToAreas')} className={btnClass}>{text}</button>; }
     else if (view === 'forms') { text = '+🔗 Aggiungi Modulo Forms'; button = <button onClick={() => openModal('newForm')} className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-md transition-all transform hover:-translate-y-0.5 w-full sm:w-auto text-sm">{text}</button>; }
+    
+    // NUOVO BOTTONE AGGIUNGI SPESA (Admin + Preposto)
+    else if (view === 'expenses') { 
+        text = '+ 💰 Registra Spesa'; 
+        button = <button onClick={onOpenAddExpense} className="px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg shadow-md transition-all transform hover:-translate-y-0.5 w-full sm:w-auto text-sm">{text}</button>; 
+    }
 
     if (!button) return null;
     return (<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4"><div className="flex justify-end">{button}</div></div>);
@@ -865,6 +1152,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const [activeEmployeesDetails, setActiveEmployeesDetails] = useState([]);
     const [reports, setReports] = useState([]);
     const [forms, setForms] = useState([]);
+    const [expenses, setExpenses] = useState([]); 
     
     // STATO PER FILTRARE GLI ARCHIVIATI
     const [showArchived, setShowArchived] = useState(false);
@@ -890,6 +1178,10 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
     const [showAddEmployeeModal, setShowAddEmployeeModal] = useState(false);
     const [showAddFormModal, setShowAddFormModal] = useState(false);
+    const [showAddExpenseModal, setShowAddExpenseModal] = useState(false); // NUOVO STATO MODALE SPESA
+    
+    // NUOVI STATI PER GESTIONE SPESE
+    const [expenseToProcess, setExpenseToProcess] = useState(null); // Spesa selezionata per chiusura
 
     const currentUserRole = userData?.role;
     const superAdminEmail = SUPER_ADMIN_EMAIL; 
@@ -982,8 +1274,20 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         if (user && userData) fetchData();
     }, [user, userData, fetchData]); 
 
+    // --- LISTENER SPESE (ADMIN + PREPOSTO) ---
     useEffect(() => {
-        // --- FILTRARE GLI ARCHIVIATI DAL CONTROLLO DISPOSITIVI ---
+        if (currentUserRole !== 'admin' && currentUserRole !== 'preposto') return;
+        const q = query(collection(db, "expenses"), orderBy("date", "desc"), limit(50));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const expensesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setExpenses(expensesData);
+        }, (error) => {
+            console.error("Errore listener spese:", error);
+        });
+        return () => unsubscribe();
+    }, [currentUserRole]);
+
+    useEffect(() => {
         const activeOnly = allEmployees.filter(e => !e.isDeleted);
         if (activeOnly.length > 0) {
             const violators = activeOnly.filter(e => e.deviceIds && e.deviceIds.length > MAX_DEVICE_LIMIT);
@@ -996,9 +1300,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     }, [allEmployees, showNotification]);
 
     const sortedAndFilteredEmployees = useMemo(() => {
-        // --- FILTRAGGIO ARCHIVIATI ---
-        // Se showArchived è true, mostra SOLO i cancellati.
-        // Se false (default), mostra SOLO gli attivi.
         let baseList = managedEmployees;
         
         if (showArchived) {
@@ -1034,7 +1335,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
              });
         }
         return filterableItems;
-    }, [managedEmployees, activeEmployeesDetails, searchTerm, allWorkAreas, sortConfig, showArchived]); // AGGIUNTO showArchived
+    }, [managedEmployees, activeEmployeesDetails, searchTerm, allWorkAreas, sortConfig, showArchived]); 
 
     const visibleWorkAreas = useMemo(() => {
         if (currentUserRole === 'admin') return workAreasWithHours;
@@ -1129,6 +1430,27 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         }, (error) => { if (isMounted) { console.error("Errore listener ore totali:", error); showNotification("Errore aggiornamento ore totali.", 'error'); } });
         return () => { isMounted = false; unsubscribe(); };
     }, [currentUserRole, userData, showNotification]); 
+
+    // --- LOGICA GESTIONE SPESA (CHIUSURA/ARCHIVIAZIONE) ---
+    const handleConfirmProcessExpense = async (expenseId, paymentMethod, note) => {
+        setIsActionLoading(true);
+        try {
+            await updateDoc(doc(db, "expenses", expenseId), {
+                status: 'closed',
+                adminPaymentMethod: paymentMethod,
+                adminNote: note,
+                closedAt: Timestamp.now(),
+                closedBy: user.email
+            });
+            showNotification("Spesa archiviata con successo!", 'success');
+            setExpenseToProcess(null); // Chiudi modale
+        } catch (error) {
+            console.error("Errore archiviazione spesa:", error);
+            showNotification("Errore durante l'archiviazione.", 'error');
+        } finally {
+            setIsActionLoading(false);
+        }
+    };
 
     const handleAdminClockIn = useCallback(async (areaId, timestamp, note) => {
         if (!adminEmployeeProfile) return showNotification("Profilo dipendente non trovato.", 'error');
@@ -1374,6 +1696,9 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
        return <div className="min-h-screen flex items-center justify-center bg-gray-100 w-full"><p>Accesso non autorizzato.</p></div>;
     }
 
+    // Conta solo le spese non chiuse per il badge
+    const activeExpensesCount = expenses.filter(e => e.status !== 'closed' && e.status !== 'paid').length;
+
     return (
         <div className="min-h-screen bg-gray-100 w-full font-sans text-gray-800">
             {notification && <NotificationPopup message={notification.message} type={notification.type} onClose={() => setNotification(null)} />}
@@ -1430,6 +1755,21 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                              <button onClick={() => handleSwitchView('areas')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'areas' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>📍GestioneAree</button>
                              <button disabled className="py-2 px-3 sm:border-b-2 text-sm font-medium border-transparent text-gray-300 cursor-not-allowed" title="In arrivo...">📋Moduli Forms</button>
                              {currentUserRole === 'admin' && <button onClick={() => handleSwitchView('admins')} className={`py-2 px-3 sm:border-b-2 text-sm font-medium ${view === 'admins' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>👮Gestione Admin</button>}
+                             
+                             {/* BOTTONE SPESE AGGIORNATO (Admin e Preposto) */}
+                             {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (
+                                <button 
+                                    onClick={() => handleSwitchView('expenses')} 
+                                    className={`py-2 px-3 sm:border-b-2 text-sm font-medium flex items-center ${view === 'expenses' ? 'border-indigo-500 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}
+                                >
+                                    💰 Spese
+                                    {activeExpensesCount > 0 && (
+                                        <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800 animate-pulse">
+                                            {activeExpensesCount}
+                                        </span>
+                                    )}
+                                </button>
+                             )}
                              {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (
                                 <button 
                                     onClick={() => handleSwitchView('reports')} 
@@ -1448,7 +1788,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                  </div>
             </nav>
 
-            <ActionHeader view={view} currentUserRole={currentUserRole} openModal={openModal} />
+            <ActionHeader view={view} currentUserRole={currentUserRole} openModal={openModal} onOpenAddExpense={() => setShowAddExpenseModal(true)} />
 
             {/* CONTENUTO PRINCIPALE */}
             <div className="max-w-7xl mx-auto w-full p-4 sm:p-6 lg:p-8">
@@ -1459,6 +1799,9 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                         totalDayHours={totalDayHours} 
                         workAreas={visibleWorkAreas} 
                     />}
+                    
+                    {/* VISTA SPESE AGGIORNATA */}
+                    {view === 'expenses' && <ExpensesView expenses={expenses} onProcessExpense={setExpenseToProcess} />}
                     
                     {view === 'employees' && <EmployeeManagementView 
                         employees={sortedAndFilteredEmployees} 
@@ -1556,7 +1899,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                  />
              )}
 
-            {/* Modale Aggiunta Forms (Separato per sicurezza) */}
+            {/* Modale Aggiunta Forms */}
             <AddFormModal 
                 show={showAddFormModal}
                 onClose={() => setShowAddFormModal(false)}
@@ -1568,7 +1911,27 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 showNotification={showNotification}
             />
 
-            {/* --- NUOVO MODALE SICURO PER AGGIUNTA DIPENDENTI --- */}
+            {/* NUOVO MODALE AGGIUNTA SPESA (REINSERITO) */}
+            <AddExpenseModal 
+                show={showAddExpenseModal}
+                onClose={() => setShowAddExpenseModal(false)}
+                user={user}
+                userData={userData}
+                showNotification={showNotification}
+            />
+
+            {/* MODALE PROCESSA SPESA (ADMIN) */}
+            {expenseToProcess && (
+                <ProcessExpenseModal 
+                    show={true}
+                    onClose={() => setExpenseToProcess(null)}
+                    expense={expenseToProcess}
+                    onConfirm={handleConfirmProcessExpense}
+                    isProcessing={isActionLoading}
+                />
+            )}
+
+            {/* Modale Aggiunta Dipendenti Squadra */}
             <AddEmployeeToAreaModal 
                 show={showAddEmployeeModal}
                 onClose={() => setShowAddEmployeeModal(false)}
