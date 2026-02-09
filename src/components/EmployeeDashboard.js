@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db, storage } from '../firebase';
-import { collection, query, where, onSnapshot, orderBy, getDocs, Timestamp, limit, deleteDoc, doc, addDoc } from 'firebase/firestore'; 
+import { collection, query, where, onSnapshot, orderBy, getDocs, Timestamp, limit, deleteDoc, doc, updateDoc, addDoc } from 'firebase/firestore'; 
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import CompanyLogo from './CompanyLogo';
@@ -36,8 +36,8 @@ const PAUSE_REASONS = [
     { code: '04', reason: 'Altro... (specificare).' }
 ];
 
-// --- MODALE INTERNO CORRETTO (STOP PROPAGATION FIX) ---
-const AddExpenseModalInternal = ({ show, onClose, user, employeeData }) => {
+// --- MODALE UNICO PER SPESE (AGGIUNGI/MODIFICA) ---
+const ExpenseModalInternal = ({ show, onClose, user, employeeData, expenseToEdit }) => {
     const [amount, setAmount] = useState('');
     const [description, setDescription] = useState('');
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -46,6 +46,23 @@ const AddExpenseModalInternal = ({ show, onClose, user, employeeData }) => {
     const [file, setFile] = useState(null);
     const [isSaving, setIsSaving] = useState(false);
 
+    useEffect(() => {
+        if (expenseToEdit) {
+            setAmount(expenseToEdit.amount);
+            setDescription(expenseToEdit.description);
+            if (expenseToEdit.date && expenseToEdit.date.toDate) {
+                setDate(expenseToEdit.date.toDate().toISOString().split('T')[0]);
+            }
+            setPaymentMethod(expenseToEdit.paymentMethod || 'Contanti');
+            setNote(expenseToEdit.note || '');
+            setFile(null); 
+        } else {
+            setAmount(''); setDescription(''); setNote(''); setFile(null); 
+            setPaymentMethod('Contanti');
+            setDate(new Date().toISOString().split('T')[0]);
+        }
+    }, [expenseToEdit, show]);
+
     if (!show) return null;
 
     const handleSave = async (e) => {
@@ -53,14 +70,15 @@ const AddExpenseModalInternal = ({ show, onClose, user, employeeData }) => {
         if (!amount || !description || !date) { alert("Compila i campi obbligatori."); return; }
         setIsSaving(true);
         try {
-            let receiptUrl = null;
+            let receiptUrl = expenseToEdit ? expenseToEdit.receiptUrl : null;
             if (file) {
                 if (!storage) throw new Error("Storage non inizializzato.");
                 const fileRef = ref(storage, `expenses/${user.uid}/${Date.now()}_${file.name}`);
                 const snapshot = await uploadBytes(fileRef, file);
                 receiptUrl = await getDownloadURL(snapshot.ref);
             }
-            await addDoc(collection(db, "expenses"), {
+
+            const expenseData = {
                 amount: parseFloat(amount),
                 description: description,
                 paymentMethod: paymentMethod,
@@ -72,9 +90,16 @@ const AddExpenseModalInternal = ({ show, onClose, user, employeeData }) => {
                 receiptUrl: receiptUrl,
                 status: 'pending',
                 createdAt: Timestamp.now()
-            });
-            alert("Spesa registrata correttamente!");
-            setAmount(''); setDescription(''); setNote(''); setFile(null); setPaymentMethod('Contanti');
+            };
+
+            if (expenseToEdit) {
+                await updateDoc(doc(db, "expenses", expenseToEdit.id), expenseData);
+                alert("Spesa aggiornata!");
+            } else {
+                expenseData.createdAt = Timestamp.now();
+                await addDoc(collection(db, "expenses"), expenseData);
+                alert("Spesa registrata!");
+            }
             onClose();
         } catch (error) {
             console.error(error); alert("Errore salvataggio: " + error.message);
@@ -89,13 +114,14 @@ const AddExpenseModalInternal = ({ show, onClose, user, employeeData }) => {
     return (
         <div style={overlayStyle} onClick={onClose}>
             <div style={containerStyle}>
-                {/* [FIX] stopPropagation aggiunto qui */}
                 <div 
                     style={modalStyle}
                     onClick={(e) => e.stopPropagation()}
                 >
                     <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#ecfdf5' }}>
-                        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#047857' }}>💰 Registra Nuova Spesa</h3>
+                        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#047857' }}>
+                             {expenseToEdit ? '✏️ Modifica Spesa' : '💰 Nuova Spesa'}
+                        </h3>
                         <button onClick={onClose} style={{ border: 'none', background: 'none', fontSize: '24px', cursor: 'pointer', color: '#047857' }}>&times;</button>
                     </div>
                     <div style={{ padding: '24px' }}>
@@ -114,7 +140,10 @@ const AddExpenseModalInternal = ({ show, onClose, user, employeeData }) => {
                                     <option value="Altro">Altro</option>
                                 </select>
                             </div>
-                            <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Allegato (Foto/File)</label><input type="file" accept="image/*,.pdf" onChange={e => setFile(e.target.files[0])} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100" /></div>
+                            <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">
+                                {expenseToEdit && expenseToEdit.receiptUrl ? 'Cambia File (Opzionale)' : 'Allegato (Foto/File)'}
+                            </label>
+                            <input type="file" accept="image/*,.pdf" onChange={e => setFile(e.target.files[0])} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100" /></div>
                             <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Note</label><textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Opzionale" className={`${inputClasses} resize-y min-h-[80px]`} /></div>
                             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
                                 <button type="button" onClick={onClose} className="px-4 py-2 border rounded hover:bg-gray-100 text-sm">Annulla</button>
@@ -146,10 +175,13 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     const [availableForms, setAvailableForms] = useState([]);
     const [isLoadingForms, setIsLoadingForms] = useState(false);
     const [selectedAreaForForms, setSelectedAreaForForms] = useState('');
+    
+    // === SPESE ===
     const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
     const [showExpenseHistory, setShowExpenseHistory] = useState(false);
     const [myExpenses, setMyExpenses] = useState([]);
     const [isLoadingExpenses, setIsLoadingExpenses] = useState(false);
+    const [expenseToEdit, setExpenseToEdit] = useState(null);
 
     const functions = getFunctions(undefined, 'europe-west1');
     const clockIn = httpsCallable(functions, 'clockEmployeeIn');
@@ -171,6 +203,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
 
     const isGpsRequired = employeeData?.controlloGpsRichiesto ?? true;
 
+    // Logica GPS
     useEffect(() => {
         if (employeeWorkAreas.length === 0 || !isGpsRequired || !deviceId) { setLocationError(null); setInRangeArea(null); return; }
         let isMounted = true; let watchId = null;
@@ -200,6 +233,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     const isInPause = pauseStatus === 'ACTIVE'; 
     useEffect(() => { if (!isInPause && isPauseAttempted) { setIsPauseAttempted(false); } }, [isInPause, isPauseAttempted]);
 
+    // Listener Firestore
     useEffect(() => {
         if (!user?.uid || !employeeData?.id) { setActiveEntry(null); setTodaysEntries([]); setWorkAreaName(''); return; }
         let isMounted = true; 
@@ -314,6 +348,17 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
         } catch (e) { alert("Errore: " + e.message); }
     };
 
+    const handleEditExpense = (expense) => {
+        setExpenseToEdit(expense);
+        setShowAddExpenseModal(true);
+        setShowExpenseHistory(false);
+    };
+
+    const handleCloseExpenseModal = () => {
+        setShowAddExpenseModal(false);
+        setExpenseToEdit(null); 
+    };
+
     const overlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: 99998, backdropFilter: 'blur(4px)' };
     const containerStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' };
     const modalStyle = { backgroundColor: '#ffffff', width: '100%', maxWidth: '500px', maxHeight: '85vh', borderRadius: '12px', overflow: 'hidden', pointerEvents: 'auto', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column' };
@@ -402,11 +447,13 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 </div>
             )}
 
-            <AddExpenseModalInternal 
+            {/* Modale Unico (Aggiungi/Modifica) */}
+            <ExpenseModalInternal 
                 show={showAddExpenseModal} 
-                onClose={() => setShowAddExpenseModal(false)} 
+                onClose={handleCloseExpenseModal} 
                 user={user} 
                 employeeData={employeeData} 
+                expenseToEdit={expenseToEdit}
             />
 
             {showExpenseHistory && (
@@ -428,12 +475,19 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                                         </div>
                                         <div className="text-right">
                                             <div className="font-bold text-blue-600">€ {e.amount}</div>
-                                            <button onClick={() => handleDeleteExpense(e.id)} className="text-red-500 ml-2">🗑️</button>
+                                            <div style={{fontSize:'0.7rem', color: e.status === 'approved' ? 'green' : e.status === 'rejected' ? 'red' : 'orange'}}>{e.status}</div>
+                                            
+                                            {e.status === 'pending' && (
+                                                <div style={{marginTop:'5px'}}>
+                                                    <button onClick={()=>handleEditExpense(e)} style={{marginRight:'10px', background:'none', border:'none', cursor:'pointer', fontSize:'1.2rem'}}>✏️</button>
+                                                    <button onClick={()=>handleDeleteExpense(e.id)} style={{color:'red', background:'none', border:'none', cursor:'pointer', fontSize:'1.2rem'}}>🗑️</button>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 ))}
                             </div>
-                            <button onClick={() => setShowExpenseHistory(false)} className="mt-4 p-2 bg-gray-200 rounded w-full">Chiudi</button>
+                            <button onClick={()=>setShowExpenseHistory(false)} className="mt-4 p-2 bg-gray-200 rounded w-full">Chiudi</button>
                         </div>
                     </div>
                 </div>

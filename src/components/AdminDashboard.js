@@ -55,13 +55,31 @@ const NotificationPopup = ({ message, type, onClose }) => {
 // ===========================================
 
 // --- MODALE PER AGGIUNGERE NUOVA SPESA (MANCANTE NEL CODICE PRECEDENTE) ---
-const AddExpenseModal = ({ show, onClose, user, userData, showNotification }) => {
+const AddExpenseModal = ({ show, onClose, user, userData, showNotification, expenseToEdit }) => {
     const [amount, setAmount] = useState('');
     const [description, setDescription] = useState('');
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [note, setNote] = useState('');
     const [file, setFile] = useState(null); 
     const [isSaving, setIsSaving] = useState(false);
+
+    // Effetto per popolare il form se siamo in modalità modifica
+    useEffect(() => {
+        if (expenseToEdit) {
+            setAmount(expenseToEdit.amount);
+            setDescription(expenseToEdit.description);
+            if (expenseToEdit.date && expenseToEdit.date.toDate) {
+                setDate(expenseToEdit.date.toDate().toISOString().split('T')[0]);
+            } else if (expenseToEdit.date) {
+                 setDate(new Date(expenseToEdit.date).toISOString().split('T')[0]);
+            }
+            setNote(expenseToEdit.note || '');
+            setFile(null); 
+        } else {
+            setAmount(''); setDescription(''); setNote(''); setFile(null); 
+            setDate(new Date().toISOString().split('T')[0]);
+        }
+    }, [expenseToEdit, show]);
 
     if (!show) return null;
 
@@ -74,7 +92,7 @@ const AddExpenseModal = ({ show, onClose, user, userData, showNotification }) =>
 
         setIsSaving(true);
         try {
-            let receiptUrl = null;
+            let receiptUrl = expenseToEdit ? expenseToEdit.receiptUrl : null;
 
             if (file) {
                 if (!storage) throw new Error("Firebase Storage non è inizializzato.");
@@ -83,20 +101,28 @@ const AddExpenseModal = ({ show, onClose, user, userData, showNotification }) =>
                 receiptUrl = await getDownloadURL(snapshot.ref);
             }
 
-            await addDoc(collection(db, "expenses"), {
+            const expenseData = {
                 amount: parseFloat(amount),
                 description: description,
                 note: note,
                 date: Timestamp.fromDate(new Date(date)),
-                userId: user.uid,
-                userName: userData?.name ? `${userData.name} ${userData.surname}` : user.email,
-                userRole: userData?.role || 'unknown',
+                userId: expenseToEdit ? expenseToEdit.userId : user.uid,
+                userName: expenseToEdit ? expenseToEdit.userName : (userData?.name ? `${userData.name} ${userData.surname}` : user.email),
+                userRole: expenseToEdit ? expenseToEdit.userRole : (userData?.role || 'unknown'),
                 receiptUrl: receiptUrl, 
-                status: 'pending',
-                createdAt: Timestamp.now()
-            });
+                status: expenseToEdit ? expenseToEdit.status : 'pending',
+                updatedAt: Timestamp.now()
+            };
 
-            showNotification("Spesa registrata con successo!", "success");
+            if (expenseToEdit) {
+                await updateDoc(doc(db, "expenses", expenseToEdit.id), expenseData);
+                showNotification("Spesa aggiornata con successo!", "success");
+            } else {
+                expenseData.createdAt = Timestamp.now();
+                await addDoc(collection(db, "expenses"), expenseData);
+                showNotification("Spesa registrata con successo!", "success");
+            }
+
             setAmount(''); setDescription(''); setNote(''); setFile(null); 
             setDate(new Date().toISOString().split('T')[0]);
             onClose();
@@ -120,7 +146,7 @@ const AddExpenseModal = ({ show, onClose, user, userData, showNotification }) =>
             <div style={containerStyle}>
                 <div style={modalStyle}>
                     <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#ecfdf5' }}>
-                        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#047857' }}>💰 Registra Nuova Spesa</h3>
+                        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#047857' }}>{expenseToEdit ? '✏️ Modifica Spesa' : '💰 Registra Nuova Spesa'}</h3>
                         <button onClick={onClose} style={{ border: 'none', background: 'none', fontSize: '24px', cursor: 'pointer', color: '#047857' }}>&times;</button>
                     </div>
                     <div style={{ padding: '24px' }}>
@@ -135,14 +161,16 @@ const AddExpenseModal = ({ show, onClose, user, userData, showNotification }) =>
                                 <input type="text" value={description} onChange={e => setDescription(e.target.value)} placeholder="Es. Carburante, Pranzo..." className={inputClasses} required />
                             </div>
                             <div>
-                                <label className={labelClasses}>Allegato (Foto/File) - Opzionale</label>
+                                <label className={labelClasses}>
+                                    {expenseToEdit && expenseToEdit.receiptUrl ? 'Cambia File (Opzionale)' : 'Allegato (Foto/File) - Opzionale'}
+                                </label>
                                 <input 
                                     type="file" 
                                     onChange={e => setFile(e.target.files[0])} 
                                     accept="image/*,.pdf"
                                     className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100"
                                 />
-                                {file && <p className="text-xs text-green-600 mt-1">File selezionato: {file.name}</p>}
+                                {expenseToEdit && expenseToEdit.receiptUrl && !file && <p style={{fontSize:'0.7rem', color:'green', marginTop:'5px'}}>📎 File attuale presente</p>}
                             </div>
                             <div>
                                 <label className={labelClasses}>Note (Opzionale)</label>
@@ -152,7 +180,7 @@ const AddExpenseModal = ({ show, onClose, user, userData, showNotification }) =>
                     </div>
                     <div style={{ padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                         <button type="button" onClick={onClose} className="px-4 py-2 border rounded hover:bg-gray-100 text-sm font-semibold">Annulla</button>
-                        <button type="submit" form="add-expense-form" disabled={isSaving} className="px-4 py-2 bg-green-600 text-white font-bold rounded hover:bg-green-700 disabled:opacity-50 text-sm">{isSaving ? 'Caricamento...' : 'Conferma Spesa'}</button>
+                        <button type="submit" form="add-expense-form" disabled={isSaving} className="px-4 py-2 bg-green-600 text-white font-bold rounded hover:bg-green-700 disabled:opacity-50 text-sm">{isSaving ? 'Caricamento...' : 'Conferma'}</button>
                     </div>
                 </div>
             </div>
@@ -217,7 +245,7 @@ const ProcessExpenseModal = ({ show, onClose, expense, onConfirm, isProcessing }
                     </div>
                     <div style={{ padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                         <button type="button" onClick={onClose} className="px-4 py-2 border rounded hover:bg-gray-100 text-sm">Annulla</button>
-                        <button type="submit" form="process-expense-form" disabled={isProcessing} className="px-4 py-2 bg-green-600 text-white font-bold rounded hover:bg-green-700 disabled:opacity-50 text-sm">{isProcessing ? 'Salvataggio...' : 'Conferma e Archivia'}</button>
+                        <button type="submit" form="process-expense-form" disabled={isProcessing} className="px-4 py-2 bg-green-600 text-white rounded font-bold">{isProcessing ? '...' : 'Conferma'}</button>
                     </div>
                 </div>
             </div>
@@ -548,14 +576,23 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
     );
 };
 
-// --- NUOVA VISTA SPESE AGGIORNATA (CON ARCHIVIO) ---
-const ExpensesView = ({ expenses, onProcessExpense }) => {
+// --- NUOVA VISTA SPESE AGGIORNATA (CON ARCHIVIO e LOGICA PERMESSI) ---
+const ExpensesView = ({ expenses, onProcessExpense, onEditExpense, currentUserRole, user }) => {
     const [showArchived, setShowArchived] = useState(false);
 
-    // Filtra in base allo stato
+    // Filtra in base allo stato E ai permessi
     const displayedExpenses = expenses.filter(exp => {
+        // 1. Filtro Archivio
         const isClosed = exp.status === 'closed' || exp.status === 'paid';
-        return showArchived ? isClosed : !isClosed;
+        const matchesArchive = showArchived ? isClosed : !isClosed;
+
+        // 2. Filtro Utente: Se NON è Admin, vede solo le sue
+        const isOwner = exp.userId === user.uid;
+        if (currentUserRole !== 'admin' && !isOwner) {
+            return false;
+        }
+
+        return matchesArchive;
     });
 
     return (
@@ -572,7 +609,7 @@ const ExpensesView = ({ expenses, onProcessExpense }) => {
             
             {!showArchived && (
                 <div className="bg-yellow-50 text-yellow-800 px-4 py-2 rounded-lg text-sm border border-yellow-200">
-                    ⚠️ <strong>SPESEIN ATTESA</strong>. Clicca su "Gestisci" per saldarle e archiviarle.
+                    {currentUserRole === 'admin' ? "⚠️ Clicca su \"Gestisci\" per saldarle e archiviarle." : "⚠️ Puoi visualizzare e modificare solo le tue spese."}
                 </div>
             )}
 
@@ -627,12 +664,23 @@ const ExpensesView = ({ expenses, onProcessExpense }) => {
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-green-600">€ {parseFloat(exp.amount).toFixed(2)}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm">
                                             {!showArchived ? (
-                                                <button 
-                                                    onClick={() => onProcessExpense(exp)}
-                                                    className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded shadow text-xs font-bold"
-                                                >
-                                                    ✅ Gestisci
-                                                </button>
+                                                <>
+                                                    {currentUserRole === 'admin' ? (
+                                                        <button 
+                                                            onClick={() => onProcessExpense(exp)}
+                                                            className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded shadow text-xs font-bold"
+                                                        >
+                                                            ✅ Gestisci
+                                                        </button>
+                                                    ) : (
+                                                        <button 
+                                                            onClick={() => onEditExpense(exp)} 
+                                                            className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1.5 rounded shadow text-xs font-bold"
+                                                        >
+                                                            ✏️ Modifica
+                                                        </button>
+                                                    )}
+                                                </>
                                             ) : (
                                                 <div className="text-xs text-gray-500">
                                                     <div>Chiuso: {exp.adminPaymentMethod}</div>
@@ -647,7 +695,7 @@ const ExpensesView = ({ expenses, onProcessExpense }) => {
                     </table>
                     {displayedExpenses.length === 0 && (
                         <div className="p-8 text-center text-gray-500">
-                            {showArchived ? "Nessuna spesa in archivio." : "Nessuna nuova spesa da approvare."}
+                            {showArchived ? "Nessuna spesa in archivio." : "Nessuna spesa trovata."}
                         </div>
                     )}
                 </div>
@@ -1182,6 +1230,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     
     // NUOVI STATI PER GESTIONE SPESE
     const [expenseToProcess, setExpenseToProcess] = useState(null); // Spesa selezionata per chiusura
+    const [expenseToEdit, setExpenseToEdit] = useState(null); // Spesa selezionata per MODIFICA (User)
 
     const currentUserRole = userData?.role;
     const superAdminEmail = SUPER_ADMIN_EMAIL; 
@@ -1788,7 +1837,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                  </div>
             </nav>
 
-            <ActionHeader view={view} currentUserRole={currentUserRole} openModal={openModal} onOpenAddExpense={() => setShowAddExpenseModal(true)} />
+            <ActionHeader view={view} currentUserRole={currentUserRole} openModal={openModal} onOpenAddExpense={() => { setExpenseToEdit(null); setShowAddExpenseModal(true); }} />
 
             {/* CONTENUTO PRINCIPALE */}
             <div className="max-w-7xl mx-auto w-full p-4 sm:p-6 lg:p-8">
@@ -1801,7 +1850,13 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                     />}
                     
                     {/* VISTA SPESE AGGIORNATA */}
-                    {view === 'expenses' && <ExpensesView expenses={expenses} onProcessExpense={setExpenseToProcess} />}
+                    {view === 'expenses' && <ExpensesView 
+                        expenses={expenses} 
+                        onProcessExpense={setExpenseToProcess} 
+                        onEditExpense={(exp) => { setExpenseToEdit(exp); setShowAddExpenseModal(true); }}
+                        currentUserRole={currentUserRole}
+                        user={user}
+                    />}
                     
                     {view === 'employees' && <EmployeeManagementView 
                         employees={sortedAndFilteredEmployees} 
@@ -1914,10 +1969,11 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             {/* NUOVO MODALE AGGIUNTA SPESA (REINSERITO) */}
             <AddExpenseModal 
                 show={showAddExpenseModal}
-                onClose={() => setShowAddExpenseModal(false)}
+                onClose={() => { setShowAddExpenseModal(false); setExpenseToEdit(null); }}
                 user={user}
                 userData={userData}
                 showNotification={showNotification}
+                expenseToEdit={expenseToEdit}
             />
 
             {/* MODALE PROCESSA SPESA (ADMIN) */}
