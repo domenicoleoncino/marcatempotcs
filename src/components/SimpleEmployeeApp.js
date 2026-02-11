@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { db } from '../firebase';
-import { collection, query, where, onSnapshot, orderBy, limit, getDocs, Timestamp, deleteDoc, doc } from 'firebase/firestore'; 
+import { db, storage } from '../firebase';
+// [MODIFICA] Aggiunto updateDoc per la modifica
+import { collection, query, where, onSnapshot, orderBy, limit, getDocs, Timestamp, deleteDoc, updateDoc, doc, addDoc } from 'firebase/firestore'; 
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Filesystem, Directory } from '@capacitor/filesystem';
-import { Capacitor } from '@capacitor/core'; // <--- NECESSARIO PER IL "BIVIO" ANDROID/WEB
-import ExpenseModal from './ExpenseModal';
+import { Capacitor } from '@capacitor/core'; 
 
-// --- MOTIVI DI MANCATA PAUSA ---
 const PAUSE_REASONS = [
     { code: '01', reason: 'Mancata pausa per intervento urgente.' },
     { code: '02', reason: 'Mancata pausa per ore non complete.' },
@@ -16,7 +16,6 @@ const PAUSE_REASONS = [
     { code: '04', reason: 'Altro... (specificare).' }
 ];
 
-// --- STILI CSS ---
 const styles = {
     container: { minHeight: '100vh', backgroundColor: '#f0f2f5', display: 'flex', flexDirection: 'column', fontFamily: '-apple-system, sans-serif', boxSizing: 'border-box' },
     headerOuter: { backgroundColor: '#ffffff', borderBottom: '1px solid #e8e8e8', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', width: '100%', display: 'flex', justifyContent: 'center' },
@@ -41,6 +40,7 @@ const styles = {
     btnOrange: { backgroundColor: '#faad14' },
     btnBlue: { backgroundColor: '#1890ff' },
     btnTeal: { backgroundColor: '#13c2c2' },
+    btnPurple: { backgroundColor: '#722ed1' }, 
     btnDisabled: { backgroundColor: '#f5f5f5', color: '#b8b8b8', cursor: 'not-allowed', boxShadow: 'none' },
     reportSection: { marginTop: '25px', backgroundColor: '#fff', padding: '20px', borderRadius: '12px', width: '100%', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', border: '1px solid #f0f0f0', display: 'flex', flexDirection: 'column', gap: '12px' },
     selectContainer: { display: 'flex', gap: '10px', width: '100%' },
@@ -68,6 +68,127 @@ const playSound = (soundName) => {
     try { const audio = new Audio(`/sounds/${soundName}.mp3`); audio.play().catch(err => { console.log("Audio bloccato:", err); }); } catch (e) { console.error("Errore audio:", e); }
 };
 
+// --- MODALE UNICO PER AGGIUNGERE O MODIFICARE SPESA ---
+const ExpenseModalInternal = ({ show, onClose, user, employeeData, expenseToEdit }) => {
+    const [amount, setAmount] = useState('');
+    const [description, setDescription] = useState('');
+    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+    const [paymentMethod, setPaymentMethod] = useState('Contanti');
+    const [note, setNote] = useState('');
+    const [file, setFile] = useState(null);
+    const [isSaving, setIsSaving] = useState(false);
+
+    // Effetto per popolare i campi se stiamo modificando
+    useEffect(() => {
+        if (expenseToEdit) {
+            setAmount(expenseToEdit.amount);
+            setDescription(expenseToEdit.description);
+            // Gestione data: se è Timestamp converti, altrimenti usa stringa
+            if (expenseToEdit.date && expenseToEdit.date.toDate) {
+                setDate(expenseToEdit.date.toDate().toISOString().split('T')[0]);
+            }
+            setPaymentMethod(expenseToEdit.paymentMethod || 'Contanti');
+            setNote(expenseToEdit.note || '');
+            setFile(null); // Reset file input (l'utente ne carica uno nuovo solo se vuole cambiare)
+        } else {
+            // Reset se è un nuovo inserimento
+            setAmount(''); setDescription(''); setNote(''); setFile(null); 
+            setPaymentMethod('Contanti');
+            setDate(new Date().toISOString().split('T')[0]);
+        }
+    }, [expenseToEdit, show]);
+
+    if (!show) return null;
+
+    const handleSave = async (e) => {
+        e.preventDefault();
+        if (!amount || !description || !date) { alert("Compila i campi obbligatori."); return; }
+        setIsSaving(true);
+        try {
+            let receiptUrl = expenseToEdit ? expenseToEdit.receiptUrl : null;
+            
+            // Se l'utente ha selezionato un NUOVO file, caricalo
+            if (file) {
+                if (!storage) throw new Error("Storage non inizializzato.");
+                const fileRef = ref(storage, `expenses/${user.uid}/${Date.now()}_${file.name}`);
+                const snapshot = await uploadBytes(fileRef, file);
+                receiptUrl = await getDownloadURL(snapshot.ref);
+            }
+
+            const expenseData = {
+                amount: parseFloat(amount),
+                description: description,
+                paymentMethod: paymentMethod,
+                note: note,
+                date: Timestamp.fromDate(new Date(date)),
+                userId: user.uid,
+                userName: employeeData ? `${employeeData.name} ${employeeData.surname}` : user.email,
+                userRole: 'employee',
+                receiptUrl: receiptUrl,
+                status: 'pending', // Torna sempre pending se modificata
+                updatedAt: Timestamp.now()
+            };
+
+            if (expenseToEdit) {
+                // MODIFICA
+                await updateDoc(doc(db, "expenses", expenseToEdit.id), expenseData);
+                alert("Spesa aggiornata!");
+            } else {
+                // CREAZIONE
+                expenseData.createdAt = Timestamp.now();
+                await addDoc(collection(db, "expenses"), expenseData);
+                alert("Spesa registrata!");
+            }
+
+            onClose();
+        } catch (error) {
+            console.error(error); alert("Errore salvataggio: " + error.message);
+        } finally { setIsSaving(false); }
+    };
+
+    return (
+        <div style={overlayStyle} onClick={onClose}>
+            <div style={{...containerStyle, pointerEvents:'none'}}>
+                <div 
+                    style={{...modalStyle, pointerEvents:'auto', padding:'20px'}}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <h3 style={{margin:'0 0 15px 0', color:'#722ed1'}}>
+                        {expenseToEdit ? '✏️ Modifica Spesa' : '💰 Nuova Spesa'}
+                    </h3>
+                    <form onSubmit={handleSave} style={{display:'flex', flexDirection:'column', gap:'10px', overflowY:'auto'}}>
+                        <input type="date" value={date} onChange={e=>setDate(e.target.value)} required style={styles.select} />
+                        <input type="number" step="0.01" placeholder="Importo €" value={amount} onChange={e=>setAmount(e.target.value)} required style={styles.select} />
+                        <input type="text" placeholder="Descrizione (es. Pranzo)" value={description} onChange={e=>setDescription(e.target.value)} required style={styles.select} />
+                        <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} style={styles.select}>
+                            <option value="Contanti">Contanti (Miei)</option>
+                            <option value="Carta Personale">Carta Personale</option>
+                            <option value="Carta Aziendale">Carta Aziendale</option>
+                            <option value="Telepass">Telepass</option>
+                            <option value="Buono Carburante">Buono Carburante</option>
+                            <option value="Altro">Altro</option>
+                        </select>
+                        <div style={{padding:'10px', background:'#f9f9f9', borderRadius:'8px'}}>
+                            <label style={{fontSize:'0.8rem', fontWeight:'bold', display:'block', marginBottom:'5px'}}>
+                                {expenseToEdit && expenseToEdit.receiptUrl ? '📸 Cambia Foto (Opzionale)' : '📸 Foto/Allegato (Opzionale)'}
+                            </label>
+                            <input type="file" accept="image/*,.pdf" onChange={e=>setFile(e.target.files[0])} style={{width:'100%'}} />
+                            {expenseToEdit && expenseToEdit.receiptUrl && !file && (
+                                <p style={{fontSize:'0.7rem', color:'green', marginTop:'5px'}}>📎 File attuale presente (non verrà modificato se non ne scegli uno nuovo)</p>
+                            )}
+                        </div>
+                        <textarea placeholder="Note extra..." value={note} onChange={e=>setNote(e.target.value)} style={{...styles.select, minHeight:'60px'}} />
+                        <div style={{display:'flex', gap:'10px', marginTop:'10px'}}>
+                            <button type="button" onClick={onClose} style={{flex:1, padding:'10px', borderRadius:'8px', border:'1px solid #ddd', background:'#fff'}}>Annulla</button>
+                            <button type="submit" disabled={isSaving} style={{flex:1, padding:'10px', borderRadius:'8px', border:'none', background:'#722ed1', color:'#fff', fontWeight:'bold'}}>{isSaving ? 'Salvataggio...' : 'Conferma'}</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) => {
     const [currentTime, setCurrentTime] = useState(new Date());
     const [isProcessing, setIsProcessing] = useState(false);
@@ -82,9 +203,13 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
     const [rawTodayEntries, setRawTodayEntries] = useState([]);
     const [dailyTotalString, setDailyTotalString] = useState('...');
+    
+    // Stati Spese
+    const [showExpenseModal, setShowExpenseModal] = useState(false);
     const [showExpenseHistory, setShowExpenseHistory] = useState(false);
     const [myExpenses, setMyExpenses] = useState([]);
     const [isLoadingExpenses, setIsLoadingExpenses] = useState(false);
+    const [expenseToEdit, setExpenseToEdit] = useState(null); // STATO PER LA MODIFICA
 
     const functions = getFunctions(undefined, 'europe-west1');
     const clockIn = httpsCallable(functions, 'clockEmployeeIn');
@@ -185,7 +310,6 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
         } catch (e) { alert(e.message); } finally { setIsProcessing(false); }
     };
 
-    // --- FUNZIONE PDF INTELLIGENTE (ANDROID APP vs WEB) ---
     const handleExportPDF = async () => {
         setIsGeneratingPdf(true);
         try {
@@ -207,10 +331,8 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
                         if (p.start && p.end) pMins += Math.round((p.end.toMillis() - p.start.toMillis()) / 60000); 
                     });
                 }
-                
                 let diff = end ? Math.round((end - start) / 60000) - pMins : 0;
                 if (diff > 0) totalMins += diff;
-
                 rows.push([
                     start.toLocaleDateString(),
                     start.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
@@ -237,35 +359,47 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
             const base64Data = pdfOutput.split(',')[1]; 
             const fileName = `Report_${employeeData.surname}_${selectedMonth+1}_${selectedYear}.pdf`;
 
-            // --- QUI LA MAGIA: CONTROLLA DOVE SIAMO ---
             if (Capacitor.getPlatform() === 'android') {
-                // SE SIAMO NELL'APP ANDROID: Salva in Documenti (come ti piace)
-                await Filesystem.writeFile({
-                    path: fileName,
-                    data: base64Data,
-                    directory: Directory.Documents
-                });
+                await Filesystem.writeFile({ path: fileName, data: base64Data, directory: Directory.Documents });
                 alert(`✅ PDF Salvato!\nLo trovi nella cartella "Documenti" con nome:\n${fileName}`);
             } else {
-                // SE SIAMO SU WEB (IPHONE / PC): Scarica dal browser
                 docPDF.save(fileName);
             }
-
         } catch (e) { alert("Errore PDF: " + e.message); } finally { setIsGeneratingPdf(false); }
     };
 
     const handleViewExpenses = async () => {
         setIsLoadingExpenses(true); setShowExpenseHistory(true);
         try {
-            const targetId = employeeData.userId || employeeData.id;
-            const q = query(collection(db, "employee_expenses"), where("userId", "==", targetId));
+            const targetId = user.uid; // Usiamo UID sicuro
+            const q = query(collection(db, "expenses"), where("userId", "==", targetId));
             const snapshot = await getDocs(q);
             const expenses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             expenses.sort((a, b) => (b.date?.toDate() || 0) - (a.date?.toDate() || 0));
             setMyExpenses(expenses);
         } catch (error) { console.error(error); } finally { setIsLoadingExpenses(false); }
     };
-    const handleDeleteExpense = async (id) => { if(window.confirm("Eliminare?")) { await deleteDoc(doc(db, "employee_expenses", id)); setMyExpenses(p=>p.filter(e=>e.id!==id)); } };
+
+    const handleDeleteExpense = async (id) => { 
+        if(window.confirm("Eliminare?")) { 
+            await deleteDoc(doc(db, "expenses", id)); 
+            setMyExpenses(p=>p.filter(e=>e.id!==id)); 
+        } 
+    };
+
+    // --- FUNZIONE PER APRIRE MODALE MODIFICA ---
+    const handleEditExpense = (expense) => {
+        setExpenseToEdit(expense);
+        setShowExpenseModal(true);
+        // Chiudiamo lo storico per vedere il modale
+        setShowExpenseHistory(false);
+    };
+
+    const handleCloseExpenseModal = () => {
+        setShowExpenseModal(false);
+        setExpenseToEdit(null); // Reset modifica
+        // Riapriamo lo storico se vogliamo, o lasciamo chiuso. Qui non riapriamo.
+    };
 
     return (
         <div style={styles.container}>
@@ -277,7 +411,6 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
                     <div style={styles.employeeName}>{employeeData.name} {employeeData.surname}</div>
                 </div>
                 
-                {/* --- BOX GPS --- */}
                 <div style={{
                     ...styles.statusBox, 
                     backgroundColor: gpsLoading ? '#fffbe6' : !isGpsRequired ? '#e6f7ff' : inRangeArea ? '#f6ffed' : '#fff1f0',
@@ -287,7 +420,6 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
                     {gpsLoading ? "📡 Ricerca GPS..." : !isGpsRequired ? "ℹ️ GPS non richiesto" : locationError ? `⚠️ ${locationError}` : inRangeArea ? `✅ Zona: ${inRangeArea.name}` : "❌ Fuori zona"}
                 </div>
 
-                {/* --- RIEPILOGO MENTRE LAVORI (Blu/Verde) --- */}
                 {activeEntry && (
                     <div style={{...styles.compactInfoLine, backgroundColor:'#e6f7ff', borderColor:'#91d5ff', color:'#0050b3'}}>
                         <div style={styles.infoColLeft}>In: <strong>{activeEntry.clockInTime.toDate().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</strong></div>
@@ -296,7 +428,6 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
                     </div>
                 )}
 
-                {/* --- RIEPILOGO DOPO USCITA (Rosso) --- */}
                 {isOut && lastEntry && (
                     <div style={{...styles.compactInfoLine, backgroundColor:'#fff1f0', borderColor:'#ffccc7', color:'#cf1322'}}>
                         <div style={styles.infoColLeft}>Uscita: <strong>{lastEntry.clockOutTime ? lastEntry.clockOutTime.toDate().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '--:--'}</strong></div>
@@ -333,7 +464,7 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 )}
 
                 <div style={{width:'100%', marginTop:'15px', display:'flex', flexDirection:'column', gap:'10px'}}>
-                    <ExpenseModal user={user} employeeData={employeeData} />
+                    <button style={{...styles.btnBig, ...styles.btnPurple, padding:'15px', fontSize:'1rem'}} onClick={() => setShowExpenseModal(true)}>💰 Registra Spesa</button>
                     <button style={{...styles.btnBig, ...styles.btnTeal, padding:'15px', fontSize:'1rem'}} onClick={handleViewExpenses}>📜 I Miei Rimborsi</button>
                 </div>
 
@@ -346,10 +477,15 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
                     <button style={styles.btnReport} onClick={handleExportPDF} disabled={isGeneratingPdf}>{isGeneratingPdf ? '...' : '⬇️ SCARICA PDF'}</button>
                 </div>
 
+                {/* MODALE LISTA SPESE */}
                 {showExpenseHistory && (
                     <div style={overlayStyle} onClick={() => setShowExpenseHistory(false)}>
                         <div style={{...containerStyle, pointerEvents:'none'}}>
-                            <div style={{...modalStyle, pointerEvents:'auto', padding:'20px'}}>
+                            {/* [FIX] stopPropagation */}
+                            <div 
+                                style={{...modalStyle, pointerEvents:'auto', padding:'20px'}}
+                                onClick={(e) => e.stopPropagation()}
+                            >
                                 <h3>I Miei Rimborsi</h3>
                                 <div style={{flex:1, overflowY:'auto', margin:'10px 0'}}>
                                     {isLoadingExpenses ? <p>Caricamento...</p> : myExpenses.length === 0 ? <p>Nessuna spesa.</p> : myExpenses.map(e => (
@@ -357,11 +493,20 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
                                             <div>
                                                 <div style={{fontSize:'0.8rem', color:'#666'}}>{e.date?.toDate().toLocaleDateString()}</div>
                                                 <div style={{fontWeight:'bold'}}>{e.description}</div>
+                                                <div style={{fontSize:'0.7rem', color:'#555', fontStyle:'italic'}}>Pagato: {e.paymentMethod}</div>
+                                                {e.receiptUrl && <a href={e.receiptUrl} target="_blank" rel="noopener noreferrer" style={{fontSize:'0.7rem', color:'blue', textDecoration:'underline'}}>📎 Vedi Scontrino</a>}
                                             </div>
                                             <div style={{textAlign:'right'}}>
                                                 <div style={{color:'#1890ff', fontWeight:'bold'}}>€ {e.amount}</div>
-                                                <div style={{fontSize:'0.7rem'}}>{e.status}</div>
-                                                {e.status==='pending' && <button onClick={()=>handleDeleteExpense(e.id)} style={{color:'red', border:'none', background:'none'}}>🗑️</button>}
+                                                <div style={{fontSize:'0.7rem', color: e.status === 'approved' ? 'green' : e.status === 'rejected' ? 'red' : 'orange'}}>{e.status}</div>
+                                                {e.status==='pending' && (
+                                                    <div style={{marginTop:'5px'}}>
+                                                        {/* PULSANTE MODIFICA */}
+                                                        <button onClick={()=>handleEditExpense(e)} style={{border:'none', background:'none', fontSize:'1.2rem', cursor:'pointer', marginRight:'10px'}}>✏️</button>
+                                                        {/* PULSANTE ELIMINA */}
+                                                        <button onClick={()=>handleDeleteExpense(e.id)} style={{color:'red', border:'none', background:'none', fontSize:'1.2rem', cursor:'pointer'}}>🗑️</button>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     ))}
@@ -371,8 +516,18 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
                         </div>
                     </div>
                 )}
+
+                {/* MODALE UNICO (CREA/MODIFICA) */}
+                <ExpenseModalInternal 
+                    show={showExpenseModal} 
+                    onClose={handleCloseExpenseModal} 
+                    user={user} 
+                    employeeData={employeeData} 
+                    expenseToEdit={expenseToEdit}
+                />
+
             </div>
-            <div style={styles.footer}>TCS Italia App v2.2<br/>Creato da D. Leoncino</div>
+            <div style={styles.footer}>TCS Italia App v2.6<br/>Creato da D. Leoncino</div>
         </div>
     );
 };
