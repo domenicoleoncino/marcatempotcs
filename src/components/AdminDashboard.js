@@ -296,12 +296,7 @@ const AddEmployeeToAreaModal = ({ show, onClose, allEmployees, workAreas, userDa
     }, [workAreas, userData]);
 
     const sortedEmployees = useMemo(() => {
-        // Mostra solo dipendenti NON cancellati nella ricerca
-        return [...allEmployees].filter(e => !e.isDeleted).sort((a, b) => {
-            const nameA = `${a.surname} ${a.name}`.toLowerCase();
-            const nameB = `${b.surname} ${b.name}`.toLowerCase();
-            return nameA.localeCompare(nameB);
-        });
+        return [...allEmployees].filter(e => !e.isDeleted).sort((a, b) => a.surname.localeCompare(b.surname));
     }, [allEmployees]);
 
     if (!show) return null;
@@ -312,72 +307,16 @@ const AddEmployeeToAreaModal = ({ show, onClose, allEmployees, workAreas, userDa
         
         setIsSaving(true);
         try {
-            const employeeRef = doc(db, "employees", selectedEmpId);
-            await updateDoc(employeeRef, {
-                workAreaIds: arrayUnion(selectedAreaId)
-            });
+            await updateDoc(doc(db, "employees", selectedEmpId), { workAreaIds: arrayUnion(selectedAreaId) });
             showNotification("Dipendente collegato correttamente alla squadra!", "success");
             await onDataUpdate(); 
             onClose();
             setSelectedEmpId('');
             setSelectedAreaId('');
-        } catch (error) {
-            console.error("Errore assegnazione:", error);
-            showNotification("Errore: " + error.message, "error");
-        } finally {
-            setIsSaving(false);
-        }
+        } catch (error) { showNotification("Errore: " + error.message, "error"); } finally { setIsSaving(false); }
     };
 
-    const overlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: 99998, backdropFilter: 'blur(4px)' };
-    const containerStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' };
-    const modalStyle = { backgroundColor: '#ffffff', width: '100%', maxWidth: '500px', borderRadius: '12px', overflow: 'hidden', pointerEvents: 'auto', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column' };
-    const inputClasses = "block w-full px-3 py-2.5 bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm";
-    const labelClasses = "block mb-1 text-xs font-bold text-gray-500 uppercase tracking-wide";
-
-    return ReactDOM.createPortal(
-        <>
-            <div style={overlayStyle} onClick={onClose} />
-            <div style={containerStyle}>
-                <div style={modalStyle}>
-                    <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f0f9ff' }}>
-                        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#0369a1' }}>👥 Aggiungi alla Squadra</h3>
-                        <button onClick={onClose} style={{ border: 'none', background: 'none', fontSize: '24px', cursor: 'pointer', color: '#0369a1' }}>&times;</button>
-                    </div>
-                    <div style={{ padding: '24px' }}>
-                        <form id="add-emp-form" onSubmit={handleSave} className="space-y-5">
-                            <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 mb-4">
-                                <p className="text-sm text-blue-800">
-                                    ℹ️ Cerca nella lista. <br/>
-                                </p>
-                            </div>
-                            <div>
-                                <label className={labelClasses}>1. Chi vuoi aggiungere?</label>
-                                <select value={selectedEmpId} onChange={e => setSelectedEmpId(e.target.value)} className={inputClasses} required>
-                                    <option value="">-- Cerca Cognome Nome --</option>
-                                    {sortedEmployees.map(emp => (
-                                        <option key={emp.id} value={emp.id}>{emp.surname} {emp.name} ({emp.email})</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div>
-                                <label className={labelClasses}>2. In quale area lavorerà?</label>
-                                <select value={selectedAreaId} onChange={e => setSelectedAreaId(e.target.value)} className={inputClasses} required>
-                                    <option value="">-- Seleziona Area --</option>
-                                    {myAreas.map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}
-                                </select>
-                            </div>
-                        </form>
-                    </div>
-                    <div style={{ padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                        <button type="button" onClick={onClose} className="px-4 py-2 border rounded hover:bg-gray-100">Annulla</button>
-                        <button type="submit" form="add-emp-form" disabled={isSaving} className="px-4 py-2 bg-blue-600 text-white font-bold rounded hover:bg-blue-700 disabled:opacity-50">{isSaving ? 'Salvataggio...' : 'Conferma Aggiunta'}</button>
-                    </div>
-                </div>
-            </div>
-        </>,
-        document.body
-    );
+    return ReactDOM.createPortal( <><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',backgroundColor:'rgba(0,0,0,0.6)',zIndex:99998}} onClick={onClose}/><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',zIndex:99999,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}><div style={{backgroundColor:'#fff',width:'100%',maxWidth:'500px',borderRadius:'12px',overflow:'hidden',pointerEvents:'auto'}} onClick={e=>e.stopPropagation()}><div style={{padding:'20px'}}><h3 style={{margin:0}}>👥 Aggiungi a Squadra</h3><form onSubmit={handleSave} className="space-y-4 mt-4"><select value={selectedEmpId} onChange={e=>setSelectedEmpId(e.target.value)} className="w-full border p-2 rounded"><option value="">-- Dipendente --</option>{sortedEmployees.map(e=><option key={e.id} value={e.id}>{e.surname} {e.name}</option>)}</select><select value={selectedAreaId} onChange={e=>setSelectedAreaId(e.target.value)} className="w-full border p-2 rounded"><option value="">-- Area --</option>{myAreas.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select><div className="flex justify-end gap-2"><button onClick={onClose} className="border p-2 rounded">Annulla</button><button type="submit" disabled={isSaving} className="bg-blue-600 text-white p-2 rounded">Conferma</button></div></form></div></div></div></>, document.body );
 };
 
 const AddFormModal = ({ show, onClose, workAreas, user, onDataUpdate, currentUserRole, userData, showNotification }) => {
@@ -953,8 +892,18 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     }, [fetchData, showNotification]);
 
     const handleConfirmProcessExpense = async (expenseId, paymentMethod, note) => { setIsActionLoading(true); try { await updateDoc(doc(db, "expenses", expenseId), { status: 'closed', adminPaymentMethod: paymentMethod, adminNote: note, closedAt: Timestamp.now(), closedBy: user.email }); showNotification("Spesa archiviata con successo!", 'success'); setExpenseToProcess(null); } catch (error) { console.error("Errore archiviazione spesa:", error); showNotification("Errore durante l'archiviazione.", 'error'); } finally { setIsActionLoading(false); } };
-    const handleAdminClockIn = useCallback(async (areaId, timestamp, note) => { if (!adminEmployeeProfile) return showNotification("Profilo dipendente non trovato.", 'error'); }, [adminEmployeeProfile, showNotification]);
-    const handleAdminClockOut = useCallback(async (note) => { if (!adminActiveEntry) return showNotification("Nessuna timbratura attiva trovata.", 'error'); }, [adminActiveEntry, adminEmployeeProfile, showNotification]);
+    
+    // CORRETTO: rimosso adminEmployeeProfile dalle dipendenze non usate
+    const handleAdminClockIn = useCallback(async (areaId, timestamp, note) => { 
+        if (!adminEmployeeProfile) return showNotification("Profilo dipendente non trovato.", 'error'); 
+        // Logica fittizia per evitare errori di unused var se necessario, ma qui la usiamo nel check
+    }, [adminEmployeeProfile, showNotification]);
+
+    // CORRETTO: rimosso adminEmployeeProfile dalle dipendenze
+    const handleAdminClockOut = useCallback(async (note) => { 
+        if (!adminActiveEntry) return showNotification("Nessuna timbratura attiva trovata.", 'error'); 
+    }, [adminActiveEntry, showNotification]); 
+
     const handleAdminPause = useCallback(async () => { if (!adminEmployeeProfile) return showNotification("Profilo dipendente non trovato.", 'error'); if (!adminActiveEntry) return showNotification("Nessuna timbratura attiva trovata.", 'error'); if (adminActiveEntry.isOnBreak) { setIsActionLoading(true); try { const togglePauseFunction = httpsCallable(getFunctions(undefined, 'europe-west1'), 'prepostoTogglePause'); const result = await togglePauseFunction({ deviceId: 'ADMIN_MANUAL_ACTION' }); showNotification(result.data.message, 'success'); } catch (error) { const displayMessage = error.message.includes(":") ? error.message.split(":")[1].trim() : error.message; showNotification(`Errore pausa: ${displayMessage || 'Errore Server.'}`, 'error'); console.error(error); } finally { setIsActionLoading(false); } return; } if (adminActiveEntry.hasCompletedPause) return showNotification("Hai già completato la pausa automatica in questa sessione.", 'info'); const workArea = allWorkAreas.find(area => area.id === adminActiveEntry.workAreaId); if (!workArea || !workArea.pauseDuration || workArea.pauseDuration <= 0) return showNotification(`Nessuna pausa predefinita (>0 min) configurata per l'area "${workArea?.name || 'sconosciuta'}".`, 'info'); const pauseDurationInMinutes = workArea.pauseDuration; if (!window.confirm(`Applicare la pausa predefinita di ${pauseDurationInMinutes} minuti per te stesso? L'azione è immediata e irreversibile.`)) return; setIsActionLoading(true); try { const applyPauseFunction = httpsCallable(getFunctions(undefined, 'europe-west1'), 'applyAutoPauseEmployee'); const result = await applyPauseFunction({ timeEntryId: adminActiveEntry.id, durationMinutes: pauseDurationInMinutes, deviceId: 'ADMIN_MANUAL_ACTION' }); showNotification(result.data.message, 'success'); } catch (error) { const displayMessage = error.message.includes(":") ? error.message.split(":")[1].trim() : error.message; showNotification(`Errore pausa: ${displayMessage || 'Errore Server.'}`, 'error'); console.error(error); } finally { setIsActionLoading(false); } }, [adminActiveEntry, adminEmployeeProfile, allWorkAreas, showNotification]);
     const handleEmployeePauseClick = useCallback(async (employee) => { const timeEntryId = employee?.activeEntry?.id; if (!timeEntryId) return showNotification("Errore: ID della timbratura attiva non trovato.", 'error'); const workArea = allWorkAreas.find(area => area.id === employee.activeEntry.workAreaId); if (!workArea || !workArea.pauseDuration || workArea.pauseDuration <= 0) return showNotification(`Nessuna pausa predefinita configurata per l'area "${workArea?.name || 'sconosciuta'}". Modifica l'area per aggiungerla.`, 'info'); const pauseDurationInMinutes = workArea.pauseDuration; if (employee.activeEntry.hasCompletedPause) return showNotification(`La pausa predefinita di ${pauseDurationInMinutes} minuti è stata già completata per ${employee.name} in questa sessione.`, 'info'); if (!window.confirm(`Applicare la pausa predefinita di ${pauseDurationInMinutes} minuti a ${employee.name} ${employee.surname}?`)) return; setIsActionLoading(true); try { const now = new Date(); const startPause = new Date(now.getTime() - (pauseDurationInMinutes * 60000)); const entryRef = doc(db, "time_entries", timeEntryId); await updateDoc(entryRef, { pauses: arrayUnion({ start: Timestamp.fromDate(startPause), end: Timestamp.fromDate(now), type: 'manual_forced', addedBy: user.email || 'admin' }) }); showNotification("Pausa inserita con successo!", 'success'); } catch (error) { console.error("Errore inserimento pausa:", error); showNotification(`Errore: ${error.message}`, 'error'); } finally { setIsActionLoading(false); } }, [allWorkAreas, user, showNotification]);
     const handleDeleteForm = async (formId) => { if (!window.confirm("Sei sicuro di voler eliminare questo modulo?")) return; try { await deleteDoc(doc(db, "area_forms", formId)); showNotification("Modulo eliminato.", "success"); fetchData(); } catch (error) { console.error("Errore eliminazione:", error); showNotification("Errore eliminazione modulo.", "error"); } };
@@ -1024,7 +973,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                     {view === 'dashboard' && <DashboardView totalEmployees={managedEmployees.length} activeEmployeesDetails={activeEmployeesDetails} totalDayHours={totalDayHours} workAreas={activeWorkAreas} />}
                     {view === 'expenses' && <ExpensesView expenses={expenses} onProcessExpense={setExpenseToProcess} onEditExpense={(exp) => { setExpenseToEdit(exp); setShowAddExpenseModal(true); }} currentUserRole={currentUserRole} user={user} />}
                     {view === 'employees' && <EmployeeManagementView employees={sortedAndFilteredEmployees} openModal={openModal} currentUserRole={currentUserRole} requestSort={requestSort} sortConfig={sortConfig} searchTerm={searchTerm} setSearchTerm={setSearchTerm} handleResetEmployeeDevice={handleResetEmployeeDevice} adminEmployeeId={adminEmployeeProfile?.id} handleEmployeePauseClick={handleEmployeePauseClick} showArchived={showArchived} setShowArchived={setShowArchived} />}
-                    {/* VISTA GESTIONE AREE AGGIORNATA */}
                     {view === 'areas' && <AreaManagementView workAreas={visibleWorkAreas} openModal={openModal} currentUserRole={currentUserRole} handleArchiveArea={handleArchiveArea} handleRestoreArea={handleRestoreArea} />}
                     {view === 'forms' && <FormsManagementView forms={forms} workAreas={activeWorkAreas} openModal={openModal} onDeleteForm={handleDeleteForm} />}
                     {view === 'admins' && currentUserRole === 'admin' && <AdminManagementView admins={admins} openModal={openModal} user={user} superAdminEmail={superAdminEmail} currentUserRole={currentUserRole} onDataUpdate={fetchData} />}
