@@ -296,7 +296,12 @@ const AddEmployeeToAreaModal = ({ show, onClose, allEmployees, workAreas, userDa
     }, [workAreas, userData]);
 
     const sortedEmployees = useMemo(() => {
-        return [...allEmployees].filter(e => !e.isDeleted).sort((a, b) => a.surname.localeCompare(b.surname));
+        // Mostra solo dipendenti NON cancellati nella ricerca
+        return [...allEmployees].filter(e => !e.isDeleted).sort((a, b) => {
+            const nameA = `${a.surname} ${a.name}`.toLowerCase();
+            const nameB = `${b.surname} ${b.name}`.toLowerCase();
+            return nameA.localeCompare(nameB);
+        });
     }, [allEmployees]);
 
     if (!show) return null;
@@ -307,16 +312,72 @@ const AddEmployeeToAreaModal = ({ show, onClose, allEmployees, workAreas, userDa
         
         setIsSaving(true);
         try {
-            await updateDoc(doc(db, "employees", selectedEmpId), { workAreaIds: arrayUnion(selectedAreaId) });
+            const employeeRef = doc(db, "employees", selectedEmpId);
+            await updateDoc(employeeRef, {
+                workAreaIds: arrayUnion(selectedAreaId)
+            });
             showNotification("Dipendente collegato correttamente alla squadra!", "success");
             await onDataUpdate(); 
             onClose();
             setSelectedEmpId('');
             setSelectedAreaId('');
-        } catch (error) { showNotification("Errore: " + error.message, "error"); } finally { setIsSaving(false); }
+        } catch (error) {
+            console.error("Errore assegnazione:", error);
+            showNotification("Errore: " + error.message, "error");
+        } finally {
+            setIsSaving(false);
+        }
     };
 
-    return ReactDOM.createPortal( <><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',backgroundColor:'rgba(0,0,0,0.6)',zIndex:99998}} onClick={onClose}/><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',zIndex:99999,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}><div style={{backgroundColor:'#fff',width:'100%',maxWidth:'500px',borderRadius:'12px',overflow:'hidden',pointerEvents:'auto'}} onClick={e=>e.stopPropagation()}><div style={{padding:'20px'}}><h3 style={{margin:0}}>👥 Aggiungi a Squadra</h3><form onSubmit={handleSave} className="space-y-4 mt-4"><select value={selectedEmpId} onChange={e=>setSelectedEmpId(e.target.value)} className="w-full border p-2 rounded"><option value="">-- Dipendente --</option>{sortedEmployees.map(e=><option key={e.id} value={e.id}>{e.surname} {e.name}</option>)}</select><select value={selectedAreaId} onChange={e=>setSelectedAreaId(e.target.value)} className="w-full border p-2 rounded"><option value="">-- Area --</option>{myAreas.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select><div className="flex justify-end gap-2"><button onClick={onClose} className="border p-2 rounded">Annulla</button><button type="submit" disabled={isSaving} className="bg-blue-600 text-white p-2 rounded">Conferma</button></div></form></div></div></div></>, document.body );
+    const overlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: 99998, backdropFilter: 'blur(4px)' };
+    const containerStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' };
+    const modalStyle = { backgroundColor: '#ffffff', width: '100%', maxWidth: '500px', borderRadius: '12px', overflow: 'hidden', pointerEvents: 'auto', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column' };
+    const inputClasses = "block w-full px-3 py-2.5 bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm";
+    const labelClasses = "block mb-1 text-xs font-bold text-gray-500 uppercase tracking-wide";
+
+    return ReactDOM.createPortal(
+        <>
+            <div style={overlayStyle} onClick={onClose} />
+            <div style={containerStyle}>
+                <div style={modalStyle}>
+                    <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f0f9ff' }}>
+                        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#0369a1' }}>👥 Aggiungi alla Squadra</h3>
+                        <button onClick={onClose} style={{ border: 'none', background: 'none', fontSize: '24px', cursor: 'pointer', color: '#0369a1' }}>&times;</button>
+                    </div>
+                    <div style={{ padding: '24px' }}>
+                        <form id="add-emp-form" onSubmit={handleSave} className="space-y-5">
+                            <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 mb-4">
+                                <p className="text-sm text-blue-800">
+                                    ℹ️ Cerca nella lista. <br/>
+                                </p>
+                            </div>
+                            <div>
+                                <label className={labelClasses}>1. Chi vuoi aggiungere?</label>
+                                <select value={selectedEmpId} onChange={e => setSelectedEmpId(e.target.value)} className={inputClasses} required>
+                                    <option value="">-- Cerca Cognome Nome --</option>
+                                    {sortedEmployees.map(emp => (
+                                        <option key={emp.id} value={emp.id}>{emp.surname} {emp.name} ({emp.email})</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className={labelClasses}>2. In quale area lavorerà?</label>
+                                <select value={selectedAreaId} onChange={e => setSelectedAreaId(e.target.value)} className={inputClasses} required>
+                                    <option value="">-- Seleziona Area --</option>
+                                    {myAreas.map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}
+                                </select>
+                            </div>
+                        </form>
+                    </div>
+                    <div style={{ padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                        <button type="button" onClick={onClose} className="px-4 py-2 border rounded hover:bg-gray-100">Annulla</button>
+                        <button type="submit" form="add-emp-form" disabled={isSaving} className="px-4 py-2 bg-blue-600 text-white font-bold rounded hover:bg-blue-700 disabled:opacity-50">{isSaving ? 'Salvataggio...' : 'Conferma Aggiunta'}</button>
+                    </div>
+                </div>
+            </div>
+        </>,
+        document.body
+    );
 };
 
 const AddFormModal = ({ show, onClose, workAreas, user, onDataUpdate, currentUserRole, userData, showNotification }) => {
@@ -483,6 +544,7 @@ const ExpensesView = ({ expenses, onProcessExpense, onEditExpense, currentUserRo
     );
 };
 
+// --- MODIFICATA: GESTIONE DIPENDENTI CON ICONE REINSERITE ---
 const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortConfig, requestSort, searchTerm, setSearchTerm, handleResetEmployeeDevice, adminEmployeeId, handleEmployeePauseClick, showArchived, setShowArchived }) => { 
     const getSortIndicator = (key) => { if (!sortConfig || sortConfig.key !== key) return ''; return sortConfig.direction === 'ascending' ? ' ▲' : ' ▼'; };
     return (
@@ -499,7 +561,35 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                     <td className="px-6 py-4 whitespace-nowrap"><div className="flex items-center gap-2"><div className={`text-sm font-bold ${emp.isDeleted ? 'text-red-700 line-through' : 'text-gray-900'}`}>{emp.name} {emp.surname}</div>{emp.isDeleted && <span className="px-2 py-0.5 text-xs font-bold text-white bg-red-500 rounded">ARCHIVIATO</span>}</div><div className="text-xs text-gray-500">{emp.email}</div></td>
                                     <td className="px-6 py-4 whitespace-nowrap">{emp.isDeleted ? <span className="px-2.5 py-0.5 inline-flex text-xs leading-5 font-bold rounded-full bg-red-100 text-red-600 border border-red-200">Disattivato</span> : <span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-bold rounded-full border ${emp.activeEntry ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'}`}>{emp.activeEntry ? emp.activeEntry.status : 'Non al Lavoro'}</span>}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 max-w-xs truncate">{emp.workAreaNames?.join(', ') || 'Nessuna'}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">{!emp.isDeleted ? <div className="flex flex-col gap-2">{emp.activeEntry ? <div className="flex gap-1"><button onClick={()=>openModal('adminClockOut', emp)} className="text-xs bg-yellow-500 text-white px-2 py-1 rounded">Uscita</button></div> : <button onClick={()=>openModal('adminClockIn', emp)} className="text-xs bg-blue-600 text-white px-2 py-1 rounded">Entrata</button>}<div className="flex gap-2 text-xs">{currentUserRole==='admin' && <><button onClick={()=>openModal('editEmployee', emp)} className="text-green-600 underline">Modifica</button><button onClick={()=>openModal('deleteEmployee', emp)} className="text-red-600 underline">Archivia</button></>}</div></div> : currentUserRole==='admin' && <button onClick={()=>openModal('restoreEmployee', emp)} className="text-xs bg-green-600 text-white px-2 py-1 rounded">Ripristina</button>}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                        {!emp.isDeleted ? (
+                                            <div className="flex flex-col gap-2">
+                                                {emp.activeEntry ? (
+                                                    <div className="flex gap-1 w-full">
+                                                        <button onClick={()=>openModal('adminClockOut', emp)} className="flex-1 px-3 py-1.5 text-xs bg-yellow-500 text-white rounded-md shadow-sm hover:bg-yellow-600 transition-colors">⏹️ Uscita</button>
+                                                        <button onClick={()=>handleEmployeePauseClick(emp)} disabled={emp.activeEntry.status === 'In Pausa' || emp.activeEntry.pauses?.some(p => p.start && p.end)} className={`flex-1 px-3 py-1.5 text-xs text-white rounded-md shadow-sm transition-colors ${emp.activeEntry.status === 'In Pausa' || emp.activeEntry.pauses?.some(p => p.start && p.end) ? 'bg-gray-400 cursor-not-allowed' : 'bg-orange-500 hover:bg-orange-600'}`}>☕ Pausa</button>
+                                                    </div>
+                                                ) : (
+                                                    <button onClick={()=>openModal('adminClockIn', emp)} className="w-full px-3 py-1.5 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 shadow-sm transition-colors">▶️ Entrata</button>
+                                                )}
+                                                <div className="flex flex-wrap gap-2 text-xs mt-1 w-full">
+                                                    {currentUserRole==='admin' && (
+                                                        <>
+                                                            <button onClick={()=>openModal('assignArea', emp)} className="text-blue-600 hover:text-blue-800 font-bold underline">🌍 Aree</button>
+                                                            <button onClick={()=>openModal('editEmployee', emp)} className="text-green-600 hover:text-green-800 underline">✏️ Modifica</button>
+                                                            <button onClick={()=>openModal('deleteEmployee', emp)} className="text-red-600 hover:text-red-800 underline">📂 Archivia</button>
+                                                        </>
+                                                    )}
+                                                    {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (
+                                                        <button onClick={()=>openModal('resetDevice', emp)} disabled={!emp.deviceIds?.length} className="text-yellow-600 hover:text-yellow-800 font-semibold disabled:text-gray-400 underline decoration-yellow-200 hover:decoration-yellow-800">📱 Reset ID</button>
+                                                    )}
+                                                    {currentUserRole === 'preposto' && (<button onClick={() => openModal('prepostoAddEmployeeToAreas')} className="text-xs text-blue-600 hover:text-blue-800 font-semibold underline">🌍Gestisci Aree</button>)}
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            currentUserRole==='admin' && <button onClick={()=>openModal('restoreEmployee', emp)} className="text-xs bg-green-600 text-white px-2 py-1 rounded shadow-sm">♻️ Ripristina</button>
+                                        )}
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>
@@ -510,7 +600,7 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
     );
 };
 
-// --- MODIFICATA: GESTIONE AREE CON RICERCA E ARCHIVIAZIONE ---
+// --- GESTIONE AREE CON RICERCA E ARCHIVIAZIONE ---
 const AreaManagementView = ({ workAreas, openModal, currentUserRole, handleArchiveArea, handleRestoreArea }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [showArchived, setShowArchived] = useState(false);
@@ -972,6 +1062,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 <main>
                     {view === 'dashboard' && <DashboardView totalEmployees={managedEmployees.length} activeEmployeesDetails={activeEmployeesDetails} totalDayHours={totalDayHours} workAreas={activeWorkAreas} />}
                     {view === 'expenses' && <ExpensesView expenses={expenses} onProcessExpense={setExpenseToProcess} onEditExpense={(exp) => { setExpenseToEdit(exp); setShowAddExpenseModal(true); }} currentUserRole={currentUserRole} user={user} />}
+                    {/* VISTA DIPENDENTI AGGIORNATA CON ICONE */}
                     {view === 'employees' && <EmployeeManagementView employees={sortedAndFilteredEmployees} openModal={openModal} currentUserRole={currentUserRole} requestSort={requestSort} sortConfig={sortConfig} searchTerm={searchTerm} setSearchTerm={setSearchTerm} handleResetEmployeeDevice={handleResetEmployeeDevice} adminEmployeeId={adminEmployeeProfile?.id} handleEmployeePauseClick={handleEmployeePauseClick} showArchived={showArchived} setShowArchived={setShowArchived} />}
                     {view === 'areas' && <AreaManagementView workAreas={visibleWorkAreas} openModal={openModal} currentUserRole={currentUserRole} handleArchiveArea={handleArchiveArea} handleRestoreArea={handleRestoreArea} />}
                     {view === 'forms' && <FormsManagementView forms={forms} workAreas={activeWorkAreas} openModal={openModal} onDeleteForm={handleDeleteForm} />}
