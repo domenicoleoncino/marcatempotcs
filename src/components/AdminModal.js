@@ -200,20 +200,49 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
             switch (type) {
                 // --- CREAZIONI ---
                 case 'newEmployee':
-                    if (formData.password && formData.password.length < 6) throw new Error("La password deve avere almeno 6 caratteri.");
+                    // PULIZIA SPAZI VUOTI (TRIM)
+                    const cleanEmail = formData.email ? formData.email.trim() : '';
+                    const cleanPassword = formData.password ? formData.password.trim() : '';
+
+                    if (cleanPassword.length < 6) throw new Error("La password deve avere almeno 6 caratteri.");
+                    
                     const createEmp = httpsCallable(functions, 'createUser');
-                    await createEmp({ ...formData, role: 'dipendente', createdBy: user.uid });
+                    await createEmp({ 
+                        name: formData.name,
+                        surname: formData.surname,
+                        email: cleanEmail,      // Usa email pulita
+                        password: cleanPassword, // Usa password pulita
+                        controlloGpsRichiesto: formData.controlloGpsRichiesto,
+                        role: 'dipendente', 
+                        createdBy: user.uid 
+                    });
                     break;
+
                 case 'newArea':
                      const lat = Number(formData.latitude); const lon = Number(formData.longitude); const rad = Number(formData.radius);
                      if (isNaN(lat) || isNaN(lon) || isNaN(rad) || rad <= 0) throw new Error('Dati geografici non validi.');
                      const createArea = httpsCallable(functions, 'createWorkArea');
                      await createArea({ name: formData.name, pauseDuration: Number(formData.pauseDuration || 0), latitude: lat, longitude: lon, radius: rad });
                      break;
+
                 case 'newAdmin':
-                    if (formData.password && formData.password.length < 6) throw new Error("La password deve avere almeno 6 caratteri.");
+                    // PULIZIA SPAZI VUOTI (TRIM)
+                    const cleanAdminEmail = formData.email ? formData.email.trim() : '';
+                    const cleanAdminPassword = formData.password ? formData.password.trim() : '';
+
+                    if (cleanAdminPassword.length < 6) throw new Error("La password deve avere almeno 6 caratteri.");
+                    
                     const createAdm = httpsCallable(functions, 'createUser');
-                    await createAdm({ ...formData, createdBy: user.uid });
+                    await createAdm({ 
+                        name: formData.name,
+                        surname: formData.surname,
+                        email: cleanAdminEmail,     // Usa email pulita
+                        password: cleanAdminPassword, // Usa password pulita
+                        phone: formData.phone,
+                        role: formData.role,
+                        controlloGpsRichiesto: formData.controlloGpsRichiesto,
+                        createdBy: user.uid 
+                    });
                     break;
                 
                 // --- OPERAZIONI SPECIALI ---

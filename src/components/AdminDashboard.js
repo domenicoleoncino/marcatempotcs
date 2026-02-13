@@ -31,21 +31,61 @@ const AREA_COLORS = [
     "CCFFFF", "FFD9CC", "E5CCFF", "D9FFCC", "FFE5CC"
 ];
 
+// --- COMPONENTE NOTIFICA MIGLIORATO ---
 const NotificationPopup = ({ message, type, onClose }) => {
-    const baseClasses = "fixed top-4 left-1/2 transform -translate-x-1/2 z-[100000] px-6 py-4 rounded-xl shadow-2xl text-white transition-all duration-300 flex items-center gap-3 min-w-[300px]";
-    const typeClasses = {
-        success: "bg-gradient-to-r from-green-600 to-green-500 border border-green-400",
-        error: "bg-gradient-to-r from-red-600 to-red-500 border border-red-400",
-        info: "bg-gradient-to-r from-blue-600 to-blue-500 border border-blue-400"
+    // Definizione stili per i diversi tipi di notifica
+    const typeStyles = {
+        success: {
+            bg: 'bg-white',
+            border: 'border-l-4 border-green-500',
+            text: 'text-gray-800',
+            icon: '✅',
+            title: 'Successo'
+        },
+        error: {
+            bg: 'bg-white',
+            border: 'border-l-4 border-red-500',
+            text: 'text-gray-800',
+            icon: '❌',
+            title: 'Errore'
+        },
+        info: {
+            bg: 'bg-white',
+            border: 'border-l-4 border-blue-500',
+            text: 'text-gray-800',
+            icon: 'ℹ️',
+            title: 'Informazione'
+        }
     };
 
+    const style = typeStyles[type] || typeStyles.info;
+
     return (
-        <div className={`${baseClasses} ${typeClasses[type]}`}>
-            <div className="flex-1">
-                <p className="font-bold text-sm uppercase tracking-wider opacity-90">{type === 'error' ? 'Attenzione' : 'Avviso'}</p>
-                <p className="font-medium text-base">{message}</p>
+        <div className={`fixed top-5 right-5 z-[9999] max-w-sm w-full shadow-lg rounded-lg pointer-events-auto overflow-hidden animate-fade-in-down ${style.bg} ${style.border}`}>
+            <div className="p-4 flex items-start">
+                <div className="flex-shrink-0 text-2xl mr-3">
+                    {style.icon}
+                </div>
+                <div className="flex-1 w-0">
+                    <p className="text-sm font-medium text-gray-900">
+                        {style.title}
+                    </p>
+                    <p className="mt-1 text-sm text-gray-500">
+                        {message}
+                    </p>
+                </div>
+                <div className="ml-4 flex-shrink-0 flex">
+                    <button
+                        className="bg-transparent rounded-md inline-flex text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                        onClick={onClose}
+                    >
+                        <span className="sr-only">Chiudi</span>
+                        <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
             </div>
-            <button onClick={onClose} className="text-white hover:text-gray-200 transition-colors font-bold text-xl leading-none">&times;</button>
         </div>
     );
 };
@@ -544,7 +584,6 @@ const ExpensesView = ({ expenses, onProcessExpense, onEditExpense, currentUserRo
     );
 };
 
-// --- MODIFICATA: GESTIONE DIPENDENTI CON ICONE REINSERITE ---
 const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortConfig, requestSort, searchTerm, setSearchTerm, handleResetEmployeeDevice, adminEmployeeId, handleEmployeePauseClick, showArchived, setShowArchived }) => { 
     const getSortIndicator = (key) => { if (!sortConfig || sortConfig.key !== key) return ''; return sortConfig.direction === 'ascending' ? ' ▲' : ' ▼'; };
     return (
@@ -575,7 +614,7 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                                 <div className="flex flex-wrap gap-2 text-xs mt-1 w-full">
                                                     {currentUserRole==='admin' && (
                                                         <>
-                                                            <button onClick={()=>openModal('assignArea', emp)} className="text-blue-600 hover:text-blue-800 font-bold underline">🌍 Aree</button>
+                                                            <button onClick={()=>openModal('assignArea', emp)} className="text-blue-600 hover:text-blue-800 font-bold underline">🌍Modifica Aree</button>
                                                             <button onClick={()=>openModal('editEmployee', emp)} className="text-green-600 hover:text-green-800 underline">✏️ Modifica</button>
                                                             <button onClick={()=>openModal('deleteEmployee', emp)} className="text-red-600 hover:text-red-800 underline">📂 Archivia</button>
                                                         </>
@@ -773,7 +812,7 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
     );
 };
 
-const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, allEmployees, currentUserRole, userData, setDateRange, setReportAreaFilter, reportAreaFilter, reportEmployeeFilter, setReportEmployeeFilter, generateReport, isLoading, isActionLoading, managedEmployees, showNotification, handleReviewSkipBreak, onEditEntry }) => {
+const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, allEmployees, currentUserRole, userData, setDateRange, setReportAreaFilter, reportAreaFilter, reportEmployeeFilter, setReportEmployeeFilter, generateReport, isLoading, isActionLoading, managedEmployees, showNotification, handleReviewSkipBreak, onEditEntry, handleSaveEntryEdit }) => {
     const handleExportPayrollExcel = () => { if (typeof utils === 'undefined' || typeof writeFile === 'undefined') { showNotification("Libreria esportazione non caricata o errata.", 'error'); return; } if (!reports || reports.length === 0) { showNotification("Nessun dato da esportare per il report paghe.", 'info'); return; } const centerStyle = { vertical: 'center', horizontal: 'center' }; const areaColorMap = {}; allWorkAreas.forEach((area, index) => { areaColorMap[area.id] = AREA_COLORS[index % AREA_COLORS.length]; }); const start = new Date(dateRange.start); const end = new Date(dateRange.end); const dateArray = []; let current = new Date(start); while (current <= end) { dateArray.push(new Date(current)); current.setDate(current.getDate() + 1); } const empData = {}; const areaStats = {}; reports.forEach(r => { if (r.isAbsence) return; if (!empData[r.employeeId]) { empData[r.employeeId] = { name: r.employeeName, dailyData: {}, total: 0 }; } const hours = parseFloat(r.duration || 0); const parts = r.clockInDate.split('/'); const isoDate = `${parts[2]}-${parts[1]}-${parts[0]}`; if (!empData[r.employeeId].dailyData[isoDate]) { empData[r.employeeId].dailyData[isoDate] = { hours: 0, areaId: null }; } const currentDayData = empData[r.employeeId].dailyData[isoDate]; currentDayData.hours += hours; currentDayData.areaId = r.workAreaId; empData[r.employeeId].total += hours; const areaName = r.areaName || "Sconosciuta"; if (!areaStats[areaName]) areaStats[areaName] = 0; areaStats[areaName] += hours; }); const startObj = new Date(dateRange.start); const monthName = startObj.toLocaleString('it-IT', { month: 'long' }); const headerLabel = `${monthName.charAt(0).toUpperCase() + monthName.slice(1)} ${startObj.getFullYear().toString().slice(-2)}`; const headerRow1 = [{ v: headerLabel, t: 's', s: { font: { bold: true }, alignment: centerStyle } }]; const headerRow2 = [{ v: "DIPENDENTE", t: 's', s: { alignment: centerStyle } }]; const daysOfWeek = ['D', 'L', 'M', 'M', 'G', 'V', 'S']; dateArray.forEach(d => { headerRow1.push({ v: d.getDate(), t: 'n', s: { alignment: centerStyle } }); headerRow2.push({ v: daysOfWeek[d.getDay()], t: 's', s: { alignment: centerStyle } }); }); headerRow1.push({ v: "TOTALE", t: 's', s: { font: { bold: true }, alignment: centerStyle } }); headerRow2.push({ v: "", t: 's', s: { alignment: centerStyle } }); const sheetData = [headerRow1, headerRow2]; const sortedEmployees = Object.values(empData).sort((a,b) => a.name.localeCompare(b.name)); sortedEmployees.forEach(emp => { const row = [{ v: emp.name, t: 's', s: { alignment: centerStyle } }]; dateArray.forEach(d => { const iso = d.toISOString().split('T')[0]; const dayData = emp.dailyData[iso]; if (dayData && dayData.hours > 0) { const cell = { v: Number(dayData.hours.toFixed(2)), t: 'n', s: { fill: { fgColor: { rgb: areaColorMap[dayData.areaId] || "FFFFFF" } }, alignment: centerStyle } }; row.push(cell); } else { row.push({ v: "", t: 's', s: { alignment: centerStyle } }); } }); row.push({ v: Number(emp.total.toFixed(2)), t: 'n', s: { alignment: centerStyle, font: { bold: true } } }); sheetData.push(row); }); sheetData.push([]); sheetData.push([]); sheetData.push([ { v: "RIEPILOGO PER AREA", t: 's', s: { font: { bold: true }, alignment: centerStyle } }, { v: "TOT", t: 's', s: { font: { bold: true }, alignment: centerStyle } } ]); Object.keys(areaStats).sort().forEach(areaName => { const areaObj = allWorkAreas.find(a => a.name === areaName); const color = areaObj ? (areaColorMap[areaObj.id] || "FFFFFF") : "FFFFFF"; const cellName = { v: areaName, t: 's', s: { fill: { fgColor: { rgb: color } }, font: { bold: true }, alignment: centerStyle } }; const cellVal = { v: Number(areaStats[areaName].toFixed(2)), t: 'n', s: { alignment: centerStyle } }; sheetData.push([cellName, cellVal]); }); const ws = utils.aoa_to_sheet(sheetData); const wscols = [{wch: 30}]; dateArray.forEach(() => wscols.push({wch: 5})); wscols.push({wch: 12}); ws['!cols'] = wscols; const wb = utils.book_new(); utils.book_append_sheet(wb, ws, "Foglio Presenze"); writeFile(wb, `Report_Paghe_${dateRange.start}_${dateRange.end}.xlsx`); showNotification("Excel Paghe generato con successo!", 'success'); };
     const handleExportExcel = () => { if (typeof utils === 'undefined' || typeof writeFile === 'undefined') { showNotification("Libreria esportazione non caricata.", 'error'); return; } if (!reports || reports.length === 0) { showNotification("Nessun dato da esportare.", 'info'); return; } const dataToExport = reports.map(entry => ({ 'ID Dipendente': entry.employeeId, 'Dipendente': entry.employeeName, 'ID Area': entry.workAreaId || 'N/A', 'Area': entry.areaName, 'Data': entry.clockInDate, 'Entrata': entry.clockInTimeFormatted, 'Uscita': entry.clockOutTimeFormatted, 'Ore Lavorate (Netto)': entry.isAbsence ? 0 : ((entry.duration !== null) ? parseFloat(entry.duration.toFixed(2)) : "In corso"), 'Pausa Totale (Ore)': (entry.pauseHours !== null) ? parseFloat(entry.pauseHours.toFixed(2)) : 0, 'Stato Pausa': entry.skippedBreak ? (entry.skipBreakStatus === 'approved' ? 'No Pausa (Approvato)' : 'Pausa Scalata (Default)') : 'Standard', 'Motivo/Nota': entry.note })); const ws = utils.json_to_sheet(dataToExport); const wb = utils.book_new(); utils.book_append_sheet(wb, ws, "Report Ore"); ws['!cols'] = [{ wch: 25 }, { wch: 20 }, { wch: 25 }, { wch: 15 }, { wch: 10 }, { wch: 8 }, { wch: 8 }, { wch: 20 }, { wch: 20 }, { wch: 30 }]; writeFile(wb, `${(title || 'Report').replace(/ /g, '_')}.xlsx`); showNotification(`File Excel generato con successo.`, 'success'); };
     return (
@@ -983,16 +1022,9 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
     const handleConfirmProcessExpense = async (expenseId, paymentMethod, note) => { setIsActionLoading(true); try { await updateDoc(doc(db, "expenses", expenseId), { status: 'closed', adminPaymentMethod: paymentMethod, adminNote: note, closedAt: Timestamp.now(), closedBy: user.email }); showNotification("Spesa archiviata con successo!", 'success'); setExpenseToProcess(null); } catch (error) { console.error("Errore archiviazione spesa:", error); showNotification("Errore durante l'archiviazione.", 'error'); } finally { setIsActionLoading(false); } };
     
-    // CORRETTO: rimosso adminEmployeeProfile dalle dipendenze non usate
-    const handleAdminClockIn = useCallback(async (areaId, timestamp, note) => { 
-        if (!adminEmployeeProfile) return showNotification("Profilo dipendente non trovato.", 'error'); 
-        // Logica fittizia per evitare errori di unused var se necessario, ma qui la usiamo nel check
-    }, [adminEmployeeProfile, showNotification]);
-
-    // CORRETTO: rimosso adminEmployeeProfile dalle dipendenze
-    const handleAdminClockOut = useCallback(async (note) => { 
-        if (!adminActiveEntry) return showNotification("Nessuna timbratura attiva trovata.", 'error'); 
-    }, [adminActiveEntry, showNotification]); 
+    // Funzioni placeholder per evitare warning di linter e props mancanti
+    const handleAdminClockIn = useCallback(async () => {}, []);
+    const handleAdminClockOut = useCallback(async () => {}, []);
 
     const handleAdminPause = useCallback(async () => { if (!adminEmployeeProfile) return showNotification("Profilo dipendente non trovato.", 'error'); if (!adminActiveEntry) return showNotification("Nessuna timbratura attiva trovata.", 'error'); if (adminActiveEntry.isOnBreak) { setIsActionLoading(true); try { const togglePauseFunction = httpsCallable(getFunctions(undefined, 'europe-west1'), 'prepostoTogglePause'); const result = await togglePauseFunction({ deviceId: 'ADMIN_MANUAL_ACTION' }); showNotification(result.data.message, 'success'); } catch (error) { const displayMessage = error.message.includes(":") ? error.message.split(":")[1].trim() : error.message; showNotification(`Errore pausa: ${displayMessage || 'Errore Server.'}`, 'error'); console.error(error); } finally { setIsActionLoading(false); } return; } if (adminActiveEntry.hasCompletedPause) return showNotification("Hai già completato la pausa automatica in questa sessione.", 'info'); const workArea = allWorkAreas.find(area => area.id === adminActiveEntry.workAreaId); if (!workArea || !workArea.pauseDuration || workArea.pauseDuration <= 0) return showNotification(`Nessuna pausa predefinita (>0 min) configurata per l'area "${workArea?.name || 'sconosciuta'}".`, 'info'); const pauseDurationInMinutes = workArea.pauseDuration; if (!window.confirm(`Applicare la pausa predefinita di ${pauseDurationInMinutes} minuti per te stesso? L'azione è immediata e irreversibile.`)) return; setIsActionLoading(true); try { const applyPauseFunction = httpsCallable(getFunctions(undefined, 'europe-west1'), 'applyAutoPauseEmployee'); const result = await applyPauseFunction({ timeEntryId: adminActiveEntry.id, durationMinutes: pauseDurationInMinutes, deviceId: 'ADMIN_MANUAL_ACTION' }); showNotification(result.data.message, 'success'); } catch (error) { const displayMessage = error.message.includes(":") ? error.message.split(":")[1].trim() : error.message; showNotification(`Errore pausa: ${displayMessage || 'Errore Server.'}`, 'error'); console.error(error); } finally { setIsActionLoading(false); } }, [adminActiveEntry, adminEmployeeProfile, allWorkAreas, showNotification]);
     const handleEmployeePauseClick = useCallback(async (employee) => { const timeEntryId = employee?.activeEntry?.id; if (!timeEntryId) return showNotification("Errore: ID della timbratura attiva non trovato.", 'error'); const workArea = allWorkAreas.find(area => area.id === employee.activeEntry.workAreaId); if (!workArea || !workArea.pauseDuration || workArea.pauseDuration <= 0) return showNotification(`Nessuna pausa predefinita configurata per l'area "${workArea?.name || 'sconosciuta'}". Modifica l'area per aggiungerla.`, 'info'); const pauseDurationInMinutes = workArea.pauseDuration; if (employee.activeEntry.hasCompletedPause) return showNotification(`La pausa predefinita di ${pauseDurationInMinutes} minuti è stata già completata per ${employee.name} in questa sessione.`, 'info'); if (!window.confirm(`Applicare la pausa predefinita di ${pauseDurationInMinutes} minuti a ${employee.name} ${employee.surname}?`)) return; setIsActionLoading(true); try { const now = new Date(); const startPause = new Date(now.getTime() - (pauseDurationInMinutes * 60000)); const entryRef = doc(db, "time_entries", timeEntryId); await updateDoc(entryRef, { pauses: arrayUnion({ start: Timestamp.fromDate(startPause), end: Timestamp.fromDate(now), type: 'manual_forced', addedBy: user.email || 'admin' }) }); showNotification("Pausa inserita con successo!", 'success'); } catch (error) { console.error("Errore inserimento pausa:", error); showNotification(`Errore: ${error.message}`, 'error'); } finally { setIsActionLoading(false); } }, [allWorkAreas, user, showNotification]);
@@ -1062,7 +1094,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 <main>
                     {view === 'dashboard' && <DashboardView totalEmployees={managedEmployees.length} activeEmployeesDetails={activeEmployeesDetails} totalDayHours={totalDayHours} workAreas={activeWorkAreas} />}
                     {view === 'expenses' && <ExpensesView expenses={expenses} onProcessExpense={setExpenseToProcess} onEditExpense={(exp) => { setExpenseToEdit(exp); setShowAddExpenseModal(true); }} currentUserRole={currentUserRole} user={user} />}
-                    {/* VISTA DIPENDENTI AGGIORNATA CON ICONE */}
                     {view === 'employees' && <EmployeeManagementView employees={sortedAndFilteredEmployees} openModal={openModal} currentUserRole={currentUserRole} requestSort={requestSort} sortConfig={sortConfig} searchTerm={searchTerm} setSearchTerm={setSearchTerm} handleResetEmployeeDevice={handleResetEmployeeDevice} adminEmployeeId={adminEmployeeProfile?.id} handleEmployeePauseClick={handleEmployeePauseClick} showArchived={showArchived} setShowArchived={setShowArchived} />}
                     {view === 'areas' && <AreaManagementView workAreas={visibleWorkAreas} openModal={openModal} currentUserRole={currentUserRole} handleArchiveArea={handleArchiveArea} handleRestoreArea={handleRestoreArea} />}
                     {view === 'forms' && <FormsManagementView forms={forms} workAreas={activeWorkAreas} openModal={openModal} onDeleteForm={handleDeleteForm} />}
