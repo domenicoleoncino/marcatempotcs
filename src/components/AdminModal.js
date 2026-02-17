@@ -42,7 +42,8 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
         else if (type === 'newAdmin') {
             setFormData({ name: '', surname: '', email: '', password: '', phone: '', role: 'preposto', controlloGpsRichiesto: true });
         }
-        else if (type === 'manualEntryForm') { 
+        // GESTIONE RECUPERO DIMENTICANZA (manualEntry)
+        else if (type === 'manualEntryForm' || type === 'manualEntry') { 
              setFormData({
                  employeeId: item ? item.id : '',
                  workAreaId: '',
@@ -51,7 +52,8 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                  endTime: '17:00'
              });
         }
-        else if (type === 'absenceEntryForm') { 
+        // GESTIONE GIUSTIFICATIVI/ASSENZE (justification)
+        else if (type === 'absenceEntryForm' || type === 'justification') { 
              setFormData({
                  employeeId: item ? item.id : '',
                  startDate: todayDate,
@@ -64,7 +66,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
              setFormData({ reason: '' });
         }
         else if (type === 'editAreaPauseOnly') {
-             setFormData({ pauseDuration: item.pauseDuration || 0 });
+             setFormData({ pauseDuration: item?.pauseDuration || 0 });
         }
         else if (item) {
             if (['adminClockIn', 'manualClockIn', 'manualClockOut', 'adminClockOut'].includes(type)) {
@@ -179,7 +181,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
         <div className="mb-4">
             <label style={labelStyle}>{label}</label>
             <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '10px', backgroundColor: '#f9fafb' }}>
-                {items && items.length > 0 ? items.sort((a, b) => a.name.localeCompare(b.name)).map(it => (
+                {items && items.length > 0 ? [...items].sort((a, b) => a.name.localeCompare(b.name)).map(it => (
                     <div key={it.id} className="flex items-center mb-2 last:mb-0">
                         <input id={`${name}-${it.id}`} name={name} type="checkbox" value={it.id} checked={(formData[name] || []).includes(it.id)} onChange={handleChange} disabled={disabled} style={{ width: '16px', height: '16px', marginRight: '8px' }} />
                         <label htmlFor={`${name}-${it.id}`} style={{ fontSize: '14px', color: disabled ? '#9ca3af' : '#374151' }}>{it.name}</label>
@@ -200,7 +202,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
             switch (type) {
                 // --- CREAZIONI ---
                 case 'newEmployee':
-                    // PULIZIA SPAZI VUOTI (TRIM)
                     const cleanEmail = formData.email ? formData.email.trim() : '';
                     const cleanPassword = formData.password ? formData.password.trim() : '';
 
@@ -210,8 +211,8 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                     await createEmp({ 
                         name: formData.name,
                         surname: formData.surname,
-                        email: cleanEmail,      // Usa email pulita
-                        password: cleanPassword, // Usa password pulita
+                        email: cleanEmail,      
+                        password: cleanPassword, 
                         controlloGpsRichiesto: formData.controlloGpsRichiesto,
                         role: 'dipendente', 
                         createdBy: user.uid 
@@ -226,7 +227,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                      break;
 
                 case 'newAdmin':
-                    // PULIZIA SPAZI VUOTI (TRIM)
                     const cleanAdminEmail = formData.email ? formData.email.trim() : '';
                     const cleanAdminPassword = formData.password ? formData.password.trim() : '';
 
@@ -236,8 +236,8 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                     await createAdm({ 
                         name: formData.name,
                         surname: formData.surname,
-                        email: cleanAdminEmail,     // Usa email pulita
-                        password: cleanAdminPassword, // Usa password pulita
+                        email: cleanAdminEmail,     
+                        password: cleanAdminPassword, 
                         phone: formData.phone,
                         role: formData.role,
                         controlloGpsRichiesto: formData.controlloGpsRichiesto,
@@ -247,6 +247,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                 
                 // --- OPERAZIONI SPECIALI ---
                 case 'manualEntryForm':
+                case 'manualEntry': // Aggiunto caso manualEntry
                      const startDateTime = new Date(`${formData.date}T${formData.startTime}`);
                      const endDateTime = new Date(`${formData.date}T${formData.endTime}`);
                      if (endDateTime <= startDateTime) throw new Error("L'uscita deve essere dopo l'entrata.");
@@ -256,7 +257,9 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                          status: 'clocked-out', isManual: true, note: 'Recupero dimenticanza (Admin)', pauses: []
                      });
                      break;
+                     
                 case 'absenceEntryForm':
+                case 'justification': // Aggiunto caso justification
                      const start = new Date(formData.startDate); const end = new Date(formData.endDate);
                      if (end < start) throw new Error("Data fine precedente a data inizio.");
                      const batch = writeBatch(db); const tRef = collection(db, "time_entries");
@@ -394,12 +397,16 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                     });
                     break;
                 case 'applyPredefinedPause':
-                    await onAdminApplyPause(item);
-                    setIsLoading(false); return;
+                    if (onAdminApplyPause) {
+                        await onAdminApplyPause(item);
+                        setIsLoading(false); 
+                        return;
+                    }
+                    break;
                 default: break;
             }
             showNotification('Operazione completata con successo.', 'success');
-            await onDataUpdate();
+            if (onDataUpdate) await onDataUpdate();
             setShowModal(false);
         } catch (err) {
             console.error(err);
@@ -474,6 +481,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                 const pAreas = workAreas.filter(wa => userData?.managedAreaIds?.includes(wa.id));
                 return renderCheckboxes('Aree Competenza', 'selectedPrepostoAreas', pAreas);
             case 'manualEntryForm':
+            case 'manualEntry': // Aggiunto caso manualEntry
                 const allEmpOpts = allEmployees.map(e => ({ value: e.id, label: `${e.name} ${e.surname}` }));
                 const allAreaOpts = (userData.role === 'admin' ? workAreas : workAreas.filter(wa => userData.managedAreaIds?.includes(wa.id))).map(a => ({ value: a.id, label: a.name }));
                 return (
@@ -488,6 +496,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                     </>
                 );
             case 'absenceEntryForm':
+            case 'justification': // Aggiunto caso justification
                 const empOptsAbs = allEmployees.map(e => ({ value: e.id, label: `${e.name} ${e.surname}` }));
                 return (
                     <>
@@ -591,8 +600,8 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
         if(type === 'newEmployee') return 'Nuovo Dipendente';
         if(type === 'newArea') return 'Nuova Area di Lavoro';
         if(type === 'newAdmin') return 'Nuovo Admin/Preposto';
-        if(type === 'manualEntryForm') return 'Recupero Dimenticanza';
-        if(type === 'absenceEntryForm') return 'Inserimento Assenza';
+        if(type === 'manualEntryForm' || type === 'manualEntry') return 'Recupero Dimenticanza';
+        if(type === 'absenceEntryForm' || type === 'justification') return 'Inserimento Giustificativo';
         if(type === 'prepostoAddEmployeeToAreas') return 'Aggiungi Dipendente alle tue Aree';
         
         if(type === 'deleteEmployee') return isHardDelete ? 'Elimina Definitivamente' : 'Archivia Dipendente'; 
@@ -612,7 +621,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                 <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', backgroundColor: '#f9fafb', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
                         <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#111827' }}>{getTitle()}</h3>
-                        {['assignArea', 'assignPrepostoAreas', 'assignEmployeeToPrepostoArea', 'editEmployee', 'manualEntryForm', 'absenceEntryForm'].includes(type) && item && (
+                        {['assignArea', 'assignPrepostoAreas', 'assignEmployeeToPrepostoArea', 'editEmployee', 'manualEntryForm', 'manualEntry', 'absenceEntryForm', 'justification'].includes(type) && item && (
                             <div style={{ marginTop: '4px', fontSize: '13px', color: '#6b7280' }}>
                                 Dipendente: <span style={{ fontWeight: 'bold', color: '#374151' }}>{item.name} {item.surname}</span>
                             </div>

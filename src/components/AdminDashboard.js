@@ -2,7 +2,7 @@
 /* global __firebase_config, __initial_auth_token, __app_id */
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import ReactDOM from 'react-dom';
-import { db, storage } from '../firebase'; // Assicurati che storage sia esportato in firebase.js
+import { db, storage } from '../firebase'; 
 import {
     collection, getDocs, query, where,
     Timestamp, onSnapshot, updateDoc, doc, limit,
@@ -33,59 +33,28 @@ const AREA_COLORS = [
 
 // --- COMPONENTE NOTIFICA MIGLIORATO ---
 const NotificationPopup = ({ message, type, onClose }) => {
-    // Definizione stili per i diversi tipi di notifica
-    const typeStyles = {
-        success: {
-            bg: 'bg-white',
-            border: 'border-l-4 border-green-500',
-            text: 'text-gray-800',
-            icon: '✅',
-            title: 'Successo'
-        },
-        error: {
-            bg: 'bg-white',
-            border: 'border-l-4 border-red-500',
-            text: 'text-gray-800',
-            icon: '❌',
-            title: 'Errore'
-        },
-        info: {
-            bg: 'bg-white',
-            border: 'border-l-4 border-blue-500',
-            text: 'text-gray-800',
-            icon: 'ℹ️',
-            title: 'Informazione'
-        }
+    const overlayStyle = {
+        position: 'fixed', top: '20px', right: '20px', zIndex: 999999, 
+        minWidth: '320px', maxWidth: '450px', backgroundColor: '#ffffff',
+        borderRadius: '8px', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+        borderLeft: `6px solid ${type === 'error' ? '#EF4444' : type === 'success' ? '#10B981' : '#3B82F6'}`,
+        display: 'flex', alignItems: 'flex-start', padding: '16px',
+        fontFamily: 'system-ui, -apple-system, sans-serif', animation: 'slideInRight 0.4s ease-out'
     };
-
-    const style = typeStyles[type] || typeStyles.info;
+    const iconStyle = { fontSize: '24px', marginRight: '12px', lineHeight: '1' };
+    const contentStyle = { flex: 1 };
+    const titleStyle = { margin: '0 0 4px 0', fontSize: '16px', fontWeight: '700', color: '#1F2937' };
+    const messageStyle = { margin: 0, fontSize: '14px', color: '#4B5563', lineHeight: '1.5' };
+    const closeButtonStyle = { background: 'none', border: 'none', color: '#9CA3AF', fontSize: '20px', cursor: 'pointer', padding: '0 0 0 12px', lineHeight: '1', fontWeight: 'bold' };
+    const config = { success: { icon: '✅', title: 'Operazione Riuscita' }, error: { icon: '⛔', title: 'Si è verificato un errore' }, info: { icon: 'ℹ️', title: 'Informazione' } };
+    const currentConfig = config[type] || config.info;
 
     return (
-        <div className={`fixed top-5 right-5 z-[9999] max-w-sm w-full shadow-lg rounded-lg pointer-events-auto overflow-hidden animate-fade-in-down ${style.bg} ${style.border}`}>
-            <div className="p-4 flex items-start">
-                <div className="flex-shrink-0 text-2xl mr-3">
-                    {style.icon}
-                </div>
-                <div className="flex-1 w-0">
-                    <p className="text-sm font-medium text-gray-900">
-                        {style.title}
-                    </p>
-                    <p className="mt-1 text-sm text-gray-500">
-                        {message}
-                    </p>
-                </div>
-                <div className="ml-4 flex-shrink-0 flex">
-                    <button
-                        className="bg-transparent rounded-md inline-flex text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                        onClick={onClose}
-                    >
-                        <span className="sr-only">Chiudi</span>
-                        <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                        </svg>
-                    </button>
-                </div>
-            </div>
+        <div style={overlayStyle}>
+            <style>{`@keyframes slideInRight { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }`}</style>
+            <div style={iconStyle}>{currentConfig.icon}</div>
+            <div style={contentStyle}><h4 style={titleStyle}>{currentConfig.title}</h4><p style={messageStyle}>{message}</p></div>
+            <button onClick={onClose} style={closeButtonStyle}>×</button>
         </div>
     );
 };
@@ -94,7 +63,6 @@ const NotificationPopup = ({ message, type, onClose }) => {
 // --- 2. SOTTO-COMPONENTI (MODALE & VISTE) ---
 // ===========================================
 
-// --- MODALE PER AGGIUNGERE NUOVA SPESA ---
 const AddExpenseModal = ({ show, onClose, user, userData, showNotification, expenseToEdit }) => {
     const [amount, setAmount] = useState('');
     const [description, setDescription] = useState('');
@@ -124,22 +92,16 @@ const AddExpenseModal = ({ show, onClose, user, userData, showNotification, expe
 
     const handleSave = async (e) => {
         e.preventDefault();
-        if (!amount || !description || !date) { 
-            alert("Importo, descrizione e data sono obbligatori."); 
-            return; 
-        }
-
+        if (!amount || !description || !date) { alert("Importo, descrizione e data sono obbligatori."); return; }
         setIsSaving(true);
         try {
             let receiptUrl = expenseToEdit ? expenseToEdit.receiptUrl : null;
-
             if (file) {
                 if (!storage) throw new Error("Firebase Storage non è inizializzato.");
                 const fileRef = ref(storage, `expenses/${user.uid}/${Date.now()}_${file.name}`);
                 const snapshot = await uploadBytes(fileRef, file);
                 receiptUrl = await getDownloadURL(snapshot.ref);
             }
-
             const expenseData = {
                 amount: parseFloat(amount),
                 description: description,
@@ -152,7 +114,6 @@ const AddExpenseModal = ({ show, onClose, user, userData, showNotification, expe
                 status: expenseToEdit ? expenseToEdit.status : 'pending',
                 updatedAt: Timestamp.now()
             };
-
             if (expenseToEdit) {
                 await updateDoc(doc(db, "expenses", expenseToEdit.id), expenseData);
                 showNotification("Spesa aggiornata con successo!", "success");
@@ -161,263 +122,53 @@ const AddExpenseModal = ({ show, onClose, user, userData, showNotification, expe
                 await addDoc(collection(db, "expenses"), expenseData);
                 showNotification("Spesa registrata con successo!", "success");
             }
-
             setAmount(''); setDescription(''); setNote(''); setFile(null); 
             setDate(new Date().toISOString().split('T')[0]);
             onClose();
-        } catch (error) {
-            console.error("Errore salvataggio spesa:", error);
-            showNotification("Errore: " + error.message, "error");
-        } finally {
-            setIsSaving(false);
-        }
+        } catch (error) { console.error("Errore salvataggio spesa:", error); showNotification("Errore: " + error.message, "error"); } finally { setIsSaving(false); }
     };
-
-    const overlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: 99998, backdropFilter: 'blur(4px)' };
-    const containerStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' };
-    const modalStyle = { backgroundColor: '#ffffff', width: '100%', maxWidth: '500px', borderRadius: '12px', overflow: 'hidden', pointerEvents: 'auto', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column' };
-    const inputClasses = "block w-full px-3 py-2.5 bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm";
-    const labelClasses = "block mb-1 text-xs font-bold text-gray-500 uppercase tracking-wide";
 
     return ReactDOM.createPortal(
         <>
-            <div style={overlayStyle} onClick={onClose} />
-            <div style={containerStyle}>
-                <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
-                    <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#ecfdf5' }}>
-                        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#047857' }}>{expenseToEdit ? '✏️ Modifica Spesa' : '💰 Registra Nuova Spesa'}</h3>
-                        <button onClick={onClose} style={{ border: 'none', background: 'none', fontSize: '24px', cursor: 'pointer', color: '#047857' }}>&times;</button>
+            <div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',backgroundColor:'rgba(0,0,0,0.6)',zIndex:99998}} onClick={onClose} />
+            <div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',zIndex:99999,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}>
+                <div style={{backgroundColor:'#fff',width:'100%',maxWidth:'500px',borderRadius:'12px',overflow:'hidden',pointerEvents:'auto'}} onClick={(e) => e.stopPropagation()}>
+                    <div style={{padding:'16px 24px',borderBottom:'1px solid #e5e7eb',display:'flex',justifyContent:'space-between',alignItems:'center',background:'#ecfdf5'}}>
+                        <h3 style={{margin:0,fontSize:'18px',fontWeight:'bold',color:'#047857'}}>{expenseToEdit ? '✏️ Modifica Spesa' : '💰 Registra Nuova Spesa'}</h3>
+                        <button onClick={onClose} style={{border:'none',background:'none',fontSize:'24px',cursor:'pointer',color:'#047857'}}>&times;</button>
                     </div>
-                    <div style={{ padding: '24px' }}>
-                        <form id="add-expense-form" onSubmit={handleSave} className="space-y-4">
-                            <div><label className={labelClasses}>Data Spesa</label><input type="date" value={date} onChange={e => setDate(e.target.value)} className={inputClasses} required /></div>
-                            <div>
-                                <label className={labelClasses}>Importo (€)</label>
-                                <input type="number" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" className={inputClasses} required />
-                            </div>
-                            <div>
-                                <label className={labelClasses}>Descrizione</label>
-                                <input type="text" value={description} onChange={e => setDescription(e.target.value)} placeholder="Es. Carburante, Pranzo..." className={inputClasses} required />
-                            </div>
-                            <div>
-                                <label className={labelClasses}>
-                                    {expenseToEdit && expenseToEdit.receiptUrl ? 'Cambia File (Opzionale)' : 'Allegato (Foto/File) - Opzionale'}
-                                </label>
-                                <input 
-                                    type="file" 
-                                    onChange={e => setFile(e.target.files[0])} 
-                                    accept="image/*,.pdf"
-                                    className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100"
-                                />
-                                {expenseToEdit && expenseToEdit.receiptUrl && !file && <p style={{fontSize:'0.7rem', color:'green', marginTop:'5px'}}>📎 File attuale presente</p>}
-                            </div>
-                            <div>
-                                <label className={labelClasses}>Note (Opzionale)</label>
-                                <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Dettagli aggiuntivi..." className={`${inputClasses} resize-y min-h-[80px]`} />
-                            </div>
-                        </form>
-                    </div>
-                    <div style={{ padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                        <button type="button" onClick={onClose} className="px-4 py-2 border rounded hover:bg-gray-100 text-sm font-semibold">Annulla</button>
-                        <button type="submit" form="add-expense-form" disabled={isSaving} className="px-4 py-2 bg-green-600 text-white font-bold rounded hover:bg-green-700 disabled:opacity-50 text-sm">{isSaving ? 'Caricamento...' : 'Conferma'}</button>
-                    </div>
+                    <div style={{padding:'24px'}}><form id="add-expense-form" onSubmit={handleSave} className="space-y-4"><div><label className="block mb-1 text-xs font-bold text-gray-500 uppercase">Data Spesa</label><input type="date" value={date} onChange={e => setDate(e.target.value)} className="block w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg" required /></div><div><label className="block mb-1 text-xs font-bold text-gray-500 uppercase">Importo (€)</label><input type="number" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" className="block w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg" required /></div><div><label className="block mb-1 text-xs font-bold text-gray-500 uppercase">Descrizione</label><input type="text" value={description} onChange={e => setDescription(e.target.value)} placeholder="Es. Carburante, Pranzo..." className="block w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg" required /></div><div><label className="block mb-1 text-xs font-bold text-gray-500 uppercase">{expenseToEdit && expenseToEdit.receiptUrl ? 'Cambia File' : 'Allegato'}</label><input type="file" onChange={e => setFile(e.target.files[0])} accept="image/*,.pdf" className="block w-full text-sm text-gray-500" /></div><div><label className="block mb-1 text-xs font-bold text-gray-500 uppercase">Note</label><textarea value={note} onChange={e => setNote(e.target.value)} className="block w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg" /></div></form></div>
+                    <div style={{padding:'16px 24px',backgroundColor:'#f9fafb',borderTop:'1px solid #e5e7eb',display:'flex',justifyContent:'flex-end',gap:'10px'}}><button type="button" onClick={onClose} className="px-4 py-2 border rounded">Annulla</button><button type="submit" form="add-expense-form" disabled={isSaving} className="px-4 py-2 bg-green-600 text-white font-bold rounded">{isSaving ? '...' : 'Conferma'}</button></div>
                 </div>
             </div>
-        </>,
-        document.body
+        </>, document.body
     );
 };
 
-// --- MODALE PER GESTIRE/SALDARE LA SPESA (ADMIN) ---
 const ProcessExpenseModal = ({ show, onClose, expense, onConfirm, isProcessing }) => {
     const [adminPaymentMethod, setAdminPaymentMethod] = useState('Rimborso in Busta Paga');
     const [adminNote, setAdminNote] = useState('');
-
     if (!show || !expense) return null;
-
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        onConfirm(expense.id, adminPaymentMethod, adminNote);
-    };
-
-    const overlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: 99998, backdropFilter: 'blur(4px)' };
-    const containerStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' };
-    const modalStyle = { backgroundColor: '#ffffff', width: '100%', maxWidth: '500px', borderRadius: '12px', overflow: 'hidden', pointerEvents: 'auto', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column' };
-    const inputClasses = "block w-full px-3 py-2.5 bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm";
-
-    return ReactDOM.createPortal(
-        <>
-            <div style={overlayStyle} onClick={onClose} />
-            <div style={containerStyle}>
-                <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
-                    <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f0fdf4' }}>
-                        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#166534' }}>✅ Chiudi e Archivia Spesa</h3>
-                        <button onClick={onClose} style={{ border: 'none', background: 'none', fontSize: '24px', cursor: 'pointer', color: '#166534' }}>&times;</button>
-                    </div>
-                    <div style={{ padding: '24px' }}>
-                        <div className="mb-4 text-sm text-gray-600 bg-gray-50 p-3 rounded border border-gray-200">
-                            <p><strong>Dipendente:</strong> {expense.userName}</p>
-                            <p><strong>Importo:</strong> € {parseFloat(expense.amount).toFixed(2)}</p>
-                        </div>
-                        <form id="process-expense-form" onSubmit={handleSubmit} className="space-y-4">
-                            <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Pagamento</label>
-                                <select value={adminPaymentMethod} onChange={e => setAdminPaymentMethod(e.target.value)} className={inputClasses}>
-                                    <option value="Rimborso in Busta Paga">Rimborso in Busta Paga</option>
-                                    <option value="Bonifico Effettuato">Bonifico Effettuato</option>
-                                    <option value="Rimborso Cassa (Contanti)">Rimborso Cassa (Contanti)</option>
-                                    <option value="Nessun Rimborso (Carta Aziendale)">Nessun Rimborso (Carta Aziendale)</option>
-                                    <option value="Non Rimborsabile (Rifiutata)">Non Rimborsabile (Rifiutata)</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Note</label>
-                                <textarea 
-                                    value={adminNote} 
-                                    onChange={e => setAdminNote(e.target.value)} 
-                                    className={`${inputClasses} resize-y min-h-[80px]`} 
-                                />
-                            </div>
-                        </form>
-                    </div>
-                    <div style={{ padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                        <button type="button" onClick={onClose} className="px-4 py-2 border rounded hover:bg-gray-100 text-sm">Annulla</button>
-                        <button type="submit" form="process-expense-form" disabled={isProcessing} className="px-4 py-2 bg-green-600 text-white rounded font-bold">{isProcessing ? '...' : 'Conferma'}</button>
-                    </div>
-                </div>
-            </div>
-        </>,
-        document.body
-    );
+    const handleSubmit = (e) => { e.preventDefault(); onConfirm(expense.id, adminPaymentMethod, adminNote); };
+    return ReactDOM.createPortal( <><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',backgroundColor:'rgba(0,0,0,0.6)',zIndex:99998}} onClick={onClose} /><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',zIndex:99999,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}><div style={{backgroundColor:'#fff',width:'100%',maxWidth:'500px',borderRadius:'12px',overflow:'hidden',pointerEvents:'auto'}} onClick={(e) => e.stopPropagation()}><div style={{padding:'16px 24px',borderBottom:'1px solid #e5e7eb',display:'flex',justifyContent:'space-between',alignItems:'center',background:'#f0fdf4'}}><h3 style={{margin:0,fontSize:'18px',fontWeight:'bold',color:'#166534'}}>✅ Chiudi Spesa</h3><button onClick={onClose} style={{border:'none',background:'none',fontSize:'24px',cursor:'pointer',color:'#166534'}}>&times;</button></div><div style={{padding:'24px'}}><div className="mb-4 text-sm text-gray-600 bg-gray-50 p-3 rounded border"><p><strong>Dipendente:</strong> {expense.userName}</p><p><strong>Importo:</strong> € {parseFloat(expense.amount).toFixed(2)}</p></div><form id="process-expense-form" onSubmit={handleSubmit} className="space-y-4"><select value={adminPaymentMethod} onChange={e => setAdminPaymentMethod(e.target.value)} className="block w-full border p-2 rounded"><option>Rimborso in Busta Paga</option><option>Bonifico Effettuato</option><option>Rimborso Cassa</option></select><textarea value={adminNote} onChange={e => setAdminNote(e.target.value)} className="block w-full border p-2 rounded" placeholder="Note..." /></form></div><div style={{padding:'16px 24px',backgroundColor:'#f9fafb',borderTop:'1px solid #e5e7eb',display:'flex',justifyContent:'flex-end',gap:'10px'}}><button onClick={onClose} className="px-4 py-2 border rounded">Annulla</button><button type="submit" form="process-expense-form" disabled={isProcessing} className="px-4 py-2 bg-green-600 text-white rounded font-bold">{isProcessing ? '...' : 'Conferma'}</button></div></div></div></>, document.body );
 };
 
 const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) => {
-    const formatDateForInput = (dateStr) => {
-        if (!dateStr) return '';
-        const parts = dateStr.split('/'); 
-        if (parts.length === 3) return `${parts[2]}-${parts[1]}-${parts[0]}`; 
-        return dateStr;
-    };
-
+    const formatDateForInput = (dateStr) => { if (!dateStr) return ''; const parts = dateStr.split('/'); if (parts.length === 3) return `${parts[2]}-${parts[1]}-${parts[0]}`; return dateStr; };
     const [skipPause, setSkipPause] = useState(!!entry.skippedBreak);
-    const [formData, setFormData] = useState({
-        workAreaId: entry.workAreaId || '',
-        note: entry.note || '',
-        date: formatDateForInput(entry.clockInDate), 
-        clockInTime: entry.clockInTimeFormatted || '08:00',
-        clockOutTime: entry.clockOutTimeFormatted !== 'In corso' ? entry.clockOutTimeFormatted : ''
-    });
-
-    const handleChange = (e) => {
-        setFormData({ ...formData, [e.target.name]: e.target.value });
-    };
-
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        if (skipPause && (!formData.note || formData.note.trim() === '')) {
-            alert("ATTENZIONE: Se indichi che il dipendente NON ha effettuato la pausa, è OBBLIGATORIO inserire il motivo nelle note.");
-            return;
-        }
-        onSave(entry.id, { ...formData, skippedBreak: skipPause });
-    };
-
+    const [formData, setFormData] = useState({ workAreaId: entry.workAreaId || '', note: entry.note || '', date: formatDateForInput(entry.clockInDate), clockInTime: entry.clockInTimeFormatted || '08:00', clockOutTime: entry.clockOutTimeFormatted !== 'In corso' ? entry.clockOutTimeFormatted : '' });
+    const handleChange = (e) => { setFormData({ ...formData, [e.target.name]: e.target.value }); };
+    const handleSubmit = (e) => { e.preventDefault(); if (skipPause && (!formData.note || formData.note.trim() === '')) { alert("Nota obbligatoria se salti la pausa."); return; } onSave(entry.id, { ...formData, skippedBreak: skipPause }); };
     return ReactDOM.createPortal( <><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',backgroundColor:'rgba(0,0,0,0.6)',zIndex:99998}} onClick={onClose}/><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',zIndex:99999,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}><div style={{backgroundColor:'#fff',width:'100%',maxWidth:'500px',borderRadius:'12px',overflow:'hidden',pointerEvents:'auto'}} onClick={e=>e.stopPropagation()}><div style={{padding:'20px'}}><h3 style={{margin:0}}>✏️Modifica</h3><form onSubmit={handleSubmit} className="space-y-4 mt-4"><div><label>Data</label><input type="date" name="date" value={formData.date} onChange={handleChange} className="w-full border p-2 rounded"/></div>{!entry.isAbsence && <div><label>Area</label><select name="workAreaId" value={formData.workAreaId} onChange={handleChange} className="w-full border p-2 rounded">{workAreas.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></div>}<div><label>Ora In</label><input type="time" name="clockInTime" value={formData.clockInTime} onChange={handleChange} className="w-full border p-2 rounded"/></div>{!entry.isAbsence && <div><label>Ora Out</label><input type="time" name="clockOutTime" value={formData.clockOutTime} onChange={handleChange} className="w-full border p-2 rounded"/></div>}<div className="flex items-center gap-2"><input type="checkbox" checked={skipPause} onChange={e=>setSkipPause(e.target.checked)}/><label>No Pausa</label></div><div><label>Note</label><textarea name="note" value={formData.note} onChange={handleChange} className="w-full border p-2 rounded"/></div><div className="flex justify-end gap-2"><button onClick={onClose} className="border p-2 rounded">Annulla</button><button type="submit" disabled={isLoading} className="bg-blue-600 text-white p-2 rounded">Salva</button></div></form></div></div></div></>, document.body );
 };
 
-// --- NUOVO MODALE SICURO PER PREPOSTI ---
 const AddEmployeeToAreaModal = ({ show, onClose, allEmployees, workAreas, userData, showNotification, onDataUpdate }) => {
-    const [selectedEmpId, setSelectedEmpId] = useState('');
-    const [selectedAreaId, setSelectedAreaId] = useState('');
-    const [isSaving, setIsSaving] = useState(false);
-
-    const myAreas = useMemo(() => {
-        if (!userData || !userData.managedAreaIds) return [];
-        return workAreas.filter(a => userData.managedAreaIds.includes(a.id));
-    }, [workAreas, userData]);
-
-    const sortedEmployees = useMemo(() => {
-        // Mostra solo dipendenti NON cancellati nella ricerca
-        return [...allEmployees].filter(e => !e.isDeleted).sort((a, b) => {
-            const nameA = `${a.surname} ${a.name}`.toLowerCase();
-            const nameB = `${b.surname} ${b.name}`.toLowerCase();
-            return nameA.localeCompare(nameB);
-        });
-    }, [allEmployees]);
-
+    const [selectedEmpId, setSelectedEmpId] = useState(''); const [selectedAreaId, setSelectedAreaId] = useState(''); const [isSaving, setIsSaving] = useState(false);
+    const myAreas = useMemo(() => { if (!userData || !userData.managedAreaIds) return []; return workAreas.filter(a => userData.managedAreaIds.includes(a.id)); }, [workAreas, userData]);
+    const sortedEmployees = useMemo(() => { return [...allEmployees].filter(e => !e.isDeleted).sort((a, b) => { const nameA = `${a.surname} ${a.name}`.toLowerCase(); const nameB = `${b.surname} ${b.name}`.toLowerCase(); return nameA.localeCompare(nameB); }); }, [allEmployees]);
     if (!show) return null;
-
-    const handleSave = async (e) => {
-        e.preventDefault();
-        if (!selectedEmpId || !selectedAreaId) { alert("Seleziona sia il dipendente che l'area."); return; }
-        
-        setIsSaving(true);
-        try {
-            const employeeRef = doc(db, "employees", selectedEmpId);
-            await updateDoc(employeeRef, {
-                workAreaIds: arrayUnion(selectedAreaId)
-            });
-            showNotification("Dipendente collegato correttamente alla squadra!", "success");
-            await onDataUpdate(); 
-            onClose();
-            setSelectedEmpId('');
-            setSelectedAreaId('');
-        } catch (error) {
-            console.error("Errore assegnazione:", error);
-            showNotification("Errore: " + error.message, "error");
-        } finally {
-            setIsSaving(false);
-        }
-    };
-
-    const overlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: 99998, backdropFilter: 'blur(4px)' };
-    const containerStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' };
-    const modalStyle = { backgroundColor: '#ffffff', width: '100%', maxWidth: '500px', borderRadius: '12px', overflow: 'hidden', pointerEvents: 'auto', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column' };
-    const inputClasses = "block w-full px-3 py-2.5 bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm";
-    const labelClasses = "block mb-1 text-xs font-bold text-gray-500 uppercase tracking-wide";
-
-    return ReactDOM.createPortal(
-        <>
-            <div style={overlayStyle} onClick={onClose} />
-            <div style={containerStyle}>
-                <div style={modalStyle}>
-                    <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f0f9ff' }}>
-                        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#0369a1' }}>👥 Aggiungi alla Squadra</h3>
-                        <button onClick={onClose} style={{ border: 'none', background: 'none', fontSize: '24px', cursor: 'pointer', color: '#0369a1' }}>&times;</button>
-                    </div>
-                    <div style={{ padding: '24px' }}>
-                        <form id="add-emp-form" onSubmit={handleSave} className="space-y-5">
-                            <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 mb-4">
-                                <p className="text-sm text-blue-800">
-                                    ℹ️ Cerca nella lista. <br/>
-                                </p>
-                            </div>
-                            <div>
-                                <label className={labelClasses}>1. Chi vuoi aggiungere?</label>
-                                <select value={selectedEmpId} onChange={e => setSelectedEmpId(e.target.value)} className={inputClasses} required>
-                                    <option value="">-- Cerca Cognome Nome --</option>
-                                    {sortedEmployees.map(emp => (
-                                        <option key={emp.id} value={emp.id}>{emp.surname} {emp.name} ({emp.email})</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div>
-                                <label className={labelClasses}>2. In quale area lavorerà?</label>
-                                <select value={selectedAreaId} onChange={e => setSelectedAreaId(e.target.value)} className={inputClasses} required>
-                                    <option value="">-- Seleziona Area --</option>
-                                    {myAreas.map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}
-                                </select>
-                            </div>
-                        </form>
-                    </div>
-                    <div style={{ padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                        <button type="button" onClick={onClose} className="px-4 py-2 border rounded hover:bg-gray-100">Annulla</button>
-                        <button type="submit" form="add-emp-form" disabled={isSaving} className="px-4 py-2 bg-blue-600 text-white font-bold rounded hover:bg-blue-700 disabled:opacity-50">{isSaving ? 'Salvataggio...' : 'Conferma Aggiunta'}</button>
-                    </div>
-                </div>
-            </div>
-        </>,
-        document.body
-    );
+    const handleSave = async (e) => { e.preventDefault(); if (!selectedEmpId || !selectedAreaId) { alert("Seleziona tutto."); return; } setIsSaving(true); try { const employeeRef = doc(db, "employees", selectedEmpId); await updateDoc(employeeRef, { workAreaIds: arrayUnion(selectedAreaId) }); showNotification("Dipendente aggiunto!", "success"); await onDataUpdate(); onClose(); setSelectedEmpId(''); setSelectedAreaId(''); } catch (error) { showNotification("Errore", "error"); } finally { setIsSaving(false); } };
+    return ReactDOM.createPortal( <><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',backgroundColor:'rgba(0,0,0,0.6)',zIndex:99998}} onClick={onClose}/><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',zIndex:99999,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}><div style={{backgroundColor:'#fff',width:'100%',maxWidth:'500px',borderRadius:'12px',overflow:'hidden',pointerEvents:'auto'}}><div style={{padding:'20px'}}><h3 style={{margin:0}}>👥 Aggiungi alla Squadra</h3><form onSubmit={handleSave} className="space-y-4 mt-4"><select value={selectedEmpId} onChange={e => setSelectedEmpId(e.target.value)} className="w-full border p-2 rounded"><option value="">-- Dipendente --</option>{sortedEmployees.map(emp => (<option key={emp.id} value={emp.id}>{emp.surname} {emp.name}</option>))}</select><select value={selectedAreaId} onChange={e => setSelectedAreaId(e.target.value)} className="w-full border p-2 rounded"><option value="">-- Area --</option>{myAreas.map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}</select><div className="flex justify-end gap-2"><button onClick={onClose} className="border p-2 rounded">Annulla</button><button type="submit" disabled={isSaving} className="bg-blue-600 text-white p-2 rounded">Conferma</button></div></form></div></div></div></>, document.body );
 };
 
 const AddFormModal = ({ show, onClose, workAreas, user, onDataUpdate, currentUserRole, userData, showNotification }) => {
@@ -508,33 +259,16 @@ const ExpensesView = ({ expenses, onProcessExpense, onEditExpense, currentUserRo
         const isClosed = exp.status === 'closed' || exp.status === 'paid';
         const matchesArchive = showArchived ? isClosed : !isClosed;
         const isOwner = exp.userId === user.uid;
-        if (currentUserRole !== 'admin' && !isOwner) {
-            return false;
-        }
-        if (searchTerm) {
-            if (!exp.userName || !exp.userName.toLowerCase().includes(searchTerm.toLowerCase())) {
-                return false;
-            }
-        }
+        if (currentUserRole !== 'admin' && !isOwner) return false;
+        if (searchTerm) { if (!exp.userName || !exp.userName.toLowerCase().includes(searchTerm.toLowerCase())) return false; }
         if (filterDateStart || filterDateEnd) {
             let expDate = null;
-            if (exp.date && exp.date.toDate) {
-                expDate = exp.date.toDate();
-            } else if (exp.date) {
-                expDate = new Date(exp.date);
-            }
+            if (exp.date && exp.date.toDate) expDate = exp.date.toDate();
+            else if (exp.date) expDate = new Date(exp.date);
             if (expDate) {
                 expDate.setHours(0,0,0,0);
-                if (filterDateStart) {
-                    const startDate = new Date(filterDateStart);
-                    startDate.setHours(0,0,0,0);
-                    if (expDate < startDate) return false;
-                }
-                if (filterDateEnd) {
-                    const endDate = new Date(filterDateEnd);
-                    endDate.setHours(0,0,0,0);
-                    if (expDate > endDate) return false;
-                }
+                if (filterDateStart) { const startDate = new Date(filterDateStart); startDate.setHours(0,0,0,0); if (expDate < startDate) return false; }
+                if (filterDateEnd) { const endDate = new Date(filterDateEnd); endDate.setHours(0,0,0,0); if (expDate > endDate) return false; }
             }
         }
         return matchesArchive;
@@ -546,16 +280,13 @@ const ExpensesView = ({ expenses, onProcessExpense, onEditExpense, currentUserRo
                 <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-800 tracking-tight">💰 Gestione Spese</h1>
                 <button onClick={() => setShowArchived(!showArchived)} className={`px-4 py-2 rounded-lg text-sm font-bold shadow transition-colors ${showArchived ? 'bg-gray-600 text-white hover:bg-gray-700' : 'bg-blue-100 text-blue-700 hover:bg-blue-200 border border-blue-300'}`}>{showArchived ? '🔙 Torna alle Spese Attive' : '📂 Mostra Archivio'}</button>
             </div>
-            
             {!showArchived && (<div className="bg-yellow-50 text-yellow-800 px-4 py-2 rounded-lg text-sm border border-yellow-200">{currentUserRole === 'admin' ? "⚠️ Clicca su \"Gestisci\" per saldarle e archiviarle." : "⚠️ Puoi visualizzare e modificare solo le tue spese."}</div>)}
-
             <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex flex-wrap gap-4 items-center">
                 <div className="flex-1 min-w-[200px]"><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Cerca Dipendente</label><input type="text" placeholder="🔍 Nome o Cognome..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="block w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500"/></div>
                 <div className="w-[150px]"><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Dal</label><input type="date" value={filterDateStart} onChange={(e) => setFilterDateStart(e.target.value)} className="block w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500"/></div>
                 <div className="w-[150px]"><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Al</label><input type="date" value={filterDateEnd} onChange={(e) => setFilterDateEnd(e.target.value)} className="block w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500"/></div>
                 {(searchTerm || filterDateStart || filterDateEnd) && (<div className="self-end pb-1"><button onClick={() => { setSearchTerm(''); setFilterDateStart(''); setFilterDateEnd(''); }} className="text-xs text-red-600 hover:text-red-800 font-bold underline">Reset Filtri</button></div>)}
             </div>
-
             <div className="bg-white shadow-lg rounded-xl overflow-hidden border border-gray-100">
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
@@ -563,21 +294,20 @@ const ExpensesView = ({ expenses, onProcessExpense, onEditExpense, currentUserRo
                         <tbody className="bg-white divide-y divide-gray-200">
                             {displayedExpenses.map(exp => {
                                 let fDate = 'N/D'; if (exp.date && exp.date.toDate) fDate = exp.date.toDate().toLocaleDateString('it-IT'); else if (exp.date) fDate = new Date(exp.date).toLocaleDateString('it-IT');
-                                const isPreposto = exp.userRole === 'preposto';
                                 return (
                                     <tr key={exp.id} className="hover:bg-blue-50/30 transition-colors">
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{fDate}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm"><div className="font-bold text-gray-900">{exp.userName || exp.userId}</div>{isPreposto && <span className="text-xs text-blue-600 border border-blue-200 bg-blue-50 px-1 rounded">Preposto</span>}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm"><div className="font-bold text-gray-900">{exp.userName || exp.userId}</div></td>
                                         <td className="px-6 py-4 whitespace-normal text-sm text-gray-600 max-w-xs"><div className="font-semibold">{exp.description}</div><div className="text-xs italic">{exp.note}</div></td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm">{exp.receiptUrl ? <a href={exp.receiptUrl} target="_blank" rel="noreferrer" className="text-blue-600 underline">📎 File</a> : <span className="text-gray-400">Nessuno</span>}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-green-600">€ {parseFloat(exp.amount).toFixed(2)}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm">{!showArchived ? (currentUserRole === 'admin' ? <button onClick={() => onProcessExpense(exp)} className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded shadow text-xs font-bold">✅ Gestisci</button> : <button onClick={() => onEditExpense(exp)} className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1.5 rounded shadow text-xs font-bold">✏️ Modifica</button>) : <div className="text-xs text-gray-500"><div>Chiuso: {exp.adminPaymentMethod}</div>{exp.adminNote && <div className="italic">Note: {exp.adminNote}</div>}</div>}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm">{!showArchived ? (currentUserRole === 'admin' ? <button onClick={() => onProcessExpense(exp)} className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded shadow text-xs font-bold">✅ Gestisci</button> : <button onClick={() => onEditExpense(exp)} className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1.5 rounded shadow text-xs font-bold">✏️ Modifica</button>) : <div className="text-xs text-gray-500"><div>Chiuso: {exp.adminPaymentMethod}</div></div>}</td>
                                     </tr>
                                 );
                             })}
                         </tbody>
                     </table>
-                    {displayedExpenses.length === 0 && (<div className="p-8 text-center text-gray-500">{showArchived ? "Nessuna spesa in archivio corrispondente ai filtri." : "Nessuna spesa trovata."}</div>)}
+                    {displayedExpenses.length === 0 && (<div className="p-8 text-center text-gray-500">{showArchived ? "Nessuna spesa in archivio." : "Nessuna spesa trovata."}</div>)}
                 </div>
             </div>
         </div>
@@ -598,12 +328,24 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                             {employees.map(emp => (
                                 <tr key={emp.id} className={emp.isDeleted ? "bg-red-50" : "hover:bg-blue-50/30"}>
                                     <td className="px-6 py-4 whitespace-nowrap"><div className="flex items-center gap-2"><div className={`text-sm font-bold ${emp.isDeleted ? 'text-red-700 line-through' : 'text-gray-900'}`}>{emp.name} {emp.surname}</div>{emp.isDeleted && <span className="px-2 py-0.5 text-xs font-bold text-white bg-red-500 rounded">ARCHIVIATO</span>}</div><div className="text-xs text-gray-500">{emp.email}</div></td>
-                                    <td className="px-6 py-4 whitespace-nowrap">{emp.isDeleted ? <span className="px-2.5 py-0.5 inline-flex text-xs leading-5 font-bold rounded-full bg-red-100 text-red-600 border border-red-200">Disattivato</span> : <span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-bold rounded-full border ${emp.activeEntry ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'}`}>{emp.activeEntry ? emp.activeEntry.status : 'Non al Lavoro'}</span>}</td>
+                                    
+                                    {/* --- COLONNA STATO MODIFICATA: MOSTRA GIUSTIFICATIVI --- */}
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        {emp.isDeleted ? <span className="px-2.5 py-0.5 inline-flex text-xs leading-5 font-bold rounded-full bg-red-100 text-red-600 border border-red-200">Disattivato</span> : 
+                                            emp.activeEntry && emp.activeEntry.isAbsence ? 
+                                                <span className="px-2.5 py-0.5 inline-flex text-xs leading-5 font-bold rounded-full bg-purple-100 text-purple-800 border border-purple-200 uppercase">{emp.activeEntry.note || 'GIUSTIFICATO'}</span> 
+                                            : 
+                                                <span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-bold rounded-full border ${emp.activeEntry ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                                                    {emp.activeEntry ? emp.activeEntry.status : 'Non al Lavoro'}
+                                                </span>
+                                        }
+                                    </td>
+
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 max-w-xs truncate">{emp.workAreaNames?.join(', ') || 'Nessuna'}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                         {!emp.isDeleted ? (
                                             <div className="flex flex-col gap-2">
-                                                {emp.activeEntry ? (
+                                                {emp.activeEntry && !emp.activeEntry.isAbsence ? (
                                                     <div className="flex gap-1 w-full">
                                                         <button onClick={()=>openModal('adminClockOut', emp)} className="flex-1 px-3 py-1.5 text-xs bg-yellow-500 text-white rounded-md shadow-sm hover:bg-yellow-600 transition-colors">⏹️ Uscita</button>
                                                         <button onClick={()=>handleEmployeePauseClick(emp)} disabled={emp.activeEntry.status === 'In Pausa' || emp.activeEntry.pauses?.some(p => p.start && p.end)} className={`flex-1 px-3 py-1.5 text-xs text-white rounded-md shadow-sm transition-colors ${emp.activeEntry.status === 'In Pausa' || emp.activeEntry.pauses?.some(p => p.start && p.end) ? 'bg-gray-400 cursor-not-allowed' : 'bg-orange-500 hover:bg-orange-600'}`}>☕ Pausa</button>
@@ -611,19 +353,24 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                                 ) : (
                                                     <button onClick={()=>openModal('adminClockIn', emp)} className="w-full px-3 py-1.5 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 shadow-sm transition-colors">▶️ Entrata</button>
                                                 )}
-                                                <div className="flex flex-wrap gap-2 text-xs mt-1 w-full">
-                                                    {currentUserRole==='admin' && (
-                                                        <>
-                                                            <button onClick={()=>openModal('assignArea', emp)} className="text-blue-600 hover:text-blue-800 font-bold underline">🌍Modifica Aree</button>
-                                                            <button onClick={()=>openModal('editEmployee', emp)} className="text-green-600 hover:text-green-800 underline">✏️ Modifica</button>
-                                                            <button onClick={()=>openModal('deleteEmployee', emp)} className="text-red-600 hover:text-red-800 underline">📂 Archivia</button>
-                                                        </>
-                                                    )}
-                                                    {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (
-                                                        <button onClick={()=>openModal('resetDevice', emp)} disabled={!emp.deviceIds?.length} className="text-yellow-600 hover:text-yellow-800 font-semibold disabled:text-gray-400 underline decoration-yellow-200 hover:decoration-yellow-800">📱 Reset ID</button>
-                                                    )}
-                                                    {currentUserRole === 'preposto' && (<button onClick={() => openModal('prepostoAddEmployeeToAreas')} className="text-xs text-blue-600 hover:text-blue-800 font-semibold underline">🌍Gestisci Aree</button>)}
-                                                </div>
+                                                
+                                                {/* --- PULSANTI AGGIUNTIVI RIPRISTINATI --- */}
+                                                {currentUserRole==='admin' && (
+                                                    <div className="flex flex-wrap gap-2 text-xs mt-1 w-full">
+                                                        <button onClick={()=>openModal('manualEntry', emp)} className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded hover:bg-indigo-200 border border-indigo-200 font-semibold" title="Aggiungi Ore Manuali">🕒 Ore</button>
+                                                        <button onClick={()=>openModal('justification', emp)} className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded hover:bg-purple-200 border border-purple-200 font-semibold" title="Aggiungi Giustificativo">👀 Giust.</button>
+                                                        
+                                                        <button onClick={()=>openModal('assignArea', emp)} className="text-blue-600 hover:text-blue-800 font-bold underline ml-1">🌍Aree</button>
+                                                        <button onClick={()=>openModal('editEmployee', emp)} className="text-green-600 hover:text-green-800 underline">✏️Modifica</button>
+                                                        <button onClick={()=>openModal('deleteEmployee', emp)} className="text-red-600 hover:text-red-800 underline">📂Archivia</button>
+                                                    </div>
+                                                )}
+                                                
+                                                {(currentUserRole === 'preposto') && (
+                                                    <div className="flex flex-wrap gap-2 text-xs mt-1 w-full">
+                                                        <button onClick={()=>openModal('resetDevice', emp)} disabled={!emp.deviceIds?.length} className="text-yellow-600 hover:text-yellow-800 font-semibold disabled:text-gray-400 underline decoration-yellow-200 hover:decoration-yellow-800">📱Reset ID</button>
+                                                    </div>
+                                                )}
                                             </div>
                                         ) : (
                                             currentUserRole==='admin' && <button onClick={()=>openModal('restoreEmployee', emp)} className="text-xs bg-green-600 text-white px-2 py-1 rounded shadow-sm">♻️ Ripristina</button>
@@ -639,96 +386,37 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
     );
 };
 
-// --- GESTIONE AREE CON RICERCA E ARCHIVIAZIONE ---
 const AreaManagementView = ({ workAreas, openModal, currentUserRole, handleArchiveArea, handleRestoreArea }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [showArchived, setShowArchived] = useState(false);
-
     const filteredAreas = workAreas.filter(area => {
         const matchesSearch = area.name.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesArchive = showArchived ? area.isArchived : !area.isArchived;
         return matchesSearch && matchesArchive;
     });
-
     return (
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-gray-200 pb-4">
                 <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-800 tracking-tight">Gestione Aree di Lavoro</h1>
-                {/* TOGGLE ARCHIVIO AREE */}
-                <div className="flex items-center">
-                    <button 
-                        onClick={() => setShowArchived(!showArchived)}
-                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${showArchived ? 'bg-orange-500 text-white hover:bg-orange-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
-                    >
-                        {showArchived ? '📂 Nascondi Archiviate' : '📂 Mostra Archiviate'}
-                    </button>
-                </div>
+                <div className="flex items-center"><button onClick={() => setShowArchived(!showArchived)} className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${showArchived ? 'bg-orange-500 text-white hover:bg-orange-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>{showArchived ? '📂 Nascondi Archiviate' : '📂 Mostra Archiviati'}</button></div>
             </div>
-
-            {/* BARRA DI RICERCA */}
-            <div className="max-w-md">
-                <div className="relative">
-                    <input 
-                        type="text" 
-                        value={searchTerm} 
-                        onChange={(e) => setSearchTerm(e.target.value)} 
-                        placeholder="🔍 Cerca Area..." 
-                        className="w-full pl-3 pr-3 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" 
-                    />
-                </div>
-            </div>
-
+            <div className="max-w-md"><div className="relative"><input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="🔍 Cerca Area..." className="w-full pl-3 pr-3 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" /></div></div>
             <div className="bg-white shadow-lg rounded-xl overflow-hidden border border-gray-100">
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-blue-50">
-                            <tr>
-                                <th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Nome Area</th>
-                                <th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Ore Totali</th>
-                                <th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Pausa (min)</th>
-                                {currentUserRole === 'admin' && (<><th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Coordinate</th><th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Raggio</th></>)}
-                                <th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Azioni</th>
-                            </tr>
-                        </thead>
+                        <thead className="bg-blue-50"><tr><th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Nome Area</th><th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Ore Totali</th><th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Pausa (min)</th>{currentUserRole === 'admin' && (<><th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Coordinate</th><th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Raggio</th></>)}<th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Azioni</th></tr></thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                             {filteredAreas.map(area => (
                                 <tr key={area.id} className={area.isArchived ? "bg-red-50 hover:bg-red-100 transition-colors" : "hover:bg-blue-50/30 transition-colors"}>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
-                                        {area.isArchived && <span className="mr-2">🔒</span>}
-                                        {area.name}
-                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">{area.isArchived && <span className="mr-2">🔒</span>}{area.name}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 bg-gray-50 font-mono">{area.totalHours ? `${area.totalHours}h` : '0h'}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{area.pauseDuration || 0} min</td>
                                     {currentUserRole === 'admin' && (<><td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500 font-mono">{area.latitude?.toFixed(4)}, {area.longitude?.toFixed(4)}</td><td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500">{area.radius || 0} m</td></>)}
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                        <div className="flex items-center gap-3">
-                                            {!area.isArchived ? (
-                                                <>
-                                                    {currentUserRole === 'admin' ? (<button onClick={() => openModal('editArea', area)} className="text-green-600 hover:text-green-800 font-semibold hover:underline">✏️Modifica</button>) : currentUserRole === 'preposto' ? (<button onClick={() => openModal('editAreaPauseOnly', area)} className="text-green-600 hover:text-green-800 font-semibold hover:underline">✏️Modifica Pausa</button>) : null}
-                                                    {currentUserRole === 'admin' && (
-                                                        <button onClick={() => handleArchiveArea(area)} className="text-red-600 hover:text-red-800 font-semibold hover:underline">
-                                                            📂 Archivia
-                                                        </button>
-                                                    )}
-                                                </>
-                                            ) : (
-                                                currentUserRole === 'admin' && (
-                                                    <button onClick={() => handleRestoreArea(area)} className="text-green-600 hover:text-green-800 font-semibold hover:underline">
-                                                        ♻️ Ripristina
-                                                    </button>
-                                                )
-                                            )}
-                                        </div>
-                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium"><div className="flex items-center gap-3">{!area.isArchived ? (<>{currentUserRole === 'admin' ? (<button onClick={() => openModal('editArea', area)} className="text-green-600 hover:text-green-800 font-semibold hover:underline">✏️Modifica</button>) : currentUserRole === 'preposto' ? (<button onClick={() => openModal('editAreaPauseOnly', area)} className="text-green-600 hover:text-green-800 font-semibold hover:underline">✏️Modifica Pausa</button>) : null}{currentUserRole === 'admin' && (<button onClick={() => handleArchiveArea(area)} className="text-red-600 hover:text-red-800 font-semibold hover:underline">📂 Archivia</button>)}</>) : (currentUserRole === 'admin' && (<button onClick={() => handleRestoreArea(area)} className="text-green-600 hover:text-green-800 font-semibold hover:underline">♻️ Ripristina</button>))}</div></td>
                                 </tr>
                             ))}
                         </tbody>
                     </table>
-                    {filteredAreas.length === 0 && (
-                        <div className="p-8 text-center text-gray-500">
-                            {showArchived ? "Nessuna area archiviata trovata." : "Nessuna area attiva trovata."}
-                        </div>
-                    )}
                 </div>
             </div>
         </div>
@@ -738,44 +426,9 @@ const AreaManagementView = ({ workAreas, openModal, currentUserRole, handleArchi
 const FormsManagementView = ({ forms, workAreas, openModal, onDeleteForm }) => {
     return (
         <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-gray-200 pb-4">
-                <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-800 tracking-tight">📋 Gestione Moduli & Questionari</h1>
-            </div>
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-gray-200 pb-4"><h1 className="text-2xl sm:text-3xl font-extrabold text-gray-800 tracking-tight">📋 Gestione Moduli & Questionari</h1></div>
             <div className="bg-white shadow-lg rounded-xl overflow-hidden border border-gray-100">
-                <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-indigo-50">
-                            <tr>
-                                <th className="px-6 py-3 text-left text-xs font-bold text-indigo-800 uppercase tracking-wider">Titolo Modulo</th>
-                                <th className="px-6 py-3 text-left text-xs font-bold text-indigo-800 uppercase tracking-wider">Area Assegnata</th>
-                                <th className="px-6 py-3 text-left text-xs font-bold text-indigo-800 uppercase tracking-wider">Link</th>
-                                <th className="px-6 py-3 text-left text-xs font-bold text-indigo-800 uppercase tracking-wider">Azioni</th>
-                            </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                            {forms.map(form => {
-                                const areaName = workAreas.find(a => a.id === form.workAreaId)?.name || 'Area eliminata';
-                                return (
-                                    <tr key={form.id} className="hover:bg-indigo-50/30 transition-colors">
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">{form.title}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{areaName}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-600 underline max-w-xs truncate">
-                                            <a href={form.url} target="_blank" rel="noreferrer">Apri Modulo ↗️</a>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                            <button onClick={() => onDeleteForm(form.id)} className="text-red-600 hover:text-red-900 font-bold hover:underline">🗑️ Elimina</button>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                    {forms.length === 0 && (
-                        <div className="p-8 text-center text-gray-500">
-                            Nessun modulo presente. Clicca su "Aggiungi Modulo Forms" per iniziare.
-                        </div>
-                    )}
-                </div>
+                <div className="overflow-x-auto"><table className="min-w-full divide-y divide-gray-200"><thead className="bg-indigo-50"><tr><th className="px-6 py-3 text-left text-xs font-bold text-indigo-800 uppercase tracking-wider">Titolo Modulo</th><th className="px-6 py-3 text-left text-xs font-bold text-indigo-800 uppercase tracking-wider">Area Assegnata</th><th className="px-6 py-3 text-left text-xs font-bold text-indigo-800 uppercase tracking-wider">Link</th><th className="px-6 py-3 text-left text-xs font-bold text-indigo-800 uppercase tracking-wider">Azioni</th></tr></thead><tbody className="bg-white divide-y divide-gray-200">{forms.map(form => { const areaName = workAreas.find(a => a.id === form.workAreaId)?.name || 'Area eliminata'; return (<tr key={form.id} className="hover:bg-indigo-50/30 transition-colors"><td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">{form.title}</td><td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{areaName}</td><td className="px-6 py-4 whitespace-nowrap text-sm text-blue-600 underline max-w-xs truncate"><a href={form.url} target="_blank" rel="noreferrer">Apri Modulo ↗️</a></td><td className="px-6 py-4 whitespace-nowrap text-sm font-medium"><button onClick={() => onDeleteForm(form.id)} className="text-red-600 hover:text-red-900 font-bold hover:underline">🗑️ Elimina</button></td></tr>); })}</tbody></table>{forms.length === 0 && (<div className="p-8 text-center text-gray-500">Nessun modulo presente. Clicca su "Aggiungi Modulo Forms" per iniziare.</div>)}</div>
             </div>
         </div>
     );
@@ -789,24 +442,9 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
     return (
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-gray-200 pb-4"><h1 className="text-2xl sm:text-3xl font-extrabold text-gray-800 tracking-tight">Gestione Utenti Admin</h1></div>
-            <div className="max-w-md"><div className="relative"><input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="🔍 Cerca Admin per nome o email..." className="w-full pl-3 pr-3 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" /></div></div>
+            <div className="max-w-md"><div className="relative"><input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="🔍 Cerca Admin..." className="w-full pl-3 pr-3 py-2.5 border border-gray-300 rounded-lg shadow-sm" /></div></div>
             <div className="bg-white shadow-lg rounded-xl overflow-hidden border border-gray-100">
-                <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-blue-50"><tr><th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Utente</th><th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Ruolo</th><th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Aree Gestite</th><th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider">Azioni</th></tr></thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                            {displayedAdmins.map(admin => ( 
-                                <tr key={admin.id} className="hover:bg-blue-50/30 transition-colors">
-                                    <td className="px-6 py-4 whitespace-nowrap"><div className="text-sm font-bold text-gray-900">{admin.name} {admin.surname}</div><div className="text-xs text-gray-500">{admin.email}</div></td>
-                                    <td className="px-6 py-4 whitespace-nowrap"><span className={`px-2 py-1 text-xs font-bold uppercase rounded-md ${admin.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}`}>{admin.role}</span></td>
-                                    <td className="px-6 py-4 whitespace-normal text-sm text-gray-500 max-w-xs">{admin.managedAreaNames?.join(', ') || '-'}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium"><div className="flex items-center gap-2">{currentUserRole === 'admin' && (<button onClick={() => openModal('deleteAdmin', admin)} className="px-3 py-1.5 text-xs text-white bg-red-500 rounded-md hover:bg-red-600 disabled:opacity-50 transition-colors shadow-sm" disabled={admin.email === user?.email}>🗑️Elimina</button>)}{admin.role === 'preposto' && (<button onClick={() => openModal('assignPrepostoAreas', admin)} className="px-3 py-1.5 text-xs text-white bg-blue-500 rounded-md hover:bg-blue-600 transition-colors shadow-sm">🌍Assegna Aree</button>)}</div></td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                    {displayedAdmins.length === 0 && (<div className="p-8 text-center text-gray-500">Nessun admin trovato.</div>)}
-                </div>
+                <div className="overflow-x-auto"><table className="min-w-full divide-y divide-gray-200"><thead className="bg-blue-50"><tr><th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase">Utente</th><th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase">Ruolo</th><th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase">Aree</th><th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase">Azioni</th></tr></thead><tbody className="bg-white divide-y divide-gray-200">{displayedAdmins.map(admin => ( <tr key={admin.id} className="hover:bg-blue-50/30 transition-colors"><td className="px-6 py-4 whitespace-nowrap"><div className="text-sm font-bold text-gray-900">{admin.name} {admin.surname}</div><div className="text-xs text-gray-500">{admin.email}</div></td><td className="px-6 py-4 whitespace-nowrap"><span className={`px-2 py-1 text-xs font-bold uppercase rounded-md ${admin.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}`}>{admin.role}</span></td><td className="px-6 py-4 whitespace-normal text-sm text-gray-500 max-w-xs">{admin.managedAreaNames?.join(', ') || '-'}</td><td className="px-6 py-4 whitespace-nowrap text-sm font-medium"><div className="flex items-center gap-2">{currentUserRole === 'admin' && (<button onClick={() => openModal('deleteAdmin', admin)} className="px-3 py-1.5 text-xs text-white bg-red-500 rounded-md hover:bg-red-600 disabled:opacity-50 transition-colors shadow-sm" disabled={admin.email === user?.email}>🗑️Elimina</button>)}{admin.role === 'preposto' && (<button onClick={() => openModal('assignPrepostoAreas', admin)} className="px-3 py-1.5 text-xs text-white bg-blue-500 rounded-md hover:bg-blue-600 transition-colors shadow-sm">🌍Assegna Aree</button>)}</div></td></tr>))}</tbody></table></div>
             </div>
         </div>
     );
@@ -874,6 +512,11 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const [allWorkAreas, setAllWorkAreas] = useState([]);
     const [admins, setAdmins] = useState([]);
     const [activeEmployeesDetails, setActiveEmployeesDetails] = useState([]);
+    
+    // --- NUOVI STATI PER GESTIRE PRESENZE E ASSENZE SEPARATAMENTE ---
+    const [activeWorkers, setActiveWorkers] = useState([]);
+    const [absentWorkers, setAbsentWorkers] = useState([]);
+
     const [reports, setReports] = useState([]);
     const [forms, setForms] = useState([]);
     const [expenses, setExpenses] = useState([]); 
@@ -958,6 +601,25 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         if (activeOnly.length > 0) { const violators = activeOnly.filter(e => e.deviceIds && e.deviceIds.length > MAX_DEVICE_LIMIT); if (violators.length > 0) { setTimeout(() => { showNotification(`ATTENZIONE: ${violators.length} dipendenti hanno superato il limite di ${MAX_DEVICE_LIMIT} dispositivi! Controlla la lista.`, 'error'); }, 1000); } }
     }, [allEmployees, showNotification]);
 
+    // --- LOGICA DI UNIONE PRESENZE + ASSENZE ---
+    useEffect(() => {
+        // Unisci i due array: lavoratori attivi e assenti giustificati
+        const combined = [...activeWorkers, ...absentWorkers];
+        
+        // Filtra in base ai permessi (Admin vede tutto, Preposto solo i suoi)
+        const filteredDetails = combined.filter(detail => { 
+            if (currentUserRole === 'admin') return true; 
+            if (currentUserRole === 'preposto') { 
+                const managedAreaIds = userData?.managedAreaIds || []; 
+                if (managedAreaIds.length === 0) return false; 
+                return detail.workAreaId ? managedAreaIds.includes(detail.workAreaId) : true; 
+            } 
+            return false; 
+        }).sort((a, b) => a.employeeName.localeCompare(b.employeeName)); 
+
+        setActiveEmployeesDetails(filteredDetails);
+    }, [activeWorkers, absentWorkers, currentUserRole, userData]);
+
     const sortedAndFilteredEmployees = useMemo(() => {
         let baseList = managedEmployees;
         if (showArchived) { baseList = baseList.filter(emp => emp.isDeleted); } else { baseList = baseList.filter(emp => !emp.isDeleted); }
@@ -977,20 +639,56 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
     const activeVisibleWorkAreas = useMemo(() => visibleWorkAreas.filter(a => !a.isArchived), [visibleWorkAreas]);
 
+    // --- LISTENER DOPPIO: ATTIVI E ASSENTI OGGI ---
     useEffect(() => {
         if (!allEmployees.length || !allWorkAreas.length) return;
         let isMounted = true; 
+        
+        // 1. LISTENER PER CHI È AL LAVORO (Clocked-in)
         const qActive = query(collection(db, "time_entries"), where("status", "==", "clocked-in"));
         const unsubscribeActive = onSnapshot(qActive, (snapshot) => {
             if (!isMounted) return; 
             const activeEntriesList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            
+            // Logica Admin Profilo
             if (adminEmployeeProfile) { const adminEntry = activeEntriesList.find(entry => entry.employeeId === adminEmployeeProfile.id); const hasCompletedPause = adminEntry?.pauses?.some(p => p.start && p.end) || false; setAdminActiveEntry(adminEntry ? { ...adminEntry, id: adminEntry.id, isOnBreak: adminEntry.pauses?.some(p => !p.end) || false, hasCompletedPause: hasCompletedPause } : null); }
-            const details = activeEntriesList.filter(entry => entry.clockInTime).map(entry => { const employee = allEmployees.find(emp => emp.id === entry.employeeId); const area = allWorkAreas.find(ar => ar.id === entry.workAreaId); const isOnBreak = entry.pauses?.some(p => !p.end) || false; const hasCompletedPause = entry.pauses?.some(p => p.start && p.end) || false; let clockInFormatted = 'N/D'; if (entry.clockInTime && typeof entry.clockInTime.toDate === 'function') { try { const clockInDate = entry.clockInTime.toDate(); clockInFormatted = new Intl.DateTimeFormat('it-IT', {hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome'}).format(clockInDate); } catch (e) { console.error("Errore formattazione ora entrata:", e); } } return { id: entry.id, employeeId: entry.employeeId, employeeName: employee ? `${employee.name} ${employee.surname}` : 'Sconosciuto', areaName: area ? area.name : 'Sconosciuta', workAreaId: entry.workAreaId, clockInTimeFormatted: clockInFormatted, status: isOnBreak ? 'In Pausa' : 'Al Lavoro', pauses: entry.pauses || [], hasCompletedPause: hasCompletedPause }; }).filter(detail => { if (currentUserRole === 'admin') return true; if (currentUserRole === 'preposto') { const managedAreaIds = userData?.managedAreaIds || []; if (managedAreaIds.length === 0) return false; return managedAreaIds.includes(detail.workAreaId); } return false; }).sort((a, b) => a.employeeName.localeCompare(b.employeeName)); 
-            setActiveEmployeesDetails(details);
+            
+            const details = activeEntriesList.filter(entry => entry.clockInTime).map(entry => { const employee = allEmployees.find(emp => emp.id === entry.employeeId); const area = allWorkAreas.find(ar => ar.id === entry.workAreaId); const isOnBreak = entry.pauses?.some(p => !p.end) || false; const hasCompletedPause = entry.pauses?.some(p => p.start && p.end) || false; let clockInFormatted = 'N/D'; if (entry.clockInTime && typeof entry.clockInTime.toDate === 'function') { try { const clockInDate = entry.clockInTime.toDate(); clockInFormatted = new Intl.DateTimeFormat('it-IT', {hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome'}).format(clockInDate); } catch (e) { console.error("Errore formattazione ora entrata:", e); } } return { id: entry.id, employeeId: entry.employeeId, employeeName: employee ? `${employee.name} ${employee.surname}` : 'Sconosciuto', areaName: area ? area.name : 'Sconosciuta', workAreaId: entry.workAreaId, clockInTimeFormatted: clockInFormatted, status: isOnBreak ? 'In Pausa' : 'Al Lavoro', pauses: entry.pauses || [], hasCompletedPause: hasCompletedPause, isAbsence: false }; });
+            
+            setActiveWorkers(details);
         }, (error) => { if (isMounted) { console.error("Errore listener timbratura attive:", error); showNotification("Errore aggiornamento presenze.", 'error'); } });
+
+        // 2. LISTENER PER CHI È ASSENTE OGGI (Giustificativo)
+        const todayStr = new Date().toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        const qAbsence = query(collection(db, "time_entries"), where("isAbsence", "==", true), where("clockInDate", "==", todayStr));
+        
+        const unsubscribeAbsence = onSnapshot(qAbsence, (snapshot) => {
+            if (!isMounted) return;
+            const absenceList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            
+            const details = absenceList.map(entry => {
+                const employee = allEmployees.find(emp => emp.id === entry.employeeId);
+                const area = allWorkAreas.find(ar => ar.id === entry.workAreaId);
+                return {
+                    id: entry.id,
+                    employeeId: entry.employeeId,
+                    employeeName: employee ? `${employee.name} ${employee.surname}` : 'Sconosciuto',
+                    areaName: area ? area.name : '---', 
+                    workAreaId: entry.workAreaId,
+                    clockInTimeFormatted: '-',
+                    status: entry.absenceType ? entry.absenceType.toUpperCase() : 'ASSENZA',
+                    note: entry.note || entry.absenceType,
+                    isAbsence: true // Flag importante
+                };
+            });
+            setAbsentWorkers(details);
+        });
+
+        // 3. Listener Richieste Sospese
         const qPending = query(collection(db, "time_entries"), where("skipBreakStatus", "==", "pending"));
         const unsubscribePending = onSnapshot(qPending, (snapshot) => { if (!isMounted) return; const pendingDocs = snapshot.docs.map(doc => doc.data()); let count = 0; if (currentUserRole === 'admin') count = pendingDocs.length; else if (currentUserRole === 'preposto') { const managedAreaIds = userData?.managedAreaIds || []; const myPending = pendingDocs.filter(d => managedAreaIds.includes(d.workAreaId)); count = myPending.length; } setPendingRequestsCount(count); });
-        return () => { isMounted = false; unsubscribeActive(); unsubscribePending(); };
+        
+        return () => { isMounted = false; unsubscribeActive(); unsubscribeAbsence(); unsubscribePending(); };
     }, [allEmployees, allWorkAreas, adminEmployeeProfile, currentUserRole, userData, showNotification]);
 
     useEffect(() => {
