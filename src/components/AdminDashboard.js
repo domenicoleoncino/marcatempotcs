@@ -1,3 +1,4 @@
+// File: src/js/components/AdminDashboard.js
 /* eslint-disable no-unused-vars */
 /* global __firebase_config, __initial_auth_token, __app_id */
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -21,17 +22,13 @@ import { saveAs } from 'file-saver';
 // ===========================================
 
 const SUPER_ADMIN_EMAIL = "domenico.leoncino@tcsitalia.com"; 
-
-// --- CONFIGURAZIONE LIMITI ---
 const MAX_DEVICE_LIMIT = 2; 
 
-// Palette colori per Excel (Aree)
 const AREA_COLORS = [
     "FFCCCC", "CCFFCC", "CCCCFF", "FFFFCC", "FFCCFF", 
     "CCFFFF", "FFD9CC", "E5CCFF", "D9FFCC", "FFE5CC"
 ];
 
-// --- COMPONENTE NOTIFICA MIGLIORATO ---
 const NotificationPopup = ({ message, type, onClose }) => {
     const overlayStyle = {
         position: 'fixed', top: '20px', right: '20px', zIndex: 999999, 
@@ -60,7 +57,7 @@ const NotificationPopup = ({ message, type, onClose }) => {
 };
 
 // ===========================================
-// --- 2. SOTTO-COMPONENTI (MODALE & VISTE) ---
+// --- 2. SOTTO-COMPONENTI ---
 // ===========================================
 
 const AddExpenseModal = ({ show, onClose, user, userData, showNotification, expenseToEdit }) => {
@@ -278,7 +275,7 @@ const ExpensesView = ({ expenses, onProcessExpense, onEditExpense, currentUserRo
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-gray-200 pb-4">
                 <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-800 tracking-tight">💰 Gestione Spese</h1>
-                <button onClick={() => setShowArchived(!showArchived)} className={`px-4 py-2 rounded-lg text-sm font-bold shadow transition-colors ${showArchived ? 'bg-gray-600 text-white hover:bg-gray-700' : 'bg-blue-100 text-blue-700 hover:bg-blue-200 border border-blue-300'}`}>{showArchived ? '🔙 Torna alle Spese Attive' : '📂 Mostra Archivio'}</button>
+                <button onClick={() => setShowArchived(!showArchived)} className={`px-4 py-2 rounded-lg text-sm font-bold shadow transition-colors ${showArchived ? 'bg-gray-600 text-white hover:bg-gray-700' : 'bg-blue-100 text-blue-700 hover:bg-blue-200 border border-blue-300'}`}>{showArchived ? '📂 Torna alle Spese Attive' : '📂 Mostra Archivio'}</button>
             </div>
             {!showArchived && (<div className="bg-yellow-50 text-yellow-800 px-4 py-2 rounded-lg text-sm border border-yellow-200">{currentUserRole === 'admin' ? "⚠️ Clicca su \"Gestisci\" per saldarle e archiviarle." : "⚠️ Puoi visualizzare e modificare solo le tue spese."}</div>)}
             <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex flex-wrap gap-4 items-center">
@@ -323,61 +320,65 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
             <div className="bg-white shadow-lg rounded-xl overflow-hidden border border-gray-100">
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-blue-50"><tr><th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider cursor-pointer" onClick={() => requestSort('name')}>Nome{getSortIndicator('name')}</th><th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase">Stato</th><th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase">Aree Assegnate</th><th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase">Azioni</th></tr></thead>
+                        <thead className="bg-blue-50">
+                            <tr>
+                                <th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase tracking-wider cursor-pointer" onClick={() => requestSort('name')}>Nome{getSortIndicator('name')}</th>
+                                <th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase">Stato</th>
+                                <th className="px-6 py-3 pl-20 text-left text-xs font-bold text-blue-800 uppercase">Aree Assegnate</th>
+                                <th className="px-6 py-3 text-left text-xs font-bold text-blue-800 uppercase text-right">Azioni</th>
+                            </tr>
+                        </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                            {employees.map(emp => (
-                                <tr key={emp.id} className={emp.isDeleted ? "bg-red-50" : "hover:bg-blue-50/30"}>
-                                    <td className="px-6 py-4 whitespace-nowrap"><div className="flex items-center gap-2"><div className={`text-sm font-bold ${emp.isDeleted ? 'text-red-700 line-through' : 'text-gray-900'}`}>{emp.name} {emp.surname}</div>{emp.isDeleted && <span className="px-2 py-0.5 text-xs font-bold text-white bg-red-500 rounded">ARCHIVIATO</span>}</div><div className="text-xs text-gray-500">{emp.email}</div></td>
-                                    
-                                    {/* --- COLONNA STATO MODIFICATA: MOSTRA GIUSTIFICATIVI --- */}
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        {emp.isDeleted ? <span className="px-2.5 py-0.5 inline-flex text-xs leading-5 font-bold rounded-full bg-red-100 text-red-600 border border-red-200">Disattivato</span> : 
-                                            emp.activeEntry && emp.activeEntry.isAbsence ? 
-                                                <span className="px-2.5 py-0.5 inline-flex text-xs leading-5 font-bold rounded-full bg-purple-100 text-purple-800 border border-purple-200 uppercase">{emp.activeEntry.note || 'GIUSTIFICATO'}</span> 
-                                            : 
-                                                <span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-bold rounded-full border ${emp.activeEntry ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
-                                                    {emp.activeEntry ? emp.activeEntry.status : 'Non al Lavoro'}
-                                                </span>
-                                        }
-                                    </td>
+                            {employees.map(emp => {
+                                const isClockedIn = !!emp.activeEntry;
+                                const isPaused = isClockedIn && (emp.activeEntry.status === 'In Pausa' || emp.activeEntry.pauses?.some(p => !p.end));
+                                
+                                const dotStyle = {
+                                    width: '12px',
+                                    height: '12px',
+                                    borderRadius: '50%',
+                                    display: 'inline-block',
+                                    backgroundColor: isPaused ? '#f59e0b' : (isClockedIn ? '#22c55e' : '#ef4444')
+                                };
 
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 max-w-xs truncate">{emp.workAreaNames?.join(', ') || 'Nessuna'}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                        {!emp.isDeleted ? (
-                                            <div className="flex flex-col gap-2">
-                                                {emp.activeEntry && !emp.activeEntry.isAbsence ? (
-                                                    <div className="flex gap-1 w-full">
-                                                        <button onClick={()=>openModal('adminClockOut', emp)} className="flex-1 px-3 py-1.5 text-xs bg-yellow-500 text-white rounded-md shadow-sm hover:bg-yellow-600 transition-colors">⏹️ Uscita</button>
-                                                        <button onClick={()=>handleEmployeePauseClick(emp)} disabled={emp.activeEntry.status === 'In Pausa' || emp.activeEntry.pauses?.some(p => p.start && p.end)} className={`flex-1 px-3 py-1.5 text-xs text-white rounded-md shadow-sm transition-colors ${emp.activeEntry.status === 'In Pausa' || emp.activeEntry.pauses?.some(p => p.start && p.end) ? 'bg-gray-400 cursor-not-allowed' : 'bg-orange-500 hover:bg-orange-600'}`}>☕ Pausa</button>
-                                                    </div>
-                                                ) : (
-                                                    <button onClick={()=>openModal('adminClockIn', emp)} className="w-full px-3 py-1.5 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 shadow-sm transition-colors">▶️ Entrata</button>
-                                                )}
-                                                
-                                                {/* --- PULSANTI AGGIUNTIVI RIPRISTINATI --- */}
-                                                {currentUserRole==='admin' && (
-                                                    <div className="flex flex-wrap gap-2 text-xs mt-1 w-full">
-                                                        <button onClick={()=>openModal('manualEntry', emp)} className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded hover:bg-indigo-200 border border-indigo-200 font-semibold" title="Aggiungi Ore Manuali">🕒 Ore</button>
-                                                        <button onClick={()=>openModal('justification', emp)} className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded hover:bg-purple-200 border border-purple-200 font-semibold" title="Aggiungi Giustificativo">👀 Giust.</button>
-                                                        
-                                                        <button onClick={()=>openModal('assignArea', emp)} className="text-blue-600 hover:text-blue-800 font-bold underline ml-1">🌍Aree</button>
-                                                        <button onClick={()=>openModal('editEmployee', emp)} className="text-green-600 hover:text-green-800 underline">✏️Modifica</button>
-                                                        <button onClick={()=>openModal('deleteEmployee', emp)} className="text-red-600 hover:text-red-800 underline">📂Archivia</button>
-                                                    </div>
-                                                )}
-                                                
-                                                {(currentUserRole === 'preposto') && (
-                                                    <div className="flex flex-wrap gap-2 text-xs mt-1 w-full">
-                                                        <button onClick={()=>openModal('resetDevice', emp)} disabled={!emp.deviceIds?.length} className="text-yellow-600 hover:text-yellow-800 font-semibold disabled:text-gray-400 underline decoration-yellow-200 hover:decoration-yellow-800">📱Reset ID</button>
-                                                    </div>
-                                                )}
+                                return (
+                                    <tr key={emp.id} className={emp.isDeleted ? "bg-red-50" : "hover:bg-blue-50/30"}>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="flex flex-col">
+                                                <div className="flex items-center">
+                                                    <span className={`text-sm font-bold ${emp.isDeleted ? 'text-red-700 line-through' : 'text-gray-900'}`}>{emp.name} {emp.surname}</span>
+                                                    {emp.isDeleted && <span className="ml-2 px-2 py-0.5 text-xs font-bold text-white bg-red-500 rounded">ARCHIVIATO</span>}
+                                                </div>
                                             </div>
-                                        ) : (
-                                            currentUserRole==='admin' && <button onClick={()=>openModal('restoreEmployee', emp)} className="text-xs bg-green-600 text-white px-2 py-1 rounded shadow-sm">♻️ Ripristina</button>
-                                        )}
-                                    </td>
-                                </tr>
-                            ))}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="flex items-center gap-3">
+                                                <div style={dotStyle} title={isPaused ? "In Pausa" : (isClockedIn ? "Al Lavoro" : "Non al lavoro")}></div>
+                                                <div className="text-sm font-medium text-gray-700 leading-none">
+                                                    {emp.isDeleted ? <span className="px-2 py-0.5 inline-flex text-xs leading-5 font-bold rounded-full bg-red-100 text-red-600 border border-red-200">Disattivato</span> : 
+                                                        emp.activeEntry && emp.activeEntry.isAbsence ? 
+                                                            <span className="px-2 py-0.5 inline-flex text-xs leading-5 font-bold rounded-full bg-purple-100 text-purple-800 border border-purple-200 uppercase">{emp.activeEntry.note || 'GIUSTIFICATO'}</span> 
+                                                        : 
+                                                            <span className={`px-2 py-0.5 inline-flex text-xs leading-5 font-bold rounded-full border ${emp.activeEntry ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                                                                {emp.activeEntry ? emp.activeEntry.status : 'Non al Lavoro'}
+                                                            </span>
+                                                    }
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 pl-20 whitespace-nowrap text-sm text-gray-600 max-w-xs truncate">{emp.workAreaNames?.join(', ') || 'Nessuna'}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-right">
+                                            {!emp.isDeleted ? (
+                                                <div className="flex flex-col gap-2 items-end">
+                                                    <button onClick={() => openModal('employeeActions', emp)} style={{ backgroundColor: '#2563eb', color: 'white', border: 'none', padding: '6px 14px', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', fontSize: '13px', display: 'inline-flex', alignItems: 'center' }}>⚙️ Gestisci</button>
+                                                </div>
+                                            ) : (
+                                                currentUserRole==='admin' && <button onClick={()=>openModal('restoreEmployee', emp)} className="text-xs bg-green-600 text-white px-2 py-1 rounded shadow-sm">♻️ Ripristina</button>
+                                            )}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>
@@ -507,23 +508,25 @@ const ActionHeader = ({ view, currentUserRole, openModal, onOpenAddExpense }) =>
 
 const AdminDashboard = ({ user, handleLogout, userData }) => {
 
+    // --- STATI GLOBALI DASHBOARD ---
     const [view, setView] = useState('dashboard');
     const [allEmployees, setAllEmployees] = useState([]); 
     const [allWorkAreas, setAllWorkAreas] = useState([]);
     const [admins, setAdmins] = useState([]);
     const [activeEmployeesDetails, setActiveEmployeesDetails] = useState([]);
-    
-    // --- NUOVI STATI PER GESTIRE PRESENZE E ASSENZE SEPARATAMENTE ---
     const [activeWorkers, setActiveWorkers] = useState([]);
     const [absentWorkers, setAbsentWorkers] = useState([]);
-
     const [reports, setReports] = useState([]);
     const [forms, setForms] = useState([]);
     const [expenses, setExpenses] = useState([]); 
     const [showArchived, setShowArchived] = useState(false);
+    
+    // --- STATI MODALI (IMPORTANTE PER NON AVERE L'ERRORE 'not a function') ---
     const [showModal, setShowModal] = useState(false);
     const [modalType, setModalType] = useState('');
     const [selectedItem, setSelectedItem] = useState(null);
+
+    // --- ALTRI STATI ---
     const [isLoading, setIsLoading] = useState(false); 
     const [isActionLoading, setIsActionLoading] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -551,7 +554,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const handleSwitchView = (newView) => { setView(newView); };
     const showNotification = useCallback((message, type = 'success') => { setNotification({ message, type }); setTimeout(() => setNotification(null), 4000); }, []);
 
-    // --- NUOVA LOGICA: FILTER ACTIVE AREAS ---
     const activeWorkAreas = useMemo(() => allWorkAreas.filter(a => !a.isArchived), [allWorkAreas]);
 
     const managedEmployees = useMemo(() => {
@@ -601,12 +603,8 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         if (activeOnly.length > 0) { const violators = activeOnly.filter(e => e.deviceIds && e.deviceIds.length > MAX_DEVICE_LIMIT); if (violators.length > 0) { setTimeout(() => { showNotification(`ATTENZIONE: ${violators.length} dipendenti hanno superato il limite di ${MAX_DEVICE_LIMIT} dispositivi! Controlla la lista.`, 'error'); }, 1000); } }
     }, [allEmployees, showNotification]);
 
-    // --- LOGICA DI UNIONE PRESENZE + ASSENZE ---
     useEffect(() => {
-        // Unisci i due array: lavoratori attivi e assenti giustificati
         const combined = [...activeWorkers, ...absentWorkers];
-        
-        // Filtra in base ai permessi (Admin vede tutto, Preposto solo i suoi)
         const filteredDetails = combined.filter(detail => { 
             if (currentUserRole === 'admin') return true; 
             if (currentUserRole === 'preposto') { 
@@ -616,7 +614,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             } 
             return false; 
         }).sort((a, b) => a.employeeName.localeCompare(b.employeeName)); 
-
         setActiveEmployeesDetails(filteredDetails);
     }, [activeWorkers, absentWorkers, currentUserRole, userData]);
 
@@ -630,7 +627,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         return filterableItems;
     }, [managedEmployees, activeEmployeesDetails, searchTerm, allWorkAreas, sortConfig, showArchived]); 
 
-    // --- VISIBLE AREAS FOR MANAGEMENT (All needed for restore) vs MAP (Only active) ---
     const visibleWorkAreas = useMemo(() => {
         if (currentUserRole === 'admin') return workAreasWithHours;
         if (currentUserRole === 'preposto') { const managedAreaIds = userData?.managedAreaIds || []; return workAreasWithHours.filter(area => managedAreaIds.includes(area.id)); }
@@ -639,33 +635,24 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
     const activeVisibleWorkAreas = useMemo(() => visibleWorkAreas.filter(a => !a.isArchived), [visibleWorkAreas]);
 
-    // --- LISTENER DOPPIO: ATTIVI E ASSENTI OGGI ---
     useEffect(() => {
         if (!allEmployees.length || !allWorkAreas.length) return;
         let isMounted = true; 
         
-        // 1. LISTENER PER CHI È AL LAVORO (Clocked-in)
         const qActive = query(collection(db, "time_entries"), where("status", "==", "clocked-in"));
         const unsubscribeActive = onSnapshot(qActive, (snapshot) => {
             if (!isMounted) return; 
             const activeEntriesList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            
-            // Logica Admin Profilo
             if (adminEmployeeProfile) { const adminEntry = activeEntriesList.find(entry => entry.employeeId === adminEmployeeProfile.id); const hasCompletedPause = adminEntry?.pauses?.some(p => p.start && p.end) || false; setAdminActiveEntry(adminEntry ? { ...adminEntry, id: adminEntry.id, isOnBreak: adminEntry.pauses?.some(p => !p.end) || false, hasCompletedPause: hasCompletedPause } : null); }
-            
             const details = activeEntriesList.filter(entry => entry.clockInTime).map(entry => { const employee = allEmployees.find(emp => emp.id === entry.employeeId); const area = allWorkAreas.find(ar => ar.id === entry.workAreaId); const isOnBreak = entry.pauses?.some(p => !p.end) || false; const hasCompletedPause = entry.pauses?.some(p => p.start && p.end) || false; let clockInFormatted = 'N/D'; if (entry.clockInTime && typeof entry.clockInTime.toDate === 'function') { try { const clockInDate = entry.clockInTime.toDate(); clockInFormatted = new Intl.DateTimeFormat('it-IT', {hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome'}).format(clockInDate); } catch (e) { console.error("Errore formattazione ora entrata:", e); } } return { id: entry.id, employeeId: entry.employeeId, employeeName: employee ? `${employee.name} ${employee.surname}` : 'Sconosciuto', areaName: area ? area.name : 'Sconosciuta', workAreaId: entry.workAreaId, clockInTimeFormatted: clockInFormatted, status: isOnBreak ? 'In Pausa' : 'Al Lavoro', pauses: entry.pauses || [], hasCompletedPause: hasCompletedPause, isAbsence: false }; });
-            
             setActiveWorkers(details);
         }, (error) => { if (isMounted) { console.error("Errore listener timbratura attive:", error); showNotification("Errore aggiornamento presenze.", 'error'); } });
 
-        // 2. LISTENER PER CHI È ASSENTE OGGI (Giustificativo)
         const todayStr = new Date().toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
         const qAbsence = query(collection(db, "time_entries"), where("isAbsence", "==", true), where("clockInDate", "==", todayStr));
-        
         const unsubscribeAbsence = onSnapshot(qAbsence, (snapshot) => {
             if (!isMounted) return;
             const absenceList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            
             const details = absenceList.map(entry => {
                 const employee = allEmployees.find(emp => emp.id === entry.employeeId);
                 const area = allWorkAreas.find(ar => ar.id === entry.workAreaId);
@@ -678,13 +665,12 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                     clockInTimeFormatted: '-',
                     status: entry.absenceType ? entry.absenceType.toUpperCase() : 'ASSENZA',
                     note: entry.note || entry.absenceType,
-                    isAbsence: true // Flag importante
+                    isAbsence: true 
                 };
             });
             setAbsentWorkers(details);
         });
 
-        // 3. Listener Richieste Sospese
         const qPending = query(collection(db, "time_entries"), where("skipBreakStatus", "==", "pending"));
         const unsubscribePending = onSnapshot(qPending, (snapshot) => { if (!isMounted) return; const pendingDocs = snapshot.docs.map(doc => doc.data()); let count = 0; if (currentUserRole === 'admin') count = pendingDocs.length; else if (currentUserRole === 'preposto') { const managedAreaIds = userData?.managedAreaIds || []; const myPending = pendingDocs.filter(d => managedAreaIds.includes(d.workAreaId)); count = myPending.length; } setPendingRequestsCount(count); });
         
@@ -697,7 +683,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         return () => { isMounted = false; unsubscribe(); };
     }, [currentUserRole, userData, showNotification]); 
 
-    // --- ARCHIVIAZIONE AREE ---
     const handleArchiveArea = useCallback(async (area) => {
         if (!window.confirm(`Sei sicuro di voler archiviare l'area "${area.name}"? Non sarà più visibile nella mappa e nei menu, ma i dati rimarranno salvati.`)) return;
         setIsActionLoading(true);
@@ -720,14 +705,17 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
     const handleConfirmProcessExpense = async (expenseId, paymentMethod, note) => { setIsActionLoading(true); try { await updateDoc(doc(db, "expenses", expenseId), { status: 'closed', adminPaymentMethod: paymentMethod, adminNote: note, closedAt: Timestamp.now(), closedBy: user.email }); showNotification("Spesa archiviata con successo!", 'success'); setExpenseToProcess(null); } catch (error) { console.error("Errore archiviazione spesa:", error); showNotification("Errore durante l'archiviazione.", 'error'); } finally { setIsActionLoading(false); } };
     
-    // Funzioni placeholder per evitare warning di linter e props mancanti
-    const handleAdminClockIn = useCallback(async () => {}, []);
-    const handleAdminClockOut = useCallback(async () => {}, []);
-
     const handleAdminPause = useCallback(async () => { if (!adminEmployeeProfile) return showNotification("Profilo dipendente non trovato.", 'error'); if (!adminActiveEntry) return showNotification("Nessuna timbratura attiva trovata.", 'error'); if (adminActiveEntry.isOnBreak) { setIsActionLoading(true); try { const togglePauseFunction = httpsCallable(getFunctions(undefined, 'europe-west1'), 'prepostoTogglePause'); const result = await togglePauseFunction({ deviceId: 'ADMIN_MANUAL_ACTION' }); showNotification(result.data.message, 'success'); } catch (error) { const displayMessage = error.message.includes(":") ? error.message.split(":")[1].trim() : error.message; showNotification(`Errore pausa: ${displayMessage || 'Errore Server.'}`, 'error'); console.error(error); } finally { setIsActionLoading(false); } return; } if (adminActiveEntry.hasCompletedPause) return showNotification("Hai già completato la pausa automatica in questa sessione.", 'info'); const workArea = allWorkAreas.find(area => area.id === adminActiveEntry.workAreaId); if (!workArea || !workArea.pauseDuration || workArea.pauseDuration <= 0) return showNotification(`Nessuna pausa predefinita (>0 min) configurata per l'area "${workArea?.name || 'sconosciuta'}".`, 'info'); const pauseDurationInMinutes = workArea.pauseDuration; if (!window.confirm(`Applicare la pausa predefinita di ${pauseDurationInMinutes} minuti per te stesso? L'azione è immediata e irreversibile.`)) return; setIsActionLoading(true); try { const applyPauseFunction = httpsCallable(getFunctions(undefined, 'europe-west1'), 'applyAutoPauseEmployee'); const result = await applyPauseFunction({ timeEntryId: adminActiveEntry.id, durationMinutes: pauseDurationInMinutes, deviceId: 'ADMIN_MANUAL_ACTION' }); showNotification(result.data.message, 'success'); } catch (error) { const displayMessage = error.message.includes(":") ? error.message.split(":")[1].trim() : error.message; showNotification(`Errore pausa: ${displayMessage || 'Errore Server.'}`, 'error'); console.error(error); } finally { setIsActionLoading(false); } }, [adminActiveEntry, adminEmployeeProfile, allWorkAreas, showNotification]);
     const handleEmployeePauseClick = useCallback(async (employee) => { const timeEntryId = employee?.activeEntry?.id; if (!timeEntryId) return showNotification("Errore: ID della timbratura attiva non trovato.", 'error'); const workArea = allWorkAreas.find(area => area.id === employee.activeEntry.workAreaId); if (!workArea || !workArea.pauseDuration || workArea.pauseDuration <= 0) return showNotification(`Nessuna pausa predefinita configurata per l'area "${workArea?.name || 'sconosciuta'}". Modifica l'area per aggiungerla.`, 'info'); const pauseDurationInMinutes = workArea.pauseDuration; if (employee.activeEntry.hasCompletedPause) return showNotification(`La pausa predefinita di ${pauseDurationInMinutes} minuti è stata già completata per ${employee.name} in questa sessione.`, 'info'); if (!window.confirm(`Applicare la pausa predefinita di ${pauseDurationInMinutes} minuti a ${employee.name} ${employee.surname}?`)) return; setIsActionLoading(true); try { const now = new Date(); const startPause = new Date(now.getTime() - (pauseDurationInMinutes * 60000)); const entryRef = doc(db, "time_entries", timeEntryId); await updateDoc(entryRef, { pauses: arrayUnion({ start: Timestamp.fromDate(startPause), end: Timestamp.fromDate(now), type: 'manual_forced', addedBy: user.email || 'admin' }) }); showNotification("Pausa inserita con successo!", 'success'); } catch (error) { console.error("Errore inserimento pausa:", error); showNotification(`Errore: ${error.message}`, 'error'); } finally { setIsActionLoading(false); } }, [allWorkAreas, user, showNotification]);
     const handleDeleteForm = async (formId) => { if (!window.confirm("Sei sicuro di voler eliminare questo modulo?")) return; try { await deleteDoc(doc(db, "area_forms", formId)); showNotification("Modulo eliminato.", "success"); fetchData(); } catch (error) { console.error("Errore eliminazione:", error); showNotification("Errore eliminazione modulo.", "error"); } };
-    const openModal = useCallback((type, item = null) => { if (type === 'prepostoAddEmployeeToAreas') { setShowAddEmployeeModal(true); return; } if (type === 'newForm') { setShowAddFormModal(true); } else { setModalType(type); setSelectedItem(item); setShowModal(true); } }, []);
+    
+    // --- FUNZIONE OPENMODAL (Cruciale per non avere l'errore) ---
+    const openModal = useCallback((type, item = null) => { 
+        if (type === 'prepostoAddEmployeeToAreas') { setShowAddEmployeeModal(true); return; } 
+        if (type === 'newForm') { setShowAddFormModal(true); } 
+        else { setModalType(type); setSelectedItem(item); setShowModal(true); } 
+    }, []);
+
     const handleResetEmployeeDevice = useCallback(async (employee) => { if (!employee || !employee.id) return showNotification("Dipendente non valido.", 'error'); if (!window.confirm(`Sei sicuro di resettare il dispositivo per ${employee.name} ${employee.surname}?`)) return; setIsActionLoading(true); try { const employeeRef = doc(db, "employees", employee.id); await updateDoc(employeeRef, { deviceIds: [] }); showNotification(`Dispositivo resettato per ${employee.name} ${employee.surname}.`, 'success'); await fetchData(); } catch (error) { console.error("Errore reset dispositivo:", error); showNotification(`Errore reset dispositivo: ${error.message}`, 'error'); } finally { setIsActionLoading(false); } }, [fetchData, showNotification]);
     const generateReport = useCallback(async () => { if (!dateRange.start || !dateRange.end) return showNotification("Seleziona date valide.", 'info'); setIsLoading(true); let isMounted = true; try { const functions = getFunctions(undefined, 'europe-west1'); const generateReportFunction = httpsCallable(functions, 'generateTimeReport'); const result = await generateReportFunction({ startDate: dateRange.start, endDate: dateRange.end, employeeIdFilter: reportEmployeeFilter, areaIdFilter: reportAreaFilter }); if (!isMounted) return; let fetchedEntries = result.data.reports; if (currentUserRole === 'preposto') { const managedIds = userData?.managedAreaIds || []; fetchedEntries = fetchedEntries.filter(entry => { if (entry.isAbsence) return true; return managedIds.includes(entry.workAreaId); }); } const areaHoursMap = new Map(allWorkAreas.map(area => [area.id, 0])); const formatTime = (date, time) => { const finalTime = time === 'In corso' ? '99:99' : time; const formattedDate = date.replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3-$2-$1'); return new Date(`${formattedDate} ${finalTime}`); }; const reportData = fetchedEntries.map(entry => { const clockIn = entry.clockInTime ? new Date(entry.clockInTime) : null; const clockOut = entry.clockOutTime ? new Date(entry.clockOutTime) : null; if (!clockIn) return null; const employee = allEmployees.find(e => e.id === entry.employeeId); const area = allWorkAreas.find(a => a.id === entry.workAreaId); if (!employee) return null; let durationHours = null; let pauseDurationMinutes = 0; let pauseHours = 0; let clockInFormatted = 'N/D'; let clockOutFormatted = 'In corso'; try { clockInFormatted = new Intl.DateTimeFormat('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' }).format(clockIn); if (clockOut) { clockOutFormatted = new Intl.DateTimeFormat('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' }).format(clockOut); } } catch (e) { console.error("Errore formattazione ora report:", e); } if (entry.isAbsence) { return { id: entry.id, employeeName: `${employee.name} ${employee.surname}`, employeeId: entry.employeeId, areaName: "---", clockInDate: clockIn.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' }), clockInTimeFormatted: "-", clockOutTimeFormatted: "-", duration: 0, pauseHours: 0, note: entry.note || entry.absenceType, statusLabel: entry.absenceType ? entry.absenceType.toUpperCase() : "ASSENZA", isAbsence: true, workAreaId: null }; } if (clockOut) { const totalMs = clockOut.getTime() - clockIn.getTime(); const recordedPausesMs = (entry.pauses || []).reduce((acc, p) => { const pauseStart = p.start ? new Date(p.start) : null; const pauseEnd = p.end ? new Date(p.end) : null; if (pauseStart && pauseEnd) { return acc + (pauseEnd.getTime() - pauseStart.getTime()); } return acc; }, 0); const areaPauseMs = (area?.pauseDuration || 0) * 60000; let finalPauseDeductionMs = recordedPausesMs; if (entry.skippedBreak) { if (entry.skipBreakStatus === 'approved') { finalPauseDeductionMs = 0; } else { finalPauseDeductionMs = areaPauseMs; } } else { if (areaPauseMs > 0 && recordedPausesMs < areaPauseMs) { finalPauseDeductionMs = areaPauseMs; } } pauseDurationMinutes = finalPauseDeductionMs / 60000; pauseHours = pauseDurationMinutes / 60; let calculatedDurationMs = totalMs > 0 ? (totalMs - finalPauseDeductionMs) : 0; if (calculatedDurationMs < 0) calculatedDurationMs = 0; durationHours = calculatedDurationMs > 0 ? (calculatedDurationMs / 3600000) : 0; if (area) { areaHoursMap.set(area.id, (areaHoursMap.get(area.id) || 0) + durationHours); } } return { id: entry.id, employeeName: `${employee.name} ${employee.surname}`, employeeId: entry.employeeId, areaName: area ? area.name : 'Sconosciuta', clockInDate: clockIn.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' }), clockInTimeFormatted: clockInFormatted, clockOutTimeFormatted: clockOutFormatted, duration: durationHours, pauseHours: pauseHours, note: entry.note || '', createdBy: entry.createdBy || null, skippedBreak: entry.skippedBreak, skipBreakStatus: entry.skipBreakStatus, skippedBreakReason: entry.skippedBreakReason, workAreaId: entry.workAreaId }; }).filter(Boolean).sort((a, b) => { const dateA = formatTime(a.clockInDate, a.clockInTimeFormatted); const dateB = formatTime(b.clockInDate, b.clockOutTimeFormatted); if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) { if (a.clockInDate !== b.clockInDate) return a.clockInDate.localeCompare(b.clockInDate); return a.employeeName.localeCompare(b.employeeName); } if (dateA < dateB) return -1; if (dateA > dateB) return 1; return a.employeeName.localeCompare(b.employeeName); }); setReports(reportData); setReportTitle(`Report dal ${dateRange.start} al ${dateRange.end}`); const updatedAreas = allWorkAreas.map(area => ({ ...area, totalHours: (areaHoursMap.get(area.id) || 0).toFixed(2) })); setWorkAreasWithHours(updatedAreas); if(reportData.length > 0) setView('reports'); } catch (error) { const displayMessage = error.message.includes(":") ? error.message.split(":")[1].trim() : error.message; showNotification(`Errore generazione report: ${displayMessage || 'Errore Server.'}`, 'error'); console.error(error); } finally { if (isMounted) setIsLoading(false); } return () => { isMounted = false; }; }, [dateRange, reportAreaFilter, reportEmployeeFilter, allEmployees, allWorkAreas, showNotification, currentUserRole, userData]); 
     const handleReviewSkipBreak = useCallback(async (entryId, decision) => { if (!entryId || !decision) return; const confirmMsg = decision === 'approved' ? "Confermi che il dipendente NON ha fatto pausa? Verranno calcolate le ore piene." : "Rifiuti la richiesta? Verrà sottratta la pausa standard dell'area."; if (!window.confirm(confirmMsg)) return; setIsActionLoading(true); try { const functions = getFunctions(undefined, 'europe-west1'); const reviewFunction = httpsCallable(functions, 'reviewSkipBreakRequest'); await reviewFunction({ timeEntryId: entryId, decision: decision, adminId: user.uid }); showNotification(`Richiesta ${decision === 'approved' ? 'APPROVATA' : 'RIFIUTATA'} con successo.`, 'success'); generateReport(); } catch (error) { console.error("Errore revisione pausa:", error); showNotification("Errore durante l'aggiornamento della richiesta.", 'error'); } finally { setIsActionLoading(false); } }, [user, showNotification, generateReport]);
@@ -745,7 +733,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         <div className="min-h-screen bg-gray-100 w-full font-sans text-gray-800">
             {notification && <NotificationPopup message={notification.message} type={notification.type} onClose={() => setNotification(null)} />}
             
-            {/* Header */}
             <header className="bg-white shadow-md">
                  <div className="max-w-7xl mx-auto py-3 px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                      <CompanyLogo />
@@ -768,7 +755,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                  </div>
             </header>
 
-            {/* Navigazione */}
             <nav className="bg-white border-b border-gray-200 shadow-sm">
                  <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                      <div className="flex justify-center">
@@ -787,7 +773,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
             <ActionHeader view={view} currentUserRole={currentUserRole} openModal={openModal} onOpenAddExpense={() => setShowAddExpenseModal(true)} />
 
-            {/* CONTENUTO PRINCIPALE */}
             <div className="max-w-7xl mx-auto w-full p-4 sm:p-6 lg:p-8">
                 <main>
                     {view === 'dashboard' && <DashboardView totalEmployees={managedEmployees.length} activeEmployeesDetails={activeEmployeesDetails} totalDayHours={totalDayHours} workAreas={activeWorkAreas} />}
@@ -825,7 +810,23 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             )}
 
             {showModal && (
-                 <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} workAreas={activeWorkAreas} onDataUpdate={fetchData} user={user} superAdminEmail={superAdminEmail} allEmployees={allEmployees} currentUserRole={currentUserRole} userData={userData} onAdminClockIn={handleAdminClockIn} showNotification={showNotification} />
+                 <AdminModal 
+                    type={modalType} 
+                    item={selectedItem} 
+                    setShowModal={setShowModal} 
+                    // --- CORREZIONE QUI SOTTO: PASSATO SETMODALTYPE ---
+                    setModalType={setModalType}
+                    workAreas={activeWorkAreas} 
+                    onDataUpdate={fetchData} 
+                    user={user} 
+                    superAdminEmail={superAdminEmail} 
+                    allEmployees={allEmployees} 
+                    currentUserRole={currentUserRole} 
+                    userData={userData} 
+                    activeEmployeesDetails={activeEmployeesDetails} 
+                    onAdminApplyPause={handleEmployeePauseClick} 
+                    showNotification={showNotification} 
+                />
              )}
 
             <AddFormModal show={showAddFormModal} onClose={() => setShowAddFormModal(false)} workAreas={activeWorkAreas} user={user} onDataUpdate={fetchData} currentUserRole={currentUserRole} userData={userData} showNotification={showNotification} />

@@ -7,7 +7,7 @@ import { db } from '../firebase';
 import { doc, updateDoc, deleteDoc, addDoc, collection, Timestamp, writeBatch, query, where, getDocs } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
-const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, allEmployees, userData, showNotification, onAdminApplyPause }) => {
+const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, allEmployees, userData, showNotification, onAdminApplyPause, setModalType, activeEmployeesDetails }) => {
 
     const [formData, setFormData] = useState({});
     const [error, setError] = useState('');
@@ -247,7 +247,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                 
                 // --- OPERAZIONI SPECIALI ---
                 case 'manualEntryForm':
-                case 'manualEntry': // Aggiunto caso manualEntry
+                case 'manualEntry': 
                      const startDateTime = new Date(`${formData.date}T${formData.startTime}`);
                      const endDateTime = new Date(`${formData.date}T${formData.endTime}`);
                      if (endDateTime <= startDateTime) throw new Error("L'uscita deve essere dopo l'entrata.");
@@ -259,7 +259,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                      break;
                      
                 case 'absenceEntryForm':
-                case 'justification': // Aggiunto caso justification
+                case 'justification': 
                      const start = new Date(formData.startDate); const end = new Date(formData.endDate);
                      if (end < start) throw new Error("Data fine precedente a data inizio.");
                      const batch = writeBatch(db); const tRef = collection(db, "time_entries");
@@ -289,12 +289,9 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                 // --- GESTIONE CANCELLAZIONE (ARCHIVIA vs ELIMINA TUTTO) ---
                 case 'deleteEmployee':
                     if (isHardDelete) {
-                        // --- OPZIONE 1: ELIMINAZIONE TOTALE (PULIZIA) ---
-                        // Cancella TUTTE le timbrature per evitare record "Sconosciuti"
                         const entriesQuery = query(collection(db, "time_entries"), where("employeeId", "==", item.id));
                         const snapshot = await getDocs(entriesQuery);
                         
-                        // Usiamo batch multipli se ci sono più di 500 record
                         const deleteBatch = writeBatch(db);
                         let count = 0;
                         let batches = [deleteBatch];
@@ -308,12 +305,10 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                             count++;
                         });
 
-                        // Esegui cancellazione timbrature
                         for (const b of batches) {
                             await b.commit();
                         }
 
-                        // Cancella utente/dipendente
                         if (item.userId) {
                             const deleteUser = httpsCallable(functions, 'deleteUserAndEmployee');
                             await deleteUser({ userId: item.userId });
@@ -322,8 +317,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                         }
 
                     } else {
-                        // --- OPZIONE 2: ARCHIVIAZIONE (STANDARD) ---
-                        // Mantiene storico e nome, blocca solo l'accesso
                         await updateDoc(doc(db, "employees", item.id), {
                             isDeleted: true,
                             deviceIds: [],
@@ -427,6 +420,100 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
         ];
 
         switch (type) {
+            // --- NUOVO MENU GESTIONE DIPENDENTE ---
+            case 'employeeActions':
+                // Per avere lo stato aggiornato, cerchiamo il dipendente fresco nella lista activeEmployeesDetails
+                // che viene passata da AdminDashboard e si aggiorna in tempo reale.
+                const activeEntry = activeEmployeesDetails ? activeEmployeesDetails.find(d => d.employeeId === item.id) : null;
+                const isClockedIn = !!activeEntry && !activeEntry.isAbsence;
+                const isPaused = isClockedIn && activeEntry.status === 'In Pausa';
+                const hasCompletedPause = activeEntry?.hasCompletedPause;
+
+                // Stile bottone menu
+                const menuBtnStyle = {
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    width: '100%', padding: '16px', marginBottom: '10px',
+                    backgroundColor: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: '8px',
+                    fontSize: '16px', fontWeight: '600', color: '#374151', cursor: 'pointer',
+                    transition: 'background 0.2s'
+                };
+
+                return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                        
+                        {/* SEZIONE 1: OPERATIVITÀ GIORNALIERA */}
+                        <p style={{ fontSize: '12px', fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', marginBottom: '5px' }}>Azioni Rapide</p>
+                        
+                        {isClockedIn ? (
+                            <>
+                                <button type="button" onClick={() => setModalType('manualClockOut')} style={{...menuBtnStyle, backgroundColor: '#fee2e2', color: '#991b1b', borderColor: '#fecaca'}}>
+                                    <span>🚪 Timbra Uscita</span>
+                                    <span>➔</span>
+                                </button>
+                                
+                                {isPaused ? (
+                                    <button type="button" onClick={() => onAdminApplyPause({id: item.id, activeEntry: activeEntry})} style={{...menuBtnStyle, backgroundColor: '#dcfce7', color: '#166534', borderColor: '#86efac'}}>
+                                        <span>▶️ Riprendi Lavoro (Fine Pausa)</span>
+                                        <span>➔</span>
+                                    </button>
+                                ) : (
+                                    hasCompletedPause ? (
+                                        <button type="button" disabled style={{...menuBtnStyle, backgroundColor: '#e5e7eb', color: '#9ca3af', borderColor: '#d1d5db', cursor: 'not-allowed', opacity: 0.7}}>
+                                            <span>✅ Pausa Eseguita</span>
+                                            <span>✓</span>
+                                        </button>
+                                    ) : (
+                                        <button type="button" onClick={() => onAdminApplyPause({id: item.id, activeEntry: activeEntry})} style={{...menuBtnStyle, backgroundColor: '#fef3c7', color: '#92400e', borderColor: '#fde68a'}}>
+                                            <span>☕ Metti in Pausa</span>
+                                            <span>➔</span>
+                                        </button>
+                                    )
+                                )}
+                            </>
+                        ) : (
+                             <button type="button" onClick={() => setModalType('manualClockIn')} style={{...menuBtnStyle, backgroundColor: '#dcfce7', color: '#166534', borderColor: '#86efac'}}>
+                                <span>📍 Timbra Entrata (Manuale)</span>
+                                <span>➔</span>
+                            </button>
+                        )}
+
+                        {/* SEZIONE 2: CORREZIONI */}
+                        <p style={{ fontSize: '12px', fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', margin: '10px 0 5px' }}>Correzioni & Ore</p>
+                        
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                            <button type="button" onClick={() => setModalType('manualEntryForm')} style={{ ...menuBtnStyle, fontSize: '14px', padding: '12px', justifyContent: 'center', textAlign: 'center' }}>
+                                🕒 +Ore/Dimenticanza
+                            </button>
+                            <button type="button" onClick={() => setModalType('absenceEntryForm')} style={{ ...menuBtnStyle, fontSize: '14px', padding: '12px', justifyContent: 'center', textAlign: 'center' }}>
+                                🏖️ Giustifica/Assenza
+                            </button>
+                        </div>
+
+                        {/* SEZIONE 3: AMMINISTRAZIONE */}
+                        <p style={{ fontSize: '12px', fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', margin: '10px 0 5px' }}>Profilo Utente</p>
+                        
+                        <button type="button" onClick={() => setModalType('editEmployee')} style={menuBtnStyle}>
+                            <span>✏️ Modifica Dati</span>
+                            <span>➔</span>
+                        </button>
+                        
+                        <button type="button" onClick={() => setModalType('assignArea')} style={menuBtnStyle}>
+                            <span>🗺️ Assegna Aree</span>
+                            <span>➔</span>
+                        </button>
+
+                        <button type="button" onClick={() => setModalType('resetDevice')} style={{...menuBtnStyle, color: '#dc2626'}}>
+                            <span>📱 Reset ID Dispositivo</span>
+                            <span>⚠️</span>
+                        </button>
+
+                         <button type="button" onClick={() => setModalType('deleteEmployee')} style={{...menuBtnStyle, backgroundColor: '#fff1f2', color: '#be123c', borderColor: '#fda4af'}}>
+                            <span>📁 Archivia / Elimina</span>
+                            <span>🗑️</span>
+                        </button>
+                    </div>
+                );
+
             case 'newEmployee':
                 return (
                     <>
@@ -481,9 +568,17 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                 const pAreas = workAreas.filter(wa => userData?.managedAreaIds?.includes(wa.id));
                 return renderCheckboxes('Aree Competenza', 'selectedPrepostoAreas', pAreas);
             case 'manualEntryForm':
-            case 'manualEntry': // Aggiunto caso manualEntry
-                const allEmpOpts = allEmployees.map(e => ({ value: e.id, label: `${e.name} ${e.surname}` }));
+            case 'manualEntry': 
+                // Se è preposto, mostra solo i suoi dipendenti nel menu a tendina
+                let empForManual = allEmployees;
+                if (userData?.role === 'preposto') {
+                    const managedIds = userData?.managedAreaIds || [];
+                    empForManual = allEmployees.filter(e => e.workAreaIds && e.workAreaIds.some(id => managedIds.includes(id)));
+                }
+                const allEmpOpts = empForManual.map(e => ({ value: e.id, label: `${e.name} ${e.surname}` }));
+                
                 const allAreaOpts = (userData.role === 'admin' ? workAreas : workAreas.filter(wa => userData.managedAreaIds?.includes(wa.id))).map(a => ({ value: a.id, label: a.name }));
+                
                 return (
                     <>
                          {item ? renderFieldLocal('Dipendente', 'employeeId', 'select', allEmpOpts, true, true) : renderFieldLocal('Dipendente', 'employeeId', 'select', allEmpOpts)}
@@ -496,8 +591,15 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                     </>
                 );
             case 'absenceEntryForm':
-            case 'justification': // Aggiunto caso justification
-                const empOptsAbs = allEmployees.map(e => ({ value: e.id, label: `${e.name} ${e.surname}` }));
+            case 'justification': 
+                // Se è preposto, mostra solo i suoi dipendenti nel menu a tendina
+                let empForAbsence = allEmployees;
+                if (userData?.role === 'preposto') {
+                    const managedIds = userData?.managedAreaIds || [];
+                    empForAbsence = allEmployees.filter(e => e.workAreaIds && e.workAreaIds.some(id => managedIds.includes(id)));
+                }
+                const empOptsAbs = empForAbsence.map(e => ({ value: e.id, label: `${e.name} ${e.surname}` }));
+                
                 return (
                     <>
                         {item ? renderFieldLocal('Dipendente', 'employeeId', 'select', empOptsAbs, true, true) : renderFieldLocal('Dipendente', 'employeeId', 'select', empOptsAbs)}
@@ -597,6 +699,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
     };
 
     const getTitle = () => {
+        if(type === 'employeeActions') return `Gestione: ${item?.name} ${item?.surname}`;
         if(type === 'newEmployee') return 'Nuovo Dipendente';
         if(type === 'newArea') return 'Nuova Area di Lavoro';
         if(type === 'newAdmin') return 'Nuovo Admin/Preposto';
@@ -637,9 +740,12 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                 </div>
                 <div style={{ padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
                     <button type="button" onClick={() => setShowModal(false)} style={{ padding: '10px 20px', backgroundColor: '#fff', border: '1px solid #d1d5db', borderRadius: '6px', color: '#374151', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>Annulla</button>
-                    <button type="submit" form="modal-form" disabled={isLoading} style={{ padding: '10px 20px', backgroundColor: (type.includes('delete') || isHardDelete) ? '#dc2626' : (type === 'restoreEmployee' ? '#16a34a' : '#2563eb'), border: 'none', borderRadius: '6px', color: '#fff', fontWeight: '600', fontSize: '14px', cursor: isLoading ? 'not-allowed' : 'pointer', opacity: isLoading ? 0.7 : 1, boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)' }}>
-                        {isLoading ? 'Attendi...' : (type === 'deleteEmployee' ? (isHardDelete ? 'Elimina Definitivamente' : 'Archivia') : (type === 'restoreEmployee' ? 'Ripristina' : (type.includes('delete') ? 'Elimina definitivamente' : 'Salva')))}
-                    </button>
+                    {/* Se il tipo è employeeActions non mostriamo il tasto SALVA ma solo Annulla (o Chiudi) */}
+                    {type !== 'employeeActions' && (
+                        <button type="submit" form="modal-form" disabled={isLoading} style={{ padding: '10px 20px', backgroundColor: (type.includes('delete') || isHardDelete) ? '#dc2626' : (type === 'restoreEmployee' ? '#16a34a' : '#2563eb'), border: 'none', borderRadius: '6px', color: '#fff', fontWeight: '600', fontSize: '14px', cursor: isLoading ? 'not-allowed' : 'pointer', opacity: isLoading ? 0.7 : 1, boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)' }}>
+                            {isLoading ? 'Attendi...' : (type === 'deleteEmployee' ? (isHardDelete ? 'Elimina Definitivamente' : 'Archivia') : (type === 'restoreEmployee' ? 'Ripristina' : (type.includes('delete') ? 'Elimina definitivamente' : 'Salva')))}
+                        </button>
+                    )}
                 </div>
             </div>
         </div>,
