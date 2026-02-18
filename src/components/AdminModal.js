@@ -49,7 +49,8 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                  workAreaId: '',
                  date: todayDate,
                  startTime: '08:00',
-                 endTime: '17:00'
+                 endTime: '17:00',
+                 skippedBreak: false // <--- AGGIUNTO: Inizializzazione campo No Pausa
              });
         }
         // GESTIONE GIUSTIFICATIVI/ASSENZE (justification)
@@ -251,10 +252,19 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                      const startDateTime = new Date(`${formData.date}T${formData.startTime}`);
                      const endDateTime = new Date(`${formData.date}T${formData.endTime}`);
                      if (endDateTime <= startDateTime) throw new Error("L'uscita deve essere dopo l'entrata.");
+                     
+                     // --- MODIFICA: Salvataggio campi pausa ---
                      await addDoc(collection(db, "time_entries"), {
-                         employeeId: formData.employeeId, workAreaId: formData.workAreaId,
-                         clockInTime: Timestamp.fromDate(startDateTime), clockOutTime: Timestamp.fromDate(endDateTime),
-                         status: 'clocked-out', isManual: true, note: 'Recupero dimenticanza (Admin)', pauses: []
+                         employeeId: formData.employeeId, 
+                         workAreaId: formData.workAreaId,
+                         clockInTime: Timestamp.fromDate(startDateTime), 
+                         clockOutTime: Timestamp.fromDate(endDateTime),
+                         status: 'clocked-out', 
+                         isManual: true, 
+                         note: 'Recupero dimenticanza (Admin)', 
+                         pauses: [],
+                         skippedBreak: formData.skippedBreak, // Salva se ha saltato la pausa
+                         skipBreakStatus: formData.skippedBreak ? 'approved' : 'none' // Se saltata, è approvata
                      });
                      break;
                      
@@ -588,6 +598,8 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                              {renderFieldLocal('Entrata', 'startTime', 'time')}
                              {renderFieldLocal('Uscita', 'endTime', 'time')}
                          </div>
+                         {/* --- AGGIUNTO: Checkbox per No Pausa --- */}
+                         {renderSingleCheckboxLocal('Non ha fatto pausa (Calcola ore piene)', 'skippedBreak')}
                     </>
                 );
             case 'absenceEntryForm':
