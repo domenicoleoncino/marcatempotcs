@@ -7,7 +7,8 @@ import CompanyLogo from './CompanyLogo';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-const MIN_REENTRY_DELAY_MINUTES = 30; 
+// --- MODIFICA QUI: Blocco impostato a 60 minuti ---
+const MIN_REENTRY_DELAY_MINUTES = 60; 
 
 function getOrGenerateDeviceId() {
     let deviceId = localStorage.getItem('marcatempoDeviceId'); 

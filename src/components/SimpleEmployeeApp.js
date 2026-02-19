@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db, storage } from '../firebase';
-// [MODIFICA] Aggiunto updateDoc per la modifica
 import { collection, query, where, onSnapshot, orderBy, limit, getDocs, Timestamp, deleteDoc, updateDoc, doc, addDoc } from 'firebase/firestore'; 
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { getFunctions, httpsCallable } from 'firebase/functions';
@@ -8,6 +7,9 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Capacitor } from '@capacitor/core'; 
+
+// --- NUOVO BLOCCO 60 MINUTI ---
+const MIN_REENTRY_DELAY_MINUTES = 60; 
 
 const PAUSE_REASONS = [
     { code: '01', reason: 'Mancata pausa per intervento urgente.' },
@@ -78,20 +80,17 @@ const ExpenseModalInternal = ({ show, onClose, user, employeeData, expenseToEdit
     const [file, setFile] = useState(null);
     const [isSaving, setIsSaving] = useState(false);
 
-    // Effetto per popolare i campi se stiamo modificando
     useEffect(() => {
         if (expenseToEdit) {
             setAmount(expenseToEdit.amount);
             setDescription(expenseToEdit.description);
-            // Gestione data: se è Timestamp converti, altrimenti usa stringa
             if (expenseToEdit.date && expenseToEdit.date.toDate) {
                 setDate(expenseToEdit.date.toDate().toISOString().split('T')[0]);
             }
             setPaymentMethod(expenseToEdit.paymentMethod || 'Contanti');
             setNote(expenseToEdit.note || '');
-            setFile(null); // Reset file input (l'utente ne carica uno nuovo solo se vuole cambiare)
+            setFile(null); 
         } else {
-            // Reset se è un nuovo inserimento
             setAmount(''); setDescription(''); setNote(''); setFile(null); 
             setPaymentMethod('Contanti');
             setDate(new Date().toISOString().split('T')[0]);
@@ -106,8 +105,6 @@ const ExpenseModalInternal = ({ show, onClose, user, employeeData, expenseToEdit
         setIsSaving(true);
         try {
             let receiptUrl = expenseToEdit ? expenseToEdit.receiptUrl : null;
-            
-            // Se l'utente ha selezionato un NUOVO file, caricalo
             if (file) {
                 if (!storage) throw new Error("Storage non inizializzato.");
                 const fileRef = ref(storage, `expenses/${user.uid}/${Date.now()}_${file.name}`);
@@ -125,16 +122,14 @@ const ExpenseModalInternal = ({ show, onClose, user, employeeData, expenseToEdit
                 userName: employeeData ? `${employeeData.name} ${employeeData.surname}` : user.email,
                 userRole: 'employee',
                 receiptUrl: receiptUrl,
-                status: 'pending', // Torna sempre pending se modificata
+                status: 'pending', 
                 updatedAt: Timestamp.now()
             };
 
             if (expenseToEdit) {
-                // MODIFICA
                 await updateDoc(doc(db, "expenses", expenseToEdit.id), expenseData);
                 alert("Spesa aggiornata!");
             } else {
-                // CREAZIONE
                 expenseData.createdAt = Timestamp.now();
                 await addDoc(collection(db, "expenses"), expenseData);
                 alert("Spesa registrata!");
@@ -209,7 +204,7 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
     const [showExpenseHistory, setShowExpenseHistory] = useState(false);
     const [myExpenses, setMyExpenses] = useState([]);
     const [isLoadingExpenses, setIsLoadingExpenses] = useState(false);
-    const [expenseToEdit, setExpenseToEdit] = useState(null); // STATO PER LA MODIFICA
+    const [expenseToEdit, setExpenseToEdit] = useState(null); 
 
     const functions = getFunctions(undefined, 'europe-west1');
     const clockIn = httpsCallable(functions, 'clockEmployeeIn');
@@ -281,6 +276,18 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
         setIsProcessing(true);
         try {
             if (action === 'clockIn') {
+                // --- NUOVO CONTROLLO: 60 MINUTI DALL'USCITA ---
+                if (lastEntry && lastEntry.clockOutTime) {
+                     const now = new Date();
+                     const outTime = lastEntry.clockOutTime.toDate();
+                     const diffMins = Math.floor((now - outTime) / 60000);
+                     if (diffMins < MIN_REENTRY_DELAY_MINUTES) {
+                         alert(`⛔ ATTENZIONE: Devi attendere almeno ${MIN_REENTRY_DELAY_MINUTES - diffMins} minuti prima di timbrare di nuovo l'entrata.`);
+                         setIsProcessing(false);
+                         return;
+                     }
+                }
+
                 const areaId = isGpsRequired ? inRangeArea?.id : manualAreaId;
                 if (!areaId) throw new Error("Seleziona Area");
                 const res = await clockIn({ areaId, deviceId, isGpsRequired, note: !isGpsRequired ? 'Manuale da App' : '' });
