@@ -50,7 +50,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                  date: todayDate,
                  startTime: '08:00',
                  endTime: '17:00',
-                 skippedBreak: false // <--- AGGIUNTO: Inizializzazione campo No Pausa
+                 skippedBreak: false 
              });
         }
         // GESTIONE GIUSTIFICATIVI/ASSENZE (justification)
@@ -74,12 +74,12 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                 const employeeId = item.id; 
                 let availableAreas = [];
                 if (userData?.role === 'admin') {
-                    availableAreas = workAreas;
+                    availableAreas = workAreas || [];
                 } else if (userData?.role === 'preposto') {
                     const managedAreaIds = userData?.managedAreaIds || [];
-                    availableAreas = workAreas.filter(wa => managedAreaIds.includes(wa.id));
+                    availableAreas = (workAreas || []).filter(wa => managedAreaIds.includes(wa.id));
                 } else {
-                    availableAreas = workAreas.filter(wa => item.workAreaIds?.includes(wa.id));
+                    availableAreas = (workAreas || []).filter(wa => item.workAreaIds?.includes(wa.id));
                 }
                 
                 const isClockOut = type === 'manualClockOut' || type === 'adminClockOut';
@@ -183,9 +183,9 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
             <label style={labelStyle}>{label}</label>
             <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '10px', backgroundColor: '#f9fafb' }}>
                 {items && items.length > 0 ? [...items].sort((a, b) => a.name.localeCompare(b.name)).map(it => (
-                    <div key={it.id} className="flex items-center mb-2 last:mb-0">
+                    <div key={it.id} className="flex items-center mb-2 last:mb-0" style={{display: 'flex', alignItems: 'center', marginBottom: '8px'}}>
                         <input id={`${name}-${it.id}`} name={name} type="checkbox" value={it.id} checked={(formData[name] || []).includes(it.id)} onChange={handleChange} disabled={disabled} style={{ width: '16px', height: '16px', marginRight: '8px' }} />
-                        <label htmlFor={`${name}-${it.id}`} style={{ fontSize: '14px', color: disabled ? '#9ca3af' : '#374151' }}>{it.name}</label>
+                        <label htmlFor={`${name}-${it.id}`} style={{ fontSize: '14px', color: disabled ? '#9ca3af' : '#374151', margin: 0 }}>{it.name}</label>
                     </div>
                 )) : <p className="text-xs text-gray-500">Nessuna opzione disponibile.</p>}
             </div>
@@ -408,7 +408,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                     break;
                 default: break;
             }
-            showNotification('Operazione completata con successo.', 'success');
+            if (showNotification) showNotification('Operazione completata con successo.', 'success');
             if (onDataUpdate) await onDataUpdate();
             setShowModal(false);
         } catch (err) {
@@ -430,16 +430,13 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
         ];
 
         switch (type) {
-            // --- NUOVO MENU GESTIONE DIPENDENTE ---
+            // --- MENU GESTIONE DIPENDENTE ---
             case 'employeeActions':
-                // Per avere lo stato aggiornato, cerchiamo il dipendente fresco nella lista activeEmployeesDetails
-                // che viene passata da AdminDashboard e si aggiorna in tempo reale.
                 const activeEntry = activeEmployeesDetails ? activeEmployeesDetails.find(d => d.employeeId === item.id) : null;
                 const isClockedIn = !!activeEntry && !activeEntry.isAbsence;
                 const isPaused = isClockedIn && activeEntry.status === 'In Pausa';
                 const hasCompletedPause = activeEntry?.hasCompletedPause;
 
-                // Stile bottone menu
                 const menuBtnStyle = {
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     width: '100%', padding: '16px', marginBottom: '10px',
@@ -451,7 +448,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                 return (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
                         
-                        {/* SEZIONE 1: OPERATIVITÀ GIORNALIERA */}
                         <p style={{ fontSize: '12px', fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', marginBottom: '5px' }}>Azioni Rapide</p>
                         
                         {isClockedIn ? (
@@ -487,7 +483,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                             </button>
                         )}
 
-                        {/* SEZIONE 2: CORREZIONI */}
                         <p style={{ fontSize: '12px', fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', margin: '10px 0 5px' }}>Correzioni & Ore</p>
                         
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
@@ -499,7 +494,6 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                             </button>
                         </div>
 
-                        {/* SEZIONE 3: AMMINISTRAZIONE */}
                         <p style={{ fontSize: '12px', fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', margin: '10px 0 5px' }}>Profilo Utente</p>
                         
                         <button type="button" onClick={() => setModalType('editEmployee')} style={menuBtnStyle}>
@@ -571,44 +565,41 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
             case 'assignPrepostoAreas':
                 return <>{renderCheckboxes('Aree Gestite', 'selectedAreas', workAreas)}{renderSingleCheckboxLocal('Controllo GPS', 'controlloGpsRichiesto')}</>;
             case 'prepostoAddEmployeeToAreas':
-                const empOpts = allEmployees.map(e => ({ value: e.id, label: `${e.name} ${e.surname}` }));
-                const myAreas = workAreas.filter(wa => userData?.managedAreaIds?.includes(wa.id));
+                const empOpts = allEmployees ? allEmployees.map(e => ({ value: e.id, label: `${e.name} ${e.surname}` })) : [];
+                const myAreas = workAreas ? workAreas.filter(wa => userData?.managedAreaIds?.includes(wa.id)) : [];
                 return <>{renderFieldLocal('Dipendente', 'selectedEmployee', 'select', empOpts)}{renderCheckboxes('Aree Competenza', 'selectedPrepostoAreas', myAreas)}</>;
             case 'assignEmployeeToPrepostoArea':
-                const pAreas = workAreas.filter(wa => userData?.managedAreaIds?.includes(wa.id));
+                const pAreas = workAreas ? workAreas.filter(wa => userData?.managedAreaIds?.includes(wa.id)) : [];
                 return renderCheckboxes('Aree Competenza', 'selectedPrepostoAreas', pAreas);
             case 'manualEntryForm':
             case 'manualEntry': 
-                // Se è preposto, mostra solo i suoi dipendenti nel menu a tendina
-                let empForManual = allEmployees;
+                let empForManual = allEmployees || [];
                 if (userData?.role === 'preposto') {
                     const managedIds = userData?.managedAreaIds || [];
-                    empForManual = allEmployees.filter(e => e.workAreaIds && e.workAreaIds.some(id => managedIds.includes(id)));
+                    empForManual = empForManual.filter(e => e.workAreaIds && e.workAreaIds.some(id => managedIds.includes(id)));
                 }
                 const allEmpOpts = empForManual.map(e => ({ value: e.id, label: `${e.name} ${e.surname}` }));
                 
-                const allAreaOpts = (userData.role === 'admin' ? workAreas : workAreas.filter(wa => userData.managedAreaIds?.includes(wa.id))).map(a => ({ value: a.id, label: a.name }));
+                const allAreaOpts = (userData?.role === 'admin' ? workAreas : (workAreas || []).filter(wa => userData?.managedAreaIds?.includes(wa.id))).map(a => ({ value: a.id, label: a.name }));
                 
                 return (
                     <>
                          {item ? renderFieldLocal('Dipendente', 'employeeId', 'select', allEmpOpts, true, true) : renderFieldLocal('Dipendente', 'employeeId', 'select', allEmpOpts)}
                          {renderFieldLocal('Area', 'workAreaId', 'select', allAreaOpts)}
                          {renderFieldLocal('Data', 'date', 'date')}
-                         <div className="grid grid-cols-2 gap-4">
+                         <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px'}}>
                              {renderFieldLocal('Entrata', 'startTime', 'time')}
                              {renderFieldLocal('Uscita', 'endTime', 'time')}
                          </div>
-                         {/* --- AGGIUNTO: Checkbox per No Pausa --- */}
                          {renderSingleCheckboxLocal('Non ha fatto pausa (Calcola ore piene)', 'skippedBreak')}
                     </>
                 );
             case 'absenceEntryForm':
             case 'justification': 
-                // Se è preposto, mostra solo i suoi dipendenti nel menu a tendina
-                let empForAbsence = allEmployees;
+                let empForAbsence = allEmployees || [];
                 if (userData?.role === 'preposto') {
                     const managedIds = userData?.managedAreaIds || [];
-                    empForAbsence = allEmployees.filter(e => e.workAreaIds && e.workAreaIds.some(id => managedIds.includes(id)));
+                    empForAbsence = empForAbsence.filter(e => e.workAreaIds && e.workAreaIds.some(id => managedIds.includes(id)));
                 }
                 const empOptsAbs = empForAbsence.map(e => ({ value: e.id, label: `${e.name} ${e.surname}` }));
                 
@@ -616,7 +607,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                     <>
                         {item ? renderFieldLocal('Dipendente', 'employeeId', 'select', empOptsAbs, true, true) : renderFieldLocal('Dipendente', 'employeeId', 'select', empOptsAbs)}
                         {renderFieldLocal('Tipo Assenza', 'type', 'select', absenceTypes)}
-                        <div className="grid grid-cols-2 gap-4">
+                        <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px'}}>
                              {renderFieldLocal('Dal', 'startDate', 'date')}
                              {renderFieldLocal('Al', 'endDate', 'date')}
                         </div>
@@ -628,7 +619,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
             case 'manualClockOut':
             case 'adminClockOut':
                 const isClockIn = type.includes('In');
-                const areas = workAreas.filter(wa => item?.workAreaIds?.includes(wa.id) || userData?.role === 'admin' || userData?.managedAreaIds?.includes(wa.id));
+                const areas = (workAreas || []).filter(wa => item?.workAreaIds?.includes(wa.id) || userData?.role === 'admin' || userData?.managedAreaIds?.includes(wa.id));
                 const aOpts = areas.map(a => ({ value: a.id, label: a.name }));
                 return (
                     <>
@@ -638,7 +629,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                         </div>
                         {renderFieldLocal(isClockIn ? 'Ora Entrata' : 'Ora Uscita', 'manualTime', 'datetime-local')}
                         {isClockIn && renderFieldLocal('Area', 'selectedAreaId', 'select', aOpts)}
-                        <div className="mb-3">
+                        <div style={{marginBottom: '15px'}}>
                             <label style={labelStyle}>Motivo</label>
                             <textarea name="note" value={formData.note || ''} onChange={handleChange} rows="2" style={{...inputStyle, resize: 'vertical'}}></textarea>
                         </div>
@@ -646,7 +637,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                 );
             case 'deleteEmployee':
                 return (
-                    <div className="text-center py-6">
+                    <div style={{textAlign: 'center', padding: '24px 0'}}>
                         <div style={{ fontSize: '40px', marginBottom: '10px' }}>📁</div>
                          <p style={{fontSize: '18px', color: '#1f2937', marginBottom: '10px'}}>
                              Vuoi <b>{isHardDelete ? 'ELIMINARE DEFINITIVAMENTE' : 'ARCHIVIARE'}</b> il dipendente <br/>
@@ -678,7 +669,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                 );
             case 'restoreEmployee':
                 return (
-                    <div className="text-center py-6">
+                    <div style={{textAlign: 'center', padding: '24px 0'}}>
                         <div style={{ fontSize: '40px', marginBottom: '10px' }}>♻️</div>
                          <p style={{fontSize: '18px', color: '#1f2937', marginBottom: '10px'}}>
                              Vuoi <b>RIATTIVARE</b> il dipendente <br/>
@@ -694,7 +685,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
             case 'resetDevice':
             case 'applyPredefinedPause':
                 return (
-                    <div className="text-center py-6">
+                    <div style={{textAlign: 'center', padding: '24px 0'}}>
                         <div style={{ fontSize: '40px', marginBottom: '10px' }}>⚠️</div>
                          <p style={{fontSize: '18px', color: '#1f2937', marginBottom: '10px'}}>
                              Confermi l'operazione su <br/>
@@ -732,7 +723,7 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
     return ReactDOM.createPortal(
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'ui-sans-serif, system-ui, sans-serif' }}>
             <div onClick={() => setShowModal(false)} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: 100000 }} />
-            <div className="shadow-2xl flex flex-col mx-4" style={{ backgroundColor: '#ffffff', width: '100%', maxWidth: '500px', maxHeight: '85vh', zIndex: 100001, position: 'relative', borderRadius: '12px', overflow: 'hidden', color: '#000000' }}>
+            <div style={{ backgroundColor: '#ffffff', width: '100%', maxWidth: '500px', maxHeight: '85vh', zIndex: 100001, position: 'relative', borderRadius: '12px', overflow: 'hidden', color: '#000000', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
                 <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', backgroundColor: '#f9fafb', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
                         <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#111827' }}>{getTitle()}</h3>
@@ -751,12 +742,15 @@ const AdminModal = ({ type, item, setShowModal, workAreas, onDataUpdate, user, a
                     </form>
                 </div>
                 <div style={{ padding: '16px 24px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-                    <button type="button" onClick={() => setShowModal(false)} style={{ padding: '10px 20px', backgroundColor: '#fff', border: '1px solid #d1d5db', borderRadius: '6px', color: '#374151', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>Annulla</button>
-                    {/* Se il tipo è employeeActions non mostriamo il tasto SALVA ma solo Annulla (o Chiudi) */}
-                    {type !== 'employeeActions' && (
-                        <button type="submit" form="modal-form" disabled={isLoading} style={{ padding: '10px 20px', backgroundColor: (type.includes('delete') || isHardDelete) ? '#dc2626' : (type === 'restoreEmployee' ? '#16a34a' : '#2563eb'), border: 'none', borderRadius: '6px', color: '#fff', fontWeight: '600', fontSize: '14px', cursor: isLoading ? 'not-allowed' : 'pointer', opacity: isLoading ? 0.7 : 1, boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)' }}>
-                            {isLoading ? 'Attendi...' : (type === 'deleteEmployee' ? (isHardDelete ? 'Elimina Definitivamente' : 'Archivia') : (type === 'restoreEmployee' ? 'Ripristina' : (type.includes('delete') ? 'Elimina definitivamente' : 'Salva')))}
-                        </button>
+                    {type === 'employeeActions' ? (
+                        <button type="button" onClick={() => setShowModal(false)} style={{ padding: '10px 20px', backgroundColor: '#fff', border: '1px solid #d1d5db', borderRadius: '6px', color: '#374151', fontWeight: '600', fontSize: '14px', cursor: 'pointer', width: '100%' }}>Chiudi Menu</button>
+                    ) : (
+                        <>
+                            <button type="button" onClick={() => {if(item) setModalType('employeeActions'); else setShowModal(false)}} style={{ padding: '10px 20px', backgroundColor: '#fff', border: '1px solid #d1d5db', borderRadius: '6px', color: '#374151', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>{item && type !== 'newEmployee' && type !== 'newArea' && type !== 'newAdmin' ? 'Indietro' : 'Annulla'}</button>
+                            <button type="submit" form="modal-form" disabled={isLoading} style={{ padding: '10px 20px', backgroundColor: (type.includes('delete') || isHardDelete) ? '#dc2626' : (type === 'restoreEmployee' ? '#16a34a' : '#2563eb'), border: 'none', borderRadius: '6px', color: '#fff', fontWeight: '600', fontSize: '14px', cursor: isLoading ? 'not-allowed' : 'pointer', opacity: isLoading ? 0.7 : 1, boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)' }}>
+                                {isLoading ? 'Attendi...' : (type === 'deleteEmployee' ? (isHardDelete ? 'Elimina Definitivamente' : 'Archivia') : (type === 'restoreEmployee' ? 'Ripristina' : (type.includes('delete') ? 'Elimina definitivamente' : 'Salva')))}
+                            </button>
+                        </>
                     )}
                 </div>
             </div>

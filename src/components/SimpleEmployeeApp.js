@@ -206,6 +206,11 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
     const [isLoadingExpenses, setIsLoadingExpenses] = useState(false);
     const [expenseToEdit, setExpenseToEdit] = useState(null); 
 
+    // === NUOVO: DOTAZIONI (Attrezzature e Veicoli) ===
+    const [assignedEquipment, setAssignedEquipment] = useState([]);
+    const [assignedVehicles, setAssignedVehicles] = useState([]);
+    const [isLoadingAssets, setIsLoadingAssets] = useState(false);
+
     const functions = getFunctions(undefined, 'europe-west1');
     const clockIn = httpsCallable(functions, 'clockEmployeeIn');
     const clockOut = httpsCallable(functions, 'clockEmployeeOut');
@@ -271,6 +276,34 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
         const error = () => { setLocationError("Attiva il GPS!"); setInRangeArea(null); setGpsLoading(false); };
         if (navigator.geolocation) { const watchId = navigator.geolocation.watchPosition(success, error, { enableHighAccuracy: true }); return () => navigator.geolocation.clearWatch(watchId); } else { setLocationError("GPS non supportato"); setGpsLoading(false); }
     }, [employeeWorkAreas, isGpsRequired]);
+
+    // === NUOVO: CARICAMENTO DOTAZIONI (Attrezzatura e Veicoli) ===
+    useEffect(() => {
+        if (!employeeData?.id) return;
+        const fetchAssets = async () => {
+            setIsLoadingAssets(true);
+            try {
+                // Fetch Attrezzatura
+                const qEq = query(collection(db, "equipment"), where("assignedToUserId", "==", employeeData.id), where("status", "==", "in_use"));
+                const snapEq = await getDocs(qEq);
+                const eqList = snapEq.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                setAssignedEquipment(eqList);
+
+                // Fetch Veicoli
+              const qVeh = query(collection(db, "vehicles"), where("assignedTo", "==", employeeData.id));
+              const snapVeh = await getDocs(qVeh);
+              const vehList = snapVeh.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                // Filtra i mezzi: mostra solo quelli attivi e non restituiti
+               const activeVehicles = vehList.filter(v => v.status === 'active' && !v.isRentalReturned);
+               setAssignedVehicles(activeVehicles);
+            } catch (error) {
+                console.error("Errore caricamento dotazioni:", error);
+            } finally {
+                setIsLoadingAssets(false);
+            }
+        };
+        fetchAssets();
+    }, [employeeData?.id]);
 
     const handleAction = async (action) => {
         setIsProcessing(true);
@@ -469,6 +502,44 @@ const SimpleEmployeeApp = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 {isOnPause && (
                     <button style={{...styles.btnBig, ...styles.btnBlue}} disabled={isProcessing} onClick={() => handleAction('clockPause')}>▶️ FINE PAUSA</button>
                 )}
+
+                {/* === NUOVA SEZIONE: LE MIE DOTAZIONI (VERSIONE MOBILE) === */}
+                <div style={{ ...styles.reportSection, marginTop: '15px' }}>
+                    <div style={{fontWeight:'bold', color:'#595959', textAlign:'center', marginBottom: '10px'}}>🛠️ Le Mie Dotazioni</div>
+                    {isLoadingAssets ? (
+                        <p style={{textAlign:'center', color:'#8c8c8c', fontSize:'0.9rem'}}>Caricamento...</p>
+                    ) : (assignedEquipment.length === 0 && assignedVehicles.length === 0) ? (
+                        <p style={{textAlign:'center', color:'#8c8c8c', fontSize:'0.9rem', fontStyle:'italic'}}>Nessuna dotazione in carico.</p>
+                    ) : (
+                        <div style={{display:'flex', flexDirection:'column', gap:'10px'}}>
+                            {assignedVehicles.length > 0 && (
+                                <div>
+                                    <div style={{fontWeight:'bold', color:'#0050b3', borderBottom:'1px solid #91d5ff', paddingBottom:'4px', marginBottom:'8px'}}>🚐 Veicoli in carico</div>
+                                    {assignedVehicles.map(v => (
+                                        <div key={v.id} style={{backgroundColor:'#e6f7ff', padding:'10px', borderRadius:'8px', border:'1px solid #91d5ff', marginBottom:'8px'}}>
+                                            <div style={{fontWeight:'bold', color:'#003a8c'}}>{v.brand} {v.model}</div>
+                                            <div style={{fontSize:'0.8rem', color:'#0050b3', marginTop:'4px'}}>Targa: <span style={{fontFamily:'monospace', background:'#bae7ff', padding:'2px 4px', borderRadius:'4px'}}>{v.plate}</span></div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                            
+                            {assignedEquipment.length > 0 && (
+                                <div>
+                                    <div style={{fontWeight:'bold', color:'#d46b08', borderBottom:'1px solid #ffd591', paddingBottom:'4px', marginBottom:'8px', marginTop: assignedVehicles.length > 0 ? '10px' : '0'}}>🛠️ Attrezzatura in carico</div>
+                                    {assignedEquipment.map(eq => (
+                                        <div key={eq.id} style={{backgroundColor:'#fff7e6', padding:'10px', borderRadius:'8px', border:'1px solid #ffd591', marginBottom:'8px'}}>
+                                            <div style={{fontWeight:'bold', color:'#ad4e00'}}>{eq.name}</div>
+                                            <div style={{fontSize:'0.8rem', color:'#d46b08'}}>{eq.brand} {eq.model}</div>
+                                            {eq.serialNumber && <div style={{fontSize:'0.75rem', color:'#ad4e00', marginTop:'4px', fontFamily:'monospace'}}>Matricola: {eq.serialNumber}</div>}
+                                            {eq.accessories && <div style={{fontSize:'0.75rem', color:'#8c8c8c', marginTop:'4px', fontStyle:'italic'}}>📦 {eq.accessories}</div>}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
 
                 <div style={{width:'100%', marginTop:'15px', display:'flex', flexDirection:'column', gap:'10px'}}>
                     <button style={{...styles.btnBig, ...styles.btnPurple, padding:'15px', fontSize:'1rem'}} onClick={() => setShowExpenseModal(true)}>💰 Registra Spesa</button>

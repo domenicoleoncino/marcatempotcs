@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import ReactDOM from 'react-dom';
 import { db, storage } from '../firebase';
 import { collection, query, where, onSnapshot, orderBy, getDocs, Timestamp, limit, deleteDoc, doc, updateDoc, addDoc } from 'firebase/firestore'; 
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -7,7 +8,6 @@ import CompanyLogo from './CompanyLogo';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-// --- MODIFICA QUI: Blocco impostato a 60 minuti ---
 const MIN_REENTRY_DELAY_MINUTES = 60; 
 
 function getOrGenerateDeviceId() {
@@ -37,7 +37,7 @@ const PAUSE_REASONS = [
     { code: '04', reason: 'Altro... (specificare).' }
 ];
 
-// --- MODALE UNICO PER SPESE (AGGIUNGI/MODIFICA) ---
+// --- MODALE UNICO PER SPESE ---
 const ExpenseModalInternal = ({ show, onClose, user, employeeData, expenseToEdit }) => {
     const [amount, setAmount] = useState('');
     const [description, setDescription] = useState('');
@@ -90,7 +90,7 @@ const ExpenseModalInternal = ({ show, onClose, user, employeeData, expenseToEdit
                 userRole: 'employee',
                 receiptUrl: receiptUrl,
                 status: 'pending',
-                createdAt: Timestamp.now()
+                updatedAt: Timestamp.now()
             };
 
             if (expenseToEdit) {
@@ -107,18 +107,16 @@ const ExpenseModalInternal = ({ show, onClose, user, employeeData, expenseToEdit
         } finally { setIsSaving(false); }
     };
 
-    const overlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: 99998, backdropFilter: 'blur(4px)' };
+    const overlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: 99998 };
     const containerStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' };
-    const modalStyle = { backgroundColor: '#ffffff', width: '100%', maxWidth: '500px', borderRadius: '12px', overflow: 'hidden', pointerEvents: 'auto', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column' };
-    const inputClasses = "block w-full px-3 py-2.5 bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm";
+    const modalStyle = { backgroundColor: '#ffffff', width: '100%', maxWidth: '500px', borderRadius: '12px', overflow: 'hidden', pointerEvents: 'auto', display: 'flex', flexDirection: 'column' };
+    const inputClasses = "block w-full px-3 py-2.5 bg-white border border-gray-300 text-gray-900 text-sm rounded-lg outline-none mb-3";
 
-    return (
-        <div style={overlayStyle} onClick={onClose}>
+    return ReactDOM.createPortal(
+        <div className="portal-root">
+            <div style={overlayStyle} onClick={onClose} />
             <div style={containerStyle}>
-                <div 
-                    style={modalStyle}
-                    onClick={(e) => e.stopPropagation()}
-                >
+                <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
                     <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#ecfdf5' }}>
                         <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#047857' }}>
                              {expenseToEdit ? '✏️ Modifica Spesa' : '💰 Nuova Spesa'}
@@ -126,35 +124,42 @@ const ExpenseModalInternal = ({ show, onClose, user, employeeData, expenseToEdit
                         <button onClick={onClose} style={{ border: 'none', background: 'none', fontSize: '24px', cursor: 'pointer', color: '#047857' }}>&times;</button>
                     </div>
                     <div style={{ padding: '24px' }}>
-                        <form onSubmit={handleSave} className="space-y-4">
-                            <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Data</label><input type="date" value={date} onChange={e => setDate(e.target.value)} className={inputClasses} required /></div>
-                            <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Importo (€)</label><input type="number" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" className={inputClasses} required /></div>
-                            <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Descrizione</label><input type="text" value={description} onChange={e => setDescription(e.target.value)} placeholder="Es. Carburante" className={inputClasses} required /></div>
-                            <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Metodo di Pagamento</label>
-                                <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} className={inputClasses}>
-                                    <option value="Contanti">Contanti (Miei)</option>
-                                    <option value="Carta Personale">Carta Personale</option>
-                                    <option value="Carta Aziendale">Carta Aziendale</option>
-                                    <option value="Telepass">Telepass</option>
-                                    <option value="Buono Carburante">Buono Carburante</option>
-                                    <option value="Altro">Altro</option>
-                                </select>
-                            </div>
-                            <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">
-                                {expenseToEdit && expenseToEdit.receiptUrl ? 'Cambia File (Opzionale)' : 'Allegato (Foto/File)'}
-                            </label>
-                            <input type="file" accept="image/*,.pdf" onChange={e => setFile(e.target.files[0])} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100" /></div>
-                            <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Note</label><textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Opzionale" className={`${inputClasses} resize-y min-h-[80px]`} /></div>
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
-                                <button type="button" onClick={onClose} className="px-4 py-2 border rounded hover:bg-gray-100 text-sm">Annulla</button>
-                                <button type="submit" disabled={isSaving} className="px-4 py-2 bg-green-600 text-white font-bold rounded hover:bg-green-700 disabled:opacity-50 text-sm">{isSaving ? 'Caricamento...' : 'Conferma'}</button>
+                        <form onSubmit={handleSave}>
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Data</label>
+                            <input type="date" value={date} onChange={e => setDate(e.target.value)} className={inputClasses} required />
+                            
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Importo (€)</label>
+                            <input type="number" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" className={inputClasses} required />
+                            
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Descrizione</label>
+                            <input type="text" value={description} onChange={e => setDescription(e.target.value)} placeholder="Es. Carburante" className={inputClasses} required />
+                            
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Metodo di Pagamento</label>
+                            <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} className={inputClasses}>
+                                <option value="Contanti">Contanti (Miei)</option>
+                                <option value="Carta Personale">Carta Personale</option>
+                                <option value="Carta Aziendale">Carta Aziendale</option>
+                                <option value="Telepass">Telepass</option>
+                                <option value="Buono Carburante">Buono Carburante</option>
+                                <option value="Altro">Altro</option>
+                            </select>
+                            
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Allegato (Foto/File)</label>
+                            <input type="file" accept="image/*,.pdf" onChange={e => setFile(e.target.files[0])} className={inputClasses} />
+                            
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Note</label>
+                            <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Opzionale" className={inputClasses} style={{minHeight: '80px'}} />
+                            
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+                                <button type="button" onClick={onClose} className="px-4 py-2 border rounded text-sm">Annulla</button>
+                                <button type="submit" disabled={isSaving} className="px-4 py-2 bg-green-600 text-white font-bold rounded text-sm">{isSaving ? 'Caricamento...' : 'Conferma'}</button>
                             </div>
                         </form>
                     </div>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };
 
@@ -184,6 +189,12 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     const [isLoadingExpenses, setIsLoadingExpenses] = useState(false);
     const [expenseToEdit, setExpenseToEdit] = useState(null);
 
+    // === DOTAZIONI (Attrezzature e Veicoli) ===
+    const [assignedEquipment, setAssignedEquipment] = useState([]);
+    const [assignedVehicles, setAssignedVehicles] = useState([]);
+    const [isLoadingAssets, setIsLoadingAssets] = useState(false);
+    const [showAssets, setShowAssets] = useState(false);
+
     const functions = getFunctions(undefined, 'europe-west1');
     const clockIn = httpsCallable(functions, 'clockEmployeeIn');
     const clockOut = httpsCallable(functions, 'clockEmployeeOut');
@@ -191,11 +202,11 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
 
     const playSound = (fileName) => {
         const audioPath = `/sounds/${fileName}.mp3`;
-        try { const audio = new Audio(audioPath); audio.play().catch(e => { console.warn(`Audio fallito:`, e); }); } catch (e) { console.warn("Errore Audio:", e); }
+        try { const audio = new Audio(audioPath); audio.play().catch(() => {}); } catch (e) {}
     };
 
     useEffect(() => { const timer = setInterval(() => setCurrentTime(new Date()), 1000); playSound('app_open'); return () => clearInterval(timer); }, []);
-    useEffect(() => { const currentDeviceId = getOrGenerateDeviceId(); setDeviceId(currentDeviceId); }, []); 
+    useEffect(() => { setDeviceId(getOrGenerateDeviceId()); }, []); 
 
     const employeeWorkAreas = useMemo(() => {
         if (!employeeData || !employeeData.workAreaIds || !allWorkAreas) return [];
@@ -231,10 +242,11 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
         for (const p of pauses) { if (p.start && p.end) { isCompleted = true; } else if (p.start && !p.end) { isActive = true; break; } }
         if (isActive) return 'ACTIVE'; if (isCompleted) return 'COMPLETED'; return 'NONE';
     }, [activeEntry]);
+    
     const isInPause = pauseStatus === 'ACTIVE'; 
     useEffect(() => { if (!isInPause && isPauseAttempted) { setIsPauseAttempted(false); } }, [isInPause, isPauseAttempted]);
 
-    // Listener Firestore
+    // Listener Firestore Timbrature
     useEffect(() => {
         if (!user?.uid || !employeeData?.id) { setActiveEntry(null); setTodaysEntries([]); setWorkAreaName(''); return; }
         let isMounted = true; 
@@ -245,6 +257,34 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
         const unsubscribeTodays = onSnapshot(qTodays, (snapshot) => { if (isMounted) setTodaysEntries(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))); });
         return () => { isMounted = false; unsubscribeActive(); unsubscribeTodays(); };
     }, [user?.uid, employeeData?.id, allWorkAreas]);
+
+    // Listener Dotazioni (Attrezzatura e Veicoli FILTRATI)
+    useEffect(() => {
+        if (!employeeData?.id) return;
+        let isMounted = true;
+        const fetchAssets = async () => {
+            setIsLoadingAssets(true);
+            try {
+                const qEq = query(collection(db, "equipment"), where("assignedToUserId", "==", employeeData.id), where("status", "==", "in_use"));
+                const snapEq = await getDocs(qEq);
+                
+                const qVeh = query(collection(db, "vehicles"), where("assignedTo", "==", employeeData.id));
+                const snapVeh = await getDocs(qVeh);
+                const vehList = snapVeh.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                
+                if (isMounted) {
+                    setAssignedEquipment(snapEq.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                    setAssignedVehicles(vehList.filter(v => v.status === 'active' && !v.isRentalReturned));
+                }
+            } catch (error) {
+                console.error("Errore dotazioni:", error);
+            } finally {
+                if (isMounted) setIsLoadingAssets(false);
+            }
+        };
+        fetchAssets();
+        return () => { isMounted = false; };
+    }, [employeeData?.id]);
 
     const handleAction = async (action) => {
         if (isProcessing) return; setIsProcessing(true); setLocationError(null);
@@ -322,6 +362,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
             setAvailableForms(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         } catch (error) { console.error(error); } finally { setIsLoadingForms(false); }
     };
+
     const handleOpenFormsModal = () => {
         const areaId = activeEntry?.workAreaId || (employeeWorkAreas.length === 1 ? employeeWorkAreas[0].id : '');
         setSelectedAreaForForms(areaId);
@@ -360,95 +401,130 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
         setExpenseToEdit(null); 
     };
 
-    const overlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: 99998, backdropFilter: 'blur(4px)' };
-    const containerStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' };
-    const modalStyle = { backgroundColor: '#ffffff', width: '100%', maxWidth: '500px', maxHeight: '85vh', borderRadius: '12px', overflow: 'hidden', pointerEvents: 'auto', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column' };
-
-    if (!employeeData) return <div className="min-h-screen flex items-center justify-center">Caricamento...</div>;
+    if (!employeeData) return <div translate="no" className="min-h-screen flex items-center justify-center bg-gray-100">Caricamento...</div>;
 
     const months = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
     const years = [new Date().getFullYear(), new Date().getFullYear() - 1]; 
 
     return (
-        <div className="p-4 max-w-lg mx-auto font-sans bg-gray-50 min-h-screen flex flex-col">
+        <div translate="no" className="p-4 max-w-lg mx-auto font-sans bg-gray-50 min-h-screen flex flex-col">
             <CompanyLogo />
             
-            <div className="text-center my-4 p-4 bg-white rounded-lg shadow-sm">
-                <p>Dipendente: <span className="font-semibold">{employeeData.name} {employeeData.surname}</span></p>
-                <p className="text-4xl font-bold">{currentTime.toLocaleTimeString('it-IT')}</p>
-                {activeEntry && <p className="text-green-600 font-bold mt-2">Area Attuale: {workAreaName}</p>}
+            <div className="text-center my-4 p-4 bg-white rounded-lg shadow-sm border border-gray-200">
+                <p className="text-gray-500">Dipendente: <span className="font-semibold text-gray-800">{employeeData.name} {employeeData.surname}</span></p>
+                <p className="text-4xl font-bold text-gray-800 my-2">{currentTime.toLocaleTimeString('it-IT')}</p>
+                {activeEntry && <p className="text-green-600 font-bold mt-2 bg-green-50 py-1 rounded">Area Attuale: {workAreaName}</p>}
             </div>
 
-            <div className="bg-white p-4 rounded-lg shadow-md mb-6">
-                <h2 className="text-xl font-bold mb-3 text-center">Stato Posizione</h2>
+            <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6">
+                <h2 className="text-lg font-bold mb-3 text-center text-gray-700">Stato Posizione</h2>
                 {isGpsRequired ? (
                     <>
-                        {locationError && <p className="text-sm text-red-500 mt-2 text-center">{locationError}</p>}
+                        {locationError && <p className="text-sm text-red-500 mt-2 text-center bg-red-50 p-2 rounded">{locationError}</p>}
                         {!locationError && (
-                            inRangeArea ? <p className="text-base text-green-600 font-semibold mt-2 text-center">✅ Area rilevata: <br/><strong>{inRangeArea.name}</strong></p> : <p className="text-base text-gray-500 font-semibold mt-2 text-center">❌ Nessuna area nelle vicinanze o GPS in attesa.</p>
+                            inRangeArea ? <p className="text-base text-green-600 font-semibold mt-2 text-center bg-green-50 p-2 rounded">✅ Area rilevata: <br/><strong>{inRangeArea.name}</strong></p> : <p className="text-base text-gray-500 font-semibold mt-2 text-center bg-gray-50 p-2 rounded">❌ Nessuna area nelle vicinanze o GPS in attesa.</p>
                         )}
                     </>
                 ) : (
-                    <p className="text-base text-blue-600 font-semibold mt-2 text-center">GPS non richiesto.</p>
+                    <p className="text-base text-blue-600 font-semibold mt-2 text-center bg-blue-50 p-2 rounded">GPS non richiesto.</p>
                 )}
             </div>
 
-            <div className="bg-white p-4 rounded-lg shadow-md mb-6">
-                <h2 className="text-xl font-bold mb-3 text-center">Azioni Rapide</h2>
+            <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6">
+                <h2 className="text-lg font-bold mb-3 text-center text-gray-700">Azioni Rapide</h2>
                 {!activeEntry ? (
                     <div>
                          {!isGpsRequired && (
-                            <select value={manualAreaId} onChange={(e) => setManualAreaId(e.target.value)} className="w-full p-2 border rounded mb-2">
+                            <select value={manualAreaId} onChange={(e) => setManualAreaId(e.target.value)} className="w-full p-3 border rounded-lg mb-4 bg-gray-50">
                                 <option value="">-- Seleziona Area --</option>
                                 {employeeWorkAreas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                             </select>
                         )}
-                        <button onClick={() => handleAction('clockIn')} className="w-full py-6 bg-green-600 text-white font-bold rounded shadow text-xl">🟢 ENTRATA</button>
+                        <button onClick={() => handleAction('clockIn')} className="w-full py-4 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg shadow text-xl transition-colors">🟢 ENTRATA</button>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-2 gap-2">
-                        <button onClick={() => handleAction('clockPause')} className="py-4 bg-orange-500 text-white font-bold rounded shadow">🟡 PAUSA</button>
-                        <button onClick={() => handleAction('clockOut')} className="py-4 bg-red-600 text-white font-bold rounded shadow">🔴 USCITA</button>
+                    <div className="grid grid-cols-2 gap-3">
+                        <button onClick={() => handleAction('clockPause')} className="py-4 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg shadow transition-colors">☕ PAUSA</button>
+                        <button onClick={() => handleAction('clockOut')} className="py-4 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg shadow transition-colors">⏹️ USCITA</button>
                     </div>
                 )}
             </div>
 
-            <div className="bg-white p-4 rounded-lg shadow-md mb-6">
-                 <h2 className="text-xl font-bold mb-3 text-center">Spese e Rimborsi</h2>
+            {/* === SEZIONE RICHIUDIBILE: LE MIE DOTAZIONI === */}
+            <div className="bg-white rounded-lg shadow-sm mb-6 overflow-hidden border border-gray-200">
+                <button 
+                    type="button"
+                    onClick={() => setShowAssets(!showAssets)} 
+                    className="w-full flex justify-between items-center p-4 bg-gray-50 hover:bg-gray-100 transition-colors border-none cursor-pointer"
+                >
+                    <span className="text-lg font-bold text-gray-800">📦 Le Mie Dotazioni</span>
+                    <span className="text-xl text-blue-600 font-bold">{showAssets ? '▲' : '▼'}</span>
+                </button>
+                
+                {showAssets && (
+                    <div className="p-4 border-t border-gray-100 bg-white">
+                        {isLoadingAssets ? (
+                            <p className="text-center text-gray-500">Caricamento...</p>
+                        ) : (assignedEquipment.length === 0 && assignedVehicles.length === 0) ? (
+                            <p className="text-center text-gray-500 italic">Nessuna dotazione in carico.</p>
+                        ) : (
+                            <div className="space-y-4">
+                                {assignedVehicles.map(v => (
+                                    <div key={v.id} className="bg-blue-50 p-3 rounded-lg border border-blue-100 shadow-sm">
+                                        <div className="font-bold text-blue-900">🚐 {v.brand} {v.model}</div>
+                                        <div className="text-xs text-blue-700 font-mono mt-1 font-bold bg-white inline-block px-2 py-1 rounded">Targa: {v.plate}</div>
+                                    </div>
+                                ))}
+                                {assignedEquipment.map(eq => (
+                                    <div key={eq.id} className="bg-orange-50 p-3 rounded-lg border border-orange-100 shadow-sm">
+                                        <div className="font-bold text-orange-900">🛠️ {eq.name}</div>
+                                        <div className="text-xs text-orange-700 mt-1">{eq.brand}</div>
+                                        {eq.accessories && <div className="text-xs text-orange-600 italic mt-2">📦 {eq.accessories}</div>}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+
+            <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6">
+                 <h2 className="text-lg font-bold mb-3 text-center text-gray-700">Spese e Rimborsi</h2>
                  <div className="flex flex-col gap-3">
-                     <button onClick={() => setShowAddExpenseModal(true)} className="w-full py-2 bg-green-600 text-white font-bold rounded shadow">💰 Registra Spesa</button>
-                     <button onClick={handleViewExpenses} className="w-full py-2 bg-teal-600 text-white font-bold rounded shadow">📜 Storico</button>
+                     <button onClick={() => setShowAddExpenseModal(true)} className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg shadow transition-colors">💰 Registra Spesa</button>
+                     <button onClick={handleViewExpenses} className="w-full py-3 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-lg shadow transition-colors">📜 Storico Rimborsi</button>
                  </div>
             </div>
 
-            <div className="bg-white p-4 rounded-lg shadow-md mb-6">
-                 <button onClick={handleOpenFormsModal} className="w-full py-3 bg-indigo-600 text-white font-bold rounded shadow">📋 Moduli</button>
+            <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6">
+                 <button onClick={handleOpenFormsModal} className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow transition-colors">📋 Moduli Cantiere</button>
             </div>
             
-            <div className="bg-white p-4 rounded-lg shadow-md mb-6">
-                <h2 className="text-xl font-bold mb-3 text-center">Report Mensile PDF</h2>
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                    <select value={selectedMonth} onChange={(e) => setSelectedMonth(parseInt(e.target.value))} className="border p-2 rounded">{months.map((m, i) => <option key={i} value={i}>{m}</option>)}</select>
-                    <select value={selectedYear} onChange={(e) => setSelectedYear(parseInt(e.target.value))} className="border p-2 rounded">{years.map(y => <option key={y} value={y}>{y}</option>)}</select>
+            <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6">
+                <h2 className="text-lg font-bold mb-3 text-center text-gray-700">Report Mensile PDF</h2>
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                    <select value={selectedMonth} onChange={(e) => setSelectedMonth(parseInt(e.target.value))} className="border p-2 rounded-lg bg-gray-50">{months.map((m, i) => <option key={i} value={i}>{m}</option>)}</select>
+                    <select value={selectedYear} onChange={(e) => setSelectedYear(parseInt(e.target.value))} className="border p-2 rounded-lg bg-gray-50">{years.map(y => <option key={y} value={y}>{y}</option>)}</select>
                 </div>
-                <button onClick={handleExportPDF} disabled={isGenerating} className="w-full py-3 bg-red-600 text-white font-bold rounded shadow">{isGenerating ? 'Generazione...' : 'Scarica PDF'}</button>
+                <button onClick={handleExportPDF} disabled={isGenerating} className="w-full py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg shadow transition-colors disabled:opacity-50">{isGenerating ? 'Generazione...' : 'Scarica PDF'}</button>
             </div>
             
-            <button onClick={handleLogout} className="w-full mt-auto px-4 py-2 bg-gray-500 text-white rounded-lg">Logout</button>
+            <button onClick={handleLogout} className="w-full mt-auto px-4 py-3 bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold rounded-lg transition-colors border border-gray-400">Esci dall'App</button>
 
-            {showFormsModal && (
-                <div style={overlayStyle} onClick={() => setShowFormsModal(false)}>
-                    <div style={{...containerStyle, pointerEvents:'none'}}>
-                        <div style={{...modalStyle, pointerEvents:'auto', padding:'20px'}}>
-                            <h3>Moduli {selectedAreaForForms && '(Area Selezionata)'}</h3>
-                            {isLoadingForms ? <p>Caricamento...</p> : availableForms.map(f => <a key={f.id} href={f.url} target="_blank" rel="noreferrer" className="block p-3 border mb-2 rounded bg-gray-50">{f.title} ↗️</a>)}
-                            <button onClick={() => setShowFormsModal(false)} className="mt-4 p-2 bg-gray-200 rounded w-full">Chiudi</button>
+            {/* MODALI ESTERNI CON PORTALS */}
+            {showFormsModal && ReactDOM.createPortal(
+                <div className="portal-root">
+                    <div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',backgroundColor:'rgba(0,0,0,0.6)',zIndex:99998}} onClick={() => setShowFormsModal(false)} />
+                    <div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',zIndex:99999,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}>
+                        <div style={{backgroundColor:'#fff',width:'90%',maxWidth:'400px',borderRadius:'12px',overflow:'hidden',pointerEvents:'auto',padding:'20px'}}>
+                            <h3 className="font-bold text-lg mb-4 text-center">Moduli Cantiere</h3>
+                            {isLoadingForms ? <p className="text-center text-gray-500">Caricamento...</p> : availableForms.map(f => <a key={f.id} href={f.url} target="_blank" rel="noreferrer" className="block p-3 border border-indigo-200 mb-2 rounded-lg bg-indigo-50 text-indigo-700 font-bold text-center">{f.title} ↗️</a>)}
+                            <button onClick={() => setShowFormsModal(false)} className="mt-4 p-3 bg-gray-200 rounded-lg w-full font-bold">Chiudi</button>
                         </div>
                     </div>
-                </div>
+                </div>, document.body
             )}
 
-            {/* Modale Unico (Aggiungi/Modifica) */}
             <ExpenseModalInternal 
                 show={showAddExpenseModal} 
                 onClose={handleCloseExpenseModal} 
@@ -457,41 +533,40 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 expenseToEdit={expenseToEdit}
             />
 
-            {showExpenseHistory && (
-                <div style={overlayStyle} onClick={() => setShowExpenseHistory(false)}>
-                    <div style={{...containerStyle, pointerEvents:'none'}}>
-                        <div 
-                            style={{...modalStyle, pointerEvents:'auto', padding:'20px'}}
-                            onClick={(e) => e.stopPropagation()} 
-                        >
-                            <h3>I Miei Rimborsi</h3>
-                            <div style={{flex:1, overflowY:'auto', margin:'10px 0'}}>
-                                {isLoadingExpenses ? <p>Caricamento...</p> : myExpenses.length === 0 ? <p>Nessuna spesa.</p> : myExpenses.map(e => (
-                                    <div key={e.id} className="border-b p-2 flex justify-between items-center">
+            {showExpenseHistory && ReactDOM.createPortal(
+                <div className="portal-root">
+                    <div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',backgroundColor:'rgba(0,0,0,0.6)',zIndex:99998}} onClick={() => setShowExpenseHistory(false)} />
+                    <div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',zIndex:99999,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}>
+                        <div style={{backgroundColor:'#fff',width:'95%',maxWidth:'500px',borderRadius:'12px',overflow:'hidden',pointerEvents:'auto',padding:'20px', maxHeight:'80vh', display:'flex', flexDirection:'column'}} onClick={(e) => e.stopPropagation()}>
+                            <h3 className="font-bold text-lg border-b pb-2 mb-2">I Miei Rimborsi</h3>
+                            <div style={{flex:1, overflowY:'auto'}}>
+                                {isLoadingExpenses ? <p className="text-center my-4">Caricamento...</p> : myExpenses.length === 0 ? <p className="text-center my-4 text-gray-500">Nessuna spesa.</p> : myExpenses.map(e => (
+                                    <div key={e.id} className="border border-gray-200 rounded-lg p-3 mb-3 bg-gray-50 flex justify-between items-center">
                                         <div>
-                                            <div className="text-xs text-gray-500">{e.date?.toDate().toLocaleDateString()}</div>
-                                            <div className="font-bold">{e.description}</div>
-                                            <div className="text-xs text-gray-500 italic">Pagato: {e.paymentMethod}</div>
-                                            {e.receiptUrl && <a href={e.receiptUrl} target="_blank" rel="noreferrer" className="text-blue-500 text-xs underline">📎 Vedi File</a>}
+                                            <div className="text-xs text-gray-500">{e.date?.toDate().toLocaleDateString('it-IT')}</div>
+                                            <div className="font-bold text-gray-800">{e.description}</div>
+                                            <div className="text-xs text-gray-500 italic">Metodo: {e.paymentMethod}</div>
+                                            {e.receiptUrl && <a href={e.receiptUrl} target="_blank" rel="noreferrer" className="text-blue-600 text-xs underline font-bold mt-1 inline-block">📎 Apri Allegato</a>}
                                         </div>
                                         <div className="text-right">
-                                            <div className="font-bold text-blue-600">€ {e.amount}</div>
-                                            <div style={{fontSize:'0.7rem', color: e.status === 'approved' ? 'green' : e.status === 'rejected' ? 'red' : 'orange'}}>{e.status}</div>
-                                            
+                                            <div className="font-bold text-green-600 text-lg">€ {e.amount}</div>
+                                            <div className={`text-xs font-bold px-2 py-1 rounded inline-block mt-1 ${e.status === 'approved' || e.status === 'paid' || e.status === 'closed' ? 'bg-green-100 text-green-700' : e.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>
+                                                {e.status === 'pending' ? 'IN ATTESA' : e.status === 'paid' || e.status === 'closed' ? 'SALDATO' : e.status.toUpperCase()}
+                                            </div>
                                             {e.status === 'pending' && (
-                                                <div style={{marginTop:'5px'}}>
-                                                    <button onClick={()=>handleEditExpense(e)} style={{marginRight:'10px', background:'none', border:'none', cursor:'pointer', fontSize:'1.2rem'}}>✏️</button>
-                                                    <button onClick={()=>handleDeleteExpense(e.id)} style={{color:'red', background:'none', border:'none', cursor:'pointer', fontSize:'1.2rem'}}>🗑️</button>
+                                                <div className="flex justify-end gap-3 mt-2">
+                                                    <button type="button" onClick={()=>handleEditExpense(e)} className="text-blue-600 text-lg border-none bg-transparent cursor-pointer">✏️</button>
+                                                    <button type="button" onClick={()=>handleDeleteExpense(e.id)} className="text-red-600 text-lg border-none bg-transparent cursor-pointer">🗑️</button>
                                                 </div>
                                             )}
                                         </div>
                                     </div>
                                 ))}
                             </div>
-                            <button onClick={()=>setShowExpenseHistory(false)} className="mt-4 p-2 bg-gray-200 rounded w-full">Chiudi</button>
+                            <button onClick={()=>setShowExpenseHistory(false)} className="mt-4 p-3 bg-gray-300 hover:bg-gray-400 rounded-lg w-full font-bold">Chiudi</button>
                         </div>
                     </div>
-                </div>
+                </div>, document.body
             )}
         </div>
     );
