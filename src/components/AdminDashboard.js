@@ -1,4 +1,4 @@
-// File: src/js/components/AdminDashboard.js
+// File: src/components/AdminDashboard.js
 /* eslint-disable no-unused-vars */
 /* global __firebase_config, __initial_auth_token, __app_id */
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -18,32 +18,47 @@ import { utils, writeFile } from 'xlsx-js-style';
 import { saveAs } from 'file-saver';
 
 // ===========================================
-// --- STILE MAGICO (CSS INIETTATO) ---
+// --- STILE MAGICO "MUTAFORMA" (PC + MOBILE) ---
 // ===========================================
 const ModernStyles = () => (
     <style>
     {`
       .modern-bg { background-color: #f4f7fe; min-height: 100vh; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1e293b; }
-      .modern-header { background: #ffffff; padding: 15px 40px; box-shadow: 0 2px 10px rgba(0,0,0,0.03); display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; }
+      
+      /* Header Layout */
+      .modern-header { position: relative; display: flex; justify-content: space-between; align-items: center; background: #ffffff; padding: 15px 40px; box-shadow: 0 2px 10px rgba(0,0,0,0.03); border-bottom: 1px solid #e2e8f0; }
+      
+      /* Navigation */
       .modern-nav { background: #ffffff; padding: 10px 20px 0 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.03); display: flex; justify-content: center; flex-wrap: wrap; margin-bottom: 30px; border-radius: 0 0 16px 16px; }
       .modern-tab { border: none; background: transparent; padding: 14px 24px; font-weight: 600; color: #64748b; cursor: pointer; transition: 0.3s; margin: 0 4px; font-size: 14px; border-bottom: 3px solid transparent; display: flex; align-items: center; gap: 8px; }
       .modern-tab:hover { color: #3b82f6; background: #f8fafc; border-radius: 8px 8px 0 0; }
       .modern-tab.active { color: #2563eb; border-bottom: 3px solid #2563eb; background: #eff6ff; border-radius: 8px 8px 0 0; }
+      
+      /* Cards & Titles */
       .modern-card { background: #ffffff; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.04); padding: 28px; margin-bottom: 24px; border: 1px solid #e2e8f0; animation: fadeIn 0.4s ease-out; }
-      .modern-title { font-size: 22px; font-weight: 800; color: #0f172a; margin-bottom: 24px; display: flex; align-items: center; gap: 10px; border-bottom: 2px solid #f1f5f9; padding-bottom: 12px; }
-      .modern-input { width: 100%; max-width: 350px; padding: 12px 16px; border-radius: 8px; border: 1px solid #cbd5e1; outline: none; transition: 0.2s; font-size: 14px; background: #f8fafc; }
+      .modern-title { font-size: 22px; font-weight: 800; color: #0f172a; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 2px solid #f1f5f9; padding-bottom: 12px; flex-wrap: wrap; }
+      .title-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+      
+      /* Inputs */
+      .modern-input { width: 100%; padding: 12px 16px; border-radius: 8px; border: 1px solid #cbd5e1; outline: none; transition: 0.2s; font-size: 14px; background: #f8fafc; box-sizing: border-box; }
       .modern-input:focus { border-color: #3b82f6; background: #ffffff; box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
+      
+      /* Default Desktop Tables */
       .modern-table-wrapper { overflow-x: auto; border-radius: 12px; border: 1px solid #e2e8f0; margin-top: 20px; }
-      .modern-table { width: 100%; border-collapse: collapse; text-align: left; background: #fff; }
+      .modern-table { width: 100%; border-collapse: collapse; text-align: left; background: #fff; min-width: 600px; }
       .modern-table th { background: #f8fafc; padding: 16px 20px; font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #e2e8f0; }
       .modern-table td { padding: 16px 20px; border-bottom: 1px solid #f1f5f9; color: #334155; font-size: 14px; vertical-align: middle; transition: background 0.2s; }
       .modern-table tr:hover td { background: #f8fafc; }
-      .modern-btn { background: #2563eb; color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.2s; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px; box-shadow: 0 2px 4px rgba(37,99,235,0.1); }
+      
+      /* Buttons */
+      .modern-btn { background: #2563eb; color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.2s; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px; box-shadow: 0 2px 4px rgba(37,99,235,0.1); white-space: nowrap; }
       .modern-btn:hover { background: #1d4ed8; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(37,99,235,0.25); }
-      .modern-btn-danger { background: #ef4444; color: white; border: none; padding: 8px 14px; border-radius: 6px; font-weight: 600; cursor: pointer; transition: 0.2s; font-size: 12px; display: inline-flex; align-items: center; justify-content: center;}
+      .modern-btn-danger { background: #ef4444; color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.2s; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; white-space: nowrap; }
       .modern-btn-danger:hover { background: #dc2626; box-shadow: 0 4px 12px rgba(239,68,68,0.25); }
-      .modern-btn-outline { background: white; color: #475569; border: 1px solid #cbd5e1; padding: 8px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.2s; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+      .modern-btn-outline { background: white; color: #475569; border: 1px solid #cbd5e1; padding: 10px 18px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.2s; display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
       .modern-btn-outline:hover { background: #f8fafc; color: #0f172a; border-color: #94a3b8; }
+      
+      /* Badges */
       .modern-badge { padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; border: 1px solid transparent; }
       .modern-badge.green { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
       .modern-badge.red { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
@@ -51,7 +66,54 @@ const ModernStyles = () => (
       .modern-badge.blue { background: #dbeafe; color: #1e40af; border-color: #bfdbfe; }
       .modern-badge.purple { background: #f3e8ff; color: #4338ca; border-color: #e9d5ff; }
       .modern-avatar { width: 36px; height: 36px; border-radius: 50%; background: #e0e7ff; color: #4338ca; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; flex-shrink: 0; border: 2px solid #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+      
       @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+      /* ========================================= */
+      /* ADATTAMENTO SMARTPHONE E TABLET PICCOLI   */
+      /* ========================================= */
+      @media (max-width: 768px) {
+          .modern-header { flex-direction: column; padding: 15px; gap: 15px; }
+          .modern-header > div { position: static !important; transform: none !important; width: 100%; justify-content: center !important; text-align: center; }
+          .header-actions-mobile { flex-direction: column; width: 100%; }
+          .header-actions-mobile > button { width: 100%; margin-top: 10px; }
+          
+          .modern-nav { padding: 10px; flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; -webkit-overflow-scrolling: touch; border-radius: 0; }
+          .modern-tab { flex: 0 0 auto; white-space: nowrap; font-size: 13px; padding: 10px 15px; }
+          
+          .modern-card { padding: 15px; }
+          .title-actions { width: 100%; flex-direction: column; }
+          .title-actions button { width: 100%; }
+          
+          /* TRUCCO PER TRASFORMARE LE TABELLE IN SCHEDE SU MOBILE */
+          .modern-table-wrapper { border: none; overflow-x: visible; }
+          .modern-table { min-width: 100%; background: transparent; display: block; }
+          .modern-table thead { display: none; } /* Nascondi intestazione tabella */
+          .modern-table tbody { display: block; width: 100%; }
+          .modern-table tr { 
+              display: flex; flex-direction: column; 
+              margin-bottom: 15px; padding: 15px; 
+              background: #fff; border: 1px solid #e2e8f0; 
+              border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); 
+          }
+          .modern-table td { 
+              display: flex; justify-content: space-between; align-items: center; 
+              padding: 10px 0; border-bottom: 1px dashed #e2e8f0; 
+              text-align: right; width: 100%; box-sizing: border-box; 
+          }
+          .modern-table td:last-child { border-bottom: none; padding-bottom: 0; }
+          
+          /* Questo inserisce il nome della colonna prima del valore */
+          .modern-table td::before { 
+              content: attr(data-label); 
+              font-weight: 700; color: #64748b; 
+              text-transform: uppercase; font-size: 11px; 
+              margin-right: 15px; text-align: left; flex-shrink: 0;
+          }
+          
+          .actions-cell { flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+          .actions-cell button { flex: 1 1 auto; min-width: 100px; }
+      }
     `}
     </style>
 );
@@ -66,7 +128,7 @@ const MAX_DEVICE_LIMIT = 2;
 const AREA_COLORS = ["FFCCCC", "CCFFCC", "CCCCFF", "FFFFCC", "FFCCFF", "CCFFFF", "FFD9CC", "E5CCFF", "D9FFCC", "FFE5CC"];
 
 const NotificationPopup = ({ message, type, onClose }) => {
-    const overlayStyle = { position: 'fixed', top: '20px', right: '20px', zIndex: 999999, minWidth: '320px', maxWidth: '450px', backgroundColor: '#ffffff', borderRadius: '12px', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15)', borderLeft: `6px solid ${type === 'error' ? '#EF4444' : type === 'success' ? '#10B981' : '#3B82F6'}`, display: 'flex', alignItems: 'flex-start', padding: '16px', fontFamily: 'sans-serif', animation: 'slideInRight 0.4s ease-out' };
+    const overlayStyle = { position: 'fixed', top: '20px', right: '20px', left: window.innerWidth <= 768 ? '20px' : 'auto', zIndex: 999999, minWidth: '300px', maxWidth: '450px', backgroundColor: '#ffffff', borderRadius: '12px', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15)', borderLeft: `6px solid ${type === 'error' ? '#EF4444' : type === 'success' ? '#10B981' : '#3B82F6'}`, display: 'flex', alignItems: 'flex-start', padding: '16px', fontFamily: 'sans-serif', animation: 'slideInRight 0.4s ease-out' };
     return (
         <div style={overlayStyle}>
             <div style={{ fontSize: '24px', marginRight: '12px' }}>{type === 'success' ? '✅' : type === 'error' ? '⛔' : 'ℹ️'}</div>
@@ -77,7 +139,7 @@ const NotificationPopup = ({ message, type, onClose }) => {
 };
 
 // ===========================================
-// --- 2. SOTTO-COMPONENTI (MODALI) ---
+// --- 2. SOTTO-COMPONENTI (MODALI MANCANTI) ---
 // ===========================================
 
 const AddExpenseModal = ({ show, onClose, user, userData, showNotification, expenseToEdit }) => {
@@ -112,9 +174,9 @@ const AddExpenseModal = ({ show, onClose, user, userData, showNotification, expe
             onClose();
         } catch (error) { showNotification("Errore: " + error.message, "error"); } finally { setIsSaving(false); }
     };
-    const inputStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', marginBottom: '15px' };
+    const inputStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', marginBottom: '15px', boxSizing: 'border-box' };
     return ReactDOM.createPortal(
-        <><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',backgroundColor:'rgba(0,0,0,0.6)',zIndex:99998}} onClick={onClose} /><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',zIndex:99999,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}><div style={{backgroundColor:'#fff',width:'100%',maxWidth:'500px',borderRadius:'12px',overflow:'hidden',pointerEvents:'auto'}} onClick={(e) => e.stopPropagation()}><div style={{padding:'16px 24px',borderBottom:'1px solid #e5e7eb',display:'flex',justifyContent:'space-between',alignItems:'center',background:'#ecfdf5'}}><h3 style={{margin:0,fontSize:'18px',fontWeight:'bold',color:'#047857'}}>{expenseToEdit ? '✏️ Modifica Spesa' : '💰 Registra Nuova Spesa'}</h3><button onClick={onClose} style={{border:'none',background:'none',fontSize:'24px',cursor:'pointer',color:'#047857'}}>&times;</button></div><div style={{padding:'24px'}}><form id="add-expense-form" onSubmit={handleSave}><div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Data</label><input type="date" value={date} onChange={e => setDate(e.target.value)} style={inputStyle} required /></div><div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Importo (€)</label><input type="number" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} style={inputStyle} required /></div><div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Descrizione</label><input type="text" value={description} onChange={e => setDescription(e.target.value)} style={inputStyle} required /></div><div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Allegato</label><input type="file" onChange={e => setFile(e.target.files[0])} accept="image/*,.pdf" style={inputStyle} /></div><div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Note</label><textarea value={note} onChange={e => setNote(e.target.value)} style={inputStyle} /></div></form></div><div style={{padding:'16px 24px',backgroundColor:'#f8fafc',borderTop:'1px solid #e2e8f0',display:'flex',justifyContent:'flex-end',gap:'10px'}}><button type="button" onClick={onClose} className="modern-btn-outline">Annulla</button><button type="submit" form="add-expense-form" disabled={isSaving} className="modern-btn" style={{background:'#16a34a'}}>{isSaving ? '...' : 'Conferma'}</button></div></div></div></>, document.body
+        <><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',backgroundColor:'rgba(0,0,0,0.6)',zIndex:99998}} onClick={onClose} /><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',zIndex:99999,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}><div style={{backgroundColor:'#fff',width:'100%',maxWidth:'500px',borderRadius:'12px',overflow:'hidden',pointerEvents:'auto', margin: '0 15px'}} onClick={(e) => e.stopPropagation()}><div style={{padding:'16px 24px',borderBottom:'1px solid #e5e7eb',display:'flex',justifyContent:'space-between',alignItems:'center',background:'#ecfdf5'}}><h3 style={{margin:0,fontSize:'18px',fontWeight:'bold',color:'#047857'}}>{expenseToEdit ? '✏️ Modifica Spesa' : '💰 Registra Nuova Spesa'}</h3><button onClick={onClose} style={{border:'none',background:'none',fontSize:'24px',cursor:'pointer',color:'#047857'}}>&times;</button></div><div style={{padding:'24px'}}><form id="add-expense-form" onSubmit={handleSave}><div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Data</label><input type="date" value={date} onChange={e => setDate(e.target.value)} style={inputStyle} required /></div><div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Importo (€)</label><input type="number" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} style={inputStyle} required /></div><div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Descrizione</label><input type="text" value={description} onChange={e => setDescription(e.target.value)} style={inputStyle} required /></div><div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Allegato</label><input type="file" onChange={e => setFile(e.target.files[0])} accept="image/*,.pdf" style={inputStyle} /></div><div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Note</label><textarea value={note} onChange={e => setNote(e.target.value)} style={inputStyle} /></div></form></div><div style={{padding:'16px 24px',backgroundColor:'#f8fafc',borderTop:'1px solid #e2e8f0',display:'flex',justifyContent:'flex-end',gap:'10px'}}><button type="button" onClick={onClose} className="modern-btn-outline">Annulla</button><button type="submit" form="add-expense-form" disabled={isSaving} className="modern-btn" style={{background:'#16a34a'}}>{isSaving ? '...' : 'Conferma'}</button></div></div></div></>, document.body
     );
 };
 
@@ -123,8 +185,8 @@ const ProcessExpenseModal = ({ show, onClose, expense, onConfirm, isProcessing }
     const [adminNote, setAdminNote] = useState('');
     if (!show || !expense) return null;
     const handleSubmit = (e) => { e.preventDefault(); onConfirm(expense.id, adminPaymentMethod, adminNote); };
-    const inputStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', marginBottom: '15px' };
-    return ReactDOM.createPortal( <><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',backgroundColor:'rgba(0,0,0,0.6)',zIndex:99998}} onClick={onClose} /><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',zIndex:99999,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}><div style={{backgroundColor:'#fff',width:'100%',maxWidth:'500px',borderRadius:'12px',overflow:'hidden',pointerEvents:'auto'}} onClick={(e) => e.stopPropagation()}><div style={{padding:'16px 24px',borderBottom:'1px solid #e5e7eb',display:'flex',justifyContent:'space-between',alignItems:'center',background:'#f0fdf4'}}><h3 style={{margin:0,fontSize:'18px',fontWeight:'bold',color:'#166534'}}>✅ Chiudi Spesa</h3><button onClick={onClose} style={{border:'none',background:'none',fontSize:'24px',cursor:'pointer',color:'#166534'}}>&times;</button></div><div style={{padding:'24px'}}><div style={{marginBottom:'20px', background:'#f8fafc', padding:'15px', borderRadius:'8px', border:'1px solid #e2e8f0'}}><p><strong>Dipendente:</strong> {expense.userName}</p><p><strong>Importo:</strong> € {parseFloat(expense.amount).toFixed(2)}</p></div><form id="process-expense-form" onSubmit={handleSubmit}><select value={adminPaymentMethod} onChange={e => setAdminPaymentMethod(e.target.value)} style={inputStyle}><option>Rimborso in Busta Paga</option><option>Bonifico Effettuato</option><option>Rimborso Cassa</option></select><textarea value={adminNote} onChange={e => setAdminNote(e.target.value)} style={inputStyle} placeholder="Note amministrative..." /></form></div><div style={{padding:'16px 24px',backgroundColor:'#f8fafc',borderTop:'1px solid #e2e8f0',display:'flex',justifyContent:'flex-end',gap:'10px'}}><button onClick={onClose} className="modern-btn-outline">Annulla</button><button type="submit" form="process-expense-form" disabled={isProcessing} className="modern-btn" style={{background:'#16a34a'}}>{isProcessing ? '...' : 'Conferma'}</button></div></div></div></>, document.body );
+    const inputStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', marginBottom: '15px', boxSizing: 'border-box' };
+    return ReactDOM.createPortal( <><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',backgroundColor:'rgba(0,0,0,0.6)',zIndex:99998}} onClick={onClose} /><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',zIndex:99999,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}><div style={{backgroundColor:'#fff',width:'100%',maxWidth:'500px',borderRadius:'12px',overflow:'hidden',pointerEvents:'auto', margin: '0 15px'}} onClick={(e) => e.stopPropagation()}><div style={{padding:'16px 24px',borderBottom:'1px solid #e5e7eb',display:'flex',justifyContent:'space-between',alignItems:'center',background:'#f0fdf4'}}><h3 style={{margin:0,fontSize:'18px',fontWeight:'bold',color:'#166534'}}>✅ Chiudi Spesa</h3><button onClick={onClose} style={{border:'none',background:'none',fontSize:'24px',cursor:'pointer',color:'#166534'}}>&times;</button></div><div style={{padding:'24px'}}><div style={{marginBottom:'20px', background:'#f8fafc', padding:'15px', borderRadius:'8px', border:'1px solid #e2e8f0'}}><p><strong>Dipendente:</strong> {expense.userName}</p><p><strong>Importo:</strong> € {parseFloat(expense.amount).toFixed(2)}</p></div><form id="process-expense-form" onSubmit={handleSubmit}><select value={adminPaymentMethod} onChange={e => setAdminPaymentMethod(e.target.value)} style={inputStyle}><option>Rimborso in Busta Paga</option><option>Bonifico Effettuato</option><option>Rimborso Cassa</option></select><textarea value={adminNote} onChange={e => setAdminNote(e.target.value)} style={inputStyle} placeholder="Note amministrative..." /></form></div><div style={{padding:'16px 24px',backgroundColor:'#f8fafc',borderTop:'1px solid #e2e8f0',display:'flex',justifyContent:'flex-end',gap:'10px'}}><button onClick={onClose} className="modern-btn-outline">Annulla</button><button type="submit" form="process-expense-form" disabled={isProcessing} className="modern-btn" style={{background:'#16a34a'}}>{isProcessing ? '...' : 'Conferma'}</button></div></div></div></>, document.body );
 };
 
 const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) => {
@@ -133,8 +195,8 @@ const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) =>
     const [formData, setFormData] = useState({ workAreaId: entry.workAreaId || '', note: entry.note || '', date: formatDateForInput(entry.clockInDate), clockInTime: entry.clockInTimeFormatted || '08:00', clockOutTime: entry.clockOutTimeFormatted !== 'In corso' ? entry.clockOutTimeFormatted : '' });
     const handleChange = (e) => { setFormData({ ...formData, [e.target.name]: e.target.value }); };
     const handleSubmit = (e) => { e.preventDefault(); if (skipPause && (!formData.note || formData.note.trim() === '')) { alert("Nota obbligatoria se salti la pausa."); return; } onSave(entry.id, { ...formData, skippedBreak: skipPause }); };
-    const inputStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', marginBottom: '15px' };
-    return ReactDOM.createPortal( <><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',backgroundColor:'rgba(0,0,0,0.6)',zIndex:99998}} onClick={onClose}/><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',zIndex:99999,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}><div style={{backgroundColor:'#fff',width:'100%',maxWidth:'500px',borderRadius:'12px',overflow:'hidden',pointerEvents:'auto'}} onClick={e=>e.stopPropagation()}><div style={{padding:'20px'}}><h3 style={{margin:0, marginBottom:'20px', fontSize:'18px', fontWeight:'bold', color:'#0f172a'}}>✏️ Modifica Timbratura</h3><form onSubmit={handleSubmit}><div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Data</label><input type="date" name="date" value={formData.date} onChange={handleChange} style={inputStyle}/></div>{!entry.isAbsence && <div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Area/Cantiere</label><select name="workAreaId" value={formData.workAreaId} onChange={handleChange} style={inputStyle}>{workAreas.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></div>}<div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Ora Ingresso</label><input type="time" name="clockInTime" value={formData.clockInTime} onChange={handleChange} style={inputStyle}/></div>{!entry.isAbsence && <div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Ora Uscita</label><input type="time" name="clockOutTime" value={formData.clockOutTime} onChange={handleChange} style={inputStyle}/></div>}<div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'15px'}}><input type="checkbox" checked={skipPause} onChange={e=>setSkipPause(e.target.checked)} style={{width:'18px', height:'18px'}}/><label style={{fontWeight:'bold', color:'#0f172a'}}>Rimuovi Pausa (Nessuna pausa effettuata)</label></div><div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Note</label><textarea name="note" value={formData.note} onChange={handleChange} style={inputStyle}/></div><div style={{display:'flex', justifyContent:'flex-end', gap:'10px'}}><button type="button" onClick={onClose} className="modern-btn-outline">Annulla</button><button type="submit" disabled={isLoading} className="modern-btn">Salva Modifiche</button></div></form></div></div></div></>, document.body );
+    const inputStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', marginBottom: '15px', boxSizing: 'border-box' };
+    return ReactDOM.createPortal( <><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',backgroundColor:'rgba(0,0,0,0.6)',zIndex:99998}} onClick={onClose}/><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',zIndex:99999,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}><div style={{backgroundColor:'#fff',width:'100%',maxWidth:'500px',borderRadius:'12px',overflow:'hidden',pointerEvents:'auto', margin: '0 15px'}} onClick={e=>e.stopPropagation()}><div style={{padding:'20px'}}><h3 style={{margin:0, marginBottom:'20px', fontSize:'18px', fontWeight:'bold', color:'#0f172a'}}>✏️ Modifica Timbratura</h3><form onSubmit={handleSubmit}><div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Data</label><input type="date" name="date" value={formData.date} onChange={handleChange} style={inputStyle}/></div>{!entry.isAbsence && <div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Area/Cantiere</label><select name="workAreaId" value={formData.workAreaId} onChange={handleChange} style={inputStyle}>{workAreas.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></div>}<div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Ora Ingresso</label><input type="time" name="clockInTime" value={formData.clockInTime} onChange={handleChange} style={inputStyle}/></div>{!entry.isAbsence && <div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Ora Uscita</label><input type="time" name="clockOutTime" value={formData.clockOutTime} onChange={handleChange} style={inputStyle}/></div>}<div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'15px'}}><input type="checkbox" checked={skipPause} onChange={e=>setSkipPause(e.target.checked)} style={{width:'18px', height:'18px'}}/><label style={{fontWeight:'bold', color:'#0f172a'}}>Rimuovi Pausa (Nessuna pausa effettuata)</label></div><div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Note</label><textarea name="note" value={formData.note} onChange={handleChange} style={inputStyle}/></div><div style={{display:'flex', justifyContent:'flex-end', gap:'10px'}}><button type="button" onClick={onClose} className="modern-btn-outline">Annulla</button><button type="submit" disabled={isLoading} className="modern-btn">Salva Modifiche</button></div></form></div></div></div></>, document.body );
 };
 
 const AddEmployeeToAreaModal = ({ show, onClose, allEmployees, workAreas, userData, showNotification, onDataUpdate }) => {
@@ -143,8 +205,8 @@ const AddEmployeeToAreaModal = ({ show, onClose, allEmployees, workAreas, userDa
     const sortedEmployees = useMemo(() => { return [...allEmployees].filter(e => !e.isDeleted).sort((a, b) => { const nameA = `${a.surname} ${a.name}`.toLowerCase(); const nameB = `${b.surname} ${b.name}`.toLowerCase(); return nameA.localeCompare(nameB); }); }, [allEmployees]);
     if (!show) return null;
     const handleSave = async (e) => { e.preventDefault(); if (!selectedEmpId || !selectedAreaId) return; setIsSaving(true); try { const employeeRef = doc(db, "employees", selectedEmpId); await updateDoc(employeeRef, { workAreaIds: arrayUnion(selectedAreaId) }); showNotification("Dipendente aggiunto!", "success"); await onDataUpdate(); onClose(); setSelectedEmpId(''); setSelectedAreaId(''); } catch (error) { showNotification("Errore", "error"); } finally { setIsSaving(false); } };
-    const inputStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', marginBottom: '15px' };
-    return ReactDOM.createPortal( <><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',backgroundColor:'rgba(0,0,0,0.6)',zIndex:99998}} onClick={onClose}/><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',zIndex:99999,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}><div style={{backgroundColor:'#fff',width:'100%',maxWidth:'500px',borderRadius:'12px',overflow:'hidden',pointerEvents:'auto'}}><div style={{padding:'20px'}}><h3 style={{margin:0, marginBottom:'20px', fontSize:'18px', fontWeight:'bold', color:'#0f172a'}}>👥 Aggiungi alla Squadra</h3><form onSubmit={handleSave}><select value={selectedEmpId} onChange={e => setSelectedEmpId(e.target.value)} style={inputStyle}><option value="">-- Seleziona Dipendente --</option>{sortedEmployees.map(emp => (<option key={emp.id} value={emp.id}>{emp.surname} {emp.name}</option>))}</select><select value={selectedAreaId} onChange={e => setSelectedAreaId(e.target.value)} style={inputStyle}><option value="">-- Seleziona Area --</option>{myAreas.map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}</select><div style={{display:'flex', justifyContent:'flex-end', gap:'10px'}}><button type="button" onClick={onClose} className="modern-btn-outline">Annulla</button><button type="submit" disabled={isSaving} className="modern-btn">Conferma</button></div></form></div></div></div></>, document.body );
+    const inputStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', marginBottom: '15px', boxSizing: 'border-box' };
+    return ReactDOM.createPortal( <><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',backgroundColor:'rgba(0,0,0,0.6)',zIndex:99998}} onClick={onClose}/><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',zIndex:99999,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}><div style={{backgroundColor:'#fff',width:'100%',maxWidth:'500px',borderRadius:'12px',overflow:'hidden',pointerEvents:'auto', margin: '0 15px'}}><div style={{padding:'20px'}}><h3 style={{margin:0, marginBottom:'20px', fontSize:'18px', fontWeight:'bold', color:'#0f172a'}}>👥 Aggiungi alla Squadra</h3><form onSubmit={handleSave}><select value={selectedEmpId} onChange={e => setSelectedEmpId(e.target.value)} style={inputStyle}><option value="">-- Seleziona Dipendente --</option>{sortedEmployees.map(emp => (<option key={emp.id} value={emp.id}>{emp.surname} {emp.name}</option>))}</select><select value={selectedAreaId} onChange={e => setSelectedAreaId(e.target.value)} style={inputStyle}><option value="">-- Seleziona Area --</option>{myAreas.map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}</select><div style={{display:'flex', justifyContent:'flex-end', gap:'10px'}}><button type="button" onClick={onClose} className="modern-btn-outline">Annulla</button><button type="submit" disabled={isSaving} className="modern-btn">Conferma</button></div></form></div></div></div></>, document.body );
 };
 
 const AddFormModal = ({ show, onClose, workAreas, user, onDataUpdate, currentUserRole, userData, showNotification }) => {
@@ -152,12 +214,12 @@ const AddFormModal = ({ show, onClose, workAreas, user, onDataUpdate, currentUse
     const availableAreas = useMemo(() => { if (currentUserRole === 'admin') return workAreas; if (currentUserRole === 'preposto' && userData?.managedAreaIds) return workAreas.filter(a => userData.managedAreaIds.includes(a.id)); return []; }, [currentUserRole, userData, workAreas]);
     if (!show) return null;
     const handleSave = async (e) => { e.preventDefault(); if (!formTitle || !formUrl || !formAreaId) return; setIsSaving(true); try { await addDoc(collection(db, "area_forms"), { title: formTitle, url: formUrl, workAreaId: formAreaId, createdBy: user.email, createdAt: Timestamp.now() }); showNotification("Modulo creato!", "success"); onDataUpdate(); onClose(); setFormTitle(''); setFormUrl(''); setFormAreaId(''); } catch (error) { showNotification("Errore", "error"); } finally { setIsSaving(false); } };
-    const inputStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', marginBottom: '15px' };
-    return ReactDOM.createPortal( <><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',backgroundColor:'rgba(0,0,0,0.6)',zIndex:99998}} onClick={onClose}/><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',zIndex:99999,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}><div style={{backgroundColor:'#fff',width:'100%',maxWidth:'500px',borderRadius:'12px',overflow:'hidden',pointerEvents:'auto'}} onClick={e=>e.stopPropagation()}><div style={{padding:'20px'}}><h3 style={{margin:0, marginBottom:'20px', fontSize:'18px', fontWeight:'bold', color:'#0f172a'}}>🔗 Nuovo Modulo</h3><form onSubmit={handleSave}><input placeholder="Titolo Modulo" value={formTitle} onChange={e=>setFormTitle(e.target.value)} style={inputStyle}/><input placeholder="URL Modulo (Google Forms)" value={formUrl} onChange={e=>setFormUrl(e.target.value)} style={inputStyle}/><select value={formAreaId} onChange={e=>setFormAreaId(e.target.value)} style={inputStyle}><option value="">-- Seleziona Area --</option>{availableAreas.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select><div style={{display:'flex', justifyContent:'flex-end', gap:'10px'}}><button type="button" onClick={onClose} className="modern-btn-outline">Annulla</button><button type="submit" disabled={isSaving} className="modern-btn">Salva</button></div></form></div></div></div></>, document.body );
+    const inputStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', marginBottom: '15px', boxSizing: 'border-box' };
+    return ReactDOM.createPortal( <><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',backgroundColor:'rgba(0,0,0,0.6)',zIndex:99998}} onClick={onClose}/><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',zIndex:99999,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}><div style={{backgroundColor:'#fff',width:'100%',maxWidth:'500px',borderRadius:'12px',overflow:'hidden',pointerEvents:'auto', margin: '0 15px'}} onClick={e=>e.stopPropagation()}><div style={{padding:'20px'}}><h3 style={{margin:0, marginBottom:'20px', fontSize:'18px', fontWeight:'bold', color:'#0f172a'}}>🔗 Nuovo Modulo</h3><form onSubmit={handleSave}><input placeholder="Titolo Modulo" value={formTitle} onChange={e=>setFormTitle(e.target.value)} style={inputStyle}/><input placeholder="URL Modulo (Google Forms)" value={formUrl} onChange={e=>setFormUrl(e.target.value)} style={inputStyle}/><select value={formAreaId} onChange={e=>setFormAreaId(e.target.value)} style={inputStyle}><option value="">-- Seleziona Area --</option>{availableAreas.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select><div style={{display:'flex', justifyContent:'flex-end', gap:'10px'}}><button type="button" onClick={onClose} className="modern-btn-outline">Annulla</button><button type="submit" disabled={isSaving} className="modern-btn">Salva</button></div></form></div></div></div></>, document.body );
 };
 
 // ===========================================
-// --- VISTE SECONDARIE (CON STILI MODERNI) ---
+// --- VISTE SECONDARIE (CON DATA-LABEL PER MOBILE) ---
 // ===========================================
 
 const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortConfig, requestSort, searchTerm, setSearchTerm, showArchived, setShowArchived }) => { 
@@ -181,10 +243,10 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
 
                         return (
                             <tr key={emp.id} style={{ opacity: emp.isDeleted ? 0.6 : 1, background: emp.isDeleted ? '#fdf2f8' : 'transparent' }}>
-                                <td>
-                                    <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
+                                <td data-label="Dipendente">
+                                    <div style={{display: 'flex', alignItems: 'center', gap: '12px', justifyContent: window.innerWidth <= 768 ? 'flex-end' : 'flex-start'}}>
                                         <div className="modern-avatar">{initial}</div>
-                                        <div>
+                                        <div style={{textAlign: window.innerWidth <= 768 ? 'right' : 'left'}}>
                                             <div style={{fontWeight: '700', color: emp.isDeleted ? '#be123c' : '#1e293b', textDecoration: emp.isDeleted ? 'line-through' : 'none'}}>
                                                 {emp.name} {emp.surname}
                                             </div>
@@ -192,7 +254,7 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                         </div>
                                     </div>
                                 </td>
-                                <td>
+                                <td data-label="Stato Attuale">
                                     {emp.isDeleted ? <span className="modern-badge red">Disattivato</span> : 
                                         emp.activeEntry && emp.activeEntry.isAbsence ? 
                                             <span className="modern-badge purple">{emp.activeEntry.note || 'GIUSTIFICATO'}</span> 
@@ -202,12 +264,12 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                             </span>
                                     }
                                 </td>
-                                <td>
-                                    <div style={{maxWidth: '250px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#64748b', fontSize: '13px'}}>
+                                <td data-label="Aree Assegnate">
+                                    <div style={{maxWidth: '250px', whiteSpace: 'normal', overflow: 'hidden', color: '#64748b', fontSize: '13px', textAlign: window.innerWidth <= 768 ? 'right' : 'left'}}>
                                         {emp.workAreaNames?.join(', ') || 'Nessuna area'}
                                     </div>
                                 </td>
-                                <td style={{textAlign: 'right'}}>
+                                <td data-label="Azioni" className="actions-cell">
                                     {!emp.isDeleted ? (
                                         <button onClick={() => openModal('employeeActions', emp)} className="modern-btn">⚙️ Gestisci</button>
                                     ) : (
@@ -234,27 +296,27 @@ const AreaManagementView = ({ workAreas, openModal, currentUserRole, handleArchi
     });
     return (
         <>
-            <div className="modern-title" style={{justifyContent: 'space-between', border: 'none'}}>
-                <div style={{display:'flex', gap:'10px'}}>
-                    <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="🔍 Cerca cantiere..." className="modern-input" />
-                    <button onClick={() => setShowArchived(!showArchived)} className="modern-btn-outline">{showArchived ? '📂 Nascondi Archiviate' : '📂 Mostra Archiviate'}</button>
+            <div className="modern-title" style={{border: 'none', marginBottom: '10px'}}>
+                <div style={{display:'flex', gap:'10px', width:'100%', flexWrap: 'wrap'}}>
+                    <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="🔍 Cerca cantiere..." className="modern-input" style={{flex: 1, minWidth: '200px', maxWidth: '100%'}} />
+                    <button onClick={() => setShowArchived(!showArchived)} className="modern-btn-outline" style={{width: window.innerWidth <= 768 ? '100%' : 'auto'}}>{showArchived ? '📂 Nascondi Archiviate' : '📂 Mostra Archiviate'}</button>
                 </div>
             </div>
             <div className="modern-table-wrapper">
                 <table className="modern-table">
-                    <thead><tr><th>Nome Cantiere</th><th>Ore Totali Erogate</th><th>Pausa Default</th>{currentUserRole === 'admin' && (<><th>Coordinate GPS</th><th>Raggio (m)</th></>)}<th style={{textAlign:'right'}}>Azioni</th></tr></thead>
+                    <thead><tr><th>Nome Cantiere</th><th>Ore Erogate</th><th>Pausa Default</th>{currentUserRole === 'admin' && (<><th>Coordinate GPS</th><th>Raggio</th></>)}<th style={{textAlign:'right'}}>Azioni</th></tr></thead>
                     <tbody>
                         {filteredAreas.map(area => (
                             <tr key={area.id} style={{ opacity: area.isArchived ? 0.6 : 1, background: area.isArchived ? '#f8fafc' : 'transparent' }}>
-                                <td style={{fontWeight: '700', color: '#1e293b'}}>{area.isArchived && "🔒 "}{area.name}</td>
-                                <td><span className="modern-badge blue">{area.totalHours ? `${area.totalHours}h` : '0h'}</span></td>
-                                <td><span className="modern-badge outline" style={{border: '1px solid #cbd5e1', color: '#64748b'}}>⏱️ {area.pauseDuration || 0} min</span></td>
-                                {currentUserRole === 'admin' && (<><td style={{fontFamily: 'monospace', color: '#94a3b8'}}>{area.latitude?.toFixed(4)}, {area.longitude?.toFixed(4)}</td><td>{area.radius || 0}</td></>)}
-                                <td style={{textAlign:'right', display:'flex', gap:'8px', justifyContent:'flex-end'}}>
+                                <td data-label="Cantiere" style={{fontWeight: '700', color: '#1e293b'}}>{area.isArchived && "🔒 "}{area.name}</td>
+                                <td data-label="Ore Erogate"><span className="modern-badge blue">{area.totalHours ? `${area.totalHours}h` : '0h'}</span></td>
+                                <td data-label="Pausa"><span className="modern-badge outline" style={{border: '1px solid #cbd5e1', color: '#64748b'}}>⏱️ {area.pauseDuration || 0} min</span></td>
+                                {currentUserRole === 'admin' && (<><td data-label="GPS" style={{fontFamily: 'monospace', color: '#94a3b8'}}>{area.latitude?.toFixed(4)}, {area.longitude?.toFixed(4)}</td><td data-label="Raggio">{area.radius || 0}m</td></>)}
+                                <td data-label="Azioni" className="actions-cell">
                                     {!area.isArchived ? (
                                         <>
                                             {currentUserRole === 'admin' && <button onClick={() => openModal('editArea', area)} className="modern-btn-outline" style={{color:'#2563eb', borderColor:'#bfdbfe'}}>✏️ Modifica</button>}
-                                            {currentUserRole === 'preposto' && <button onClick={() => openModal('editAreaPauseOnly', area)} className="modern-btn-outline">⏱️ Modifica Pausa</button>}
+                                            {currentUserRole === 'preposto' && <button onClick={() => openModal('editAreaPauseOnly', area)} className="modern-btn-outline">⏱️ Pausa</button>}
                                             {currentUserRole === 'admin' && <button onClick={() => handleArchiveArea(area)} className="modern-btn-danger">📂 Archivia</button>}
                                         </>
                                     ) : (
@@ -282,14 +344,12 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
                 <tbody>
                     {displayedAdmins.map(admin => (
                         <tr key={admin.id}>
-                            <td><div style={{fontWeight:'700', color:'#0f172a'}}>{admin.name} {admin.surname}</div><div style={{fontSize:'12px', color:'#64748b'}}>{admin.email}</div></td>
-                            <td><span className={`modern-badge ${admin.role === 'admin' ? 'purple' : 'blue'}`}>{admin.role}</span></td>
-                            <td style={{color:'#64748b'}}>{admin.managedAreaNames?.join(', ') || '-'}</td>
-                            <td style={{textAlign:'right'}}>
-                                <div style={{display:'flex', gap:'8px', justifyContent:'flex-end'}}>
-                                    {currentUserRole === 'admin' && (<button onClick={() => openModal('deleteAdmin', admin)} className="modern-btn-danger" disabled={admin.email === user?.email}>🗑️ Elimina</button>)}
-                                    {admin.role === 'preposto' && (<button onClick={() => openModal('assignPrepostoAreas', admin)} className="modern-btn" style={{background:'#3b82f6'}}>🌍 Aree</button>)}
-                                </div>
+                            <td data-label="Utente"><div style={{fontWeight:'700', color:'#0f172a'}}>{admin.name} {admin.surname}</div><div style={{fontSize:'12px', color:'#64748b'}}>{admin.email}</div></td>
+                            <td data-label="Ruolo"><span className={`modern-badge ${admin.role === 'admin' ? 'purple' : 'blue'}`}>{admin.role}</span></td>
+                            <td data-label="Aree" style={{color:'#64748b'}}>{admin.managedAreaNames?.join(', ') || '-'}</td>
+                            <td data-label="Azioni" className="actions-cell">
+                                {currentUserRole === 'admin' && (<button onClick={() => openModal('deleteAdmin', admin)} className="modern-btn-danger" disabled={admin.email === user?.email}>🗑️ Elimina</button>)}
+                                {admin.role === 'preposto' && (<button onClick={() => openModal('assignPrepostoAreas', admin)} className="modern-btn" style={{background:'#3b82f6'}}>🌍 Aree</button>)}
                             </td>
                         </tr>
                     ))}
@@ -316,12 +376,12 @@ const ExpensesView = ({ expenses, onProcessExpense, onEditExpense, currentUserRo
             <tbody>
                 {displayedExpenses.map(exp => (
                     <tr key={exp.id}>
-                        <td style={{color: '#64748b', fontWeight:'600'}}>{exp.date && exp.date.toDate ? exp.date.toDate().toLocaleDateString('it-IT') : new Date(exp.date).toLocaleDateString('it-IT')}</td>
-                        <td><div style={{fontWeight: '700', color: '#0f172a'}}>{exp.userName}</div></td>
-                        <td><div style={{fontWeight: '600'}}>{exp.description}</div><div style={{fontSize:'12px', color:'#94a3b8'}}>{exp.note}</div></td>
-                        <td>{exp.receiptUrl ? <a href={exp.receiptUrl} target="_blank" rel="noreferrer" style={{color:'#2563eb', fontWeight:'bold', textDecoration:'none'}}>📎 Apri</a> : <span style={{color:'#cbd5e1'}}>-</span>}</td>
-                        <td><span className="modern-badge green" style={{fontSize:'14px'}}>€ {parseFloat(exp.amount).toFixed(2)}</span></td>
-                        <td style={{textAlign:'right'}}>
+                        <td data-label="Data" style={{color: '#64748b', fontWeight:'600'}}>{exp.date && exp.date.toDate ? exp.date.toDate().toLocaleDateString('it-IT') : new Date(exp.date).toLocaleDateString('it-IT')}</td>
+                        <td data-label="Dipendente"><div style={{fontWeight: '700', color: '#0f172a'}}>{exp.userName}</div></td>
+                        <td data-label="Dettaglio"><div style={{fontWeight: '600'}}>{exp.description}</div><div style={{fontSize:'12px', color:'#94a3b8'}}>{exp.note}</div></td>
+                        <td data-label="Allegato">{exp.receiptUrl ? <a href={exp.receiptUrl} target="_blank" rel="noreferrer" style={{color:'#2563eb', fontWeight:'bold', textDecoration:'none'}}>📎 Apri</a> : <span style={{color:'#cbd5e1'}}>-</span>}</td>
+                        <td data-label="Importo"><span className="modern-badge green" style={{fontSize:'14px'}}>€ {parseFloat(exp.amount).toFixed(2)}</span></td>
+                        <td data-label="Azioni" className="actions-cell">
                             {!showArchived ? (
                                 currentUserRole === 'admin' ? <button onClick={() => onProcessExpense(exp)} className="modern-btn" style={{background:'#16a34a'}}>✅ Gestisci</button> 
                                 : <button onClick={() => onEditExpense(exp)} className="modern-btn" style={{background:'#f59e0b'}}>✏️ Modifica</button>
@@ -339,7 +399,6 @@ const ExpensesView = ({ expenses, onProcessExpense, onEditExpense, currentUserRo
 
 const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, allEmployees, currentUserRole, userData, setDateRange, setReportAreaFilter, reportAreaFilter, reportEmployeeFilter, setReportEmployeeFilter, generateReport, isLoading, isActionLoading, managedEmployees, showNotification, handleReviewSkipBreak, onEditEntry, handleSaveEntryEdit }) => {
     
-    // RIMESSO AL SUO POSTO IL MOTORE DEL REPORT PAGHE!
     const handleExportPayrollExcel = () => { 
         if (typeof utils === 'undefined' || typeof writeFile === 'undefined') { showNotification("Libreria esportazione non caricata.", 'error'); return; } 
         if (!reports || reports.length === 0) { showNotification("Nessun dato da esportare per il report paghe.", 'info'); return; } 
@@ -408,46 +467,47 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
     
     return (
         <div className="modern-card mt-6">
-            <div className="modern-title" style={{justifyContent: 'space-between'}}>
-                <div>📊 {title || 'Risultati Report'}</div>
-                <div style={{display:'flex', gap:'10px'}}>
-                    <button onClick={handleExportExcel} disabled={!reports || reports.length === 0} className="modern-btn" style={{background:'#10b981'}}>📥 Excel (Dettagli)</button>
-                    {/* BOTTONE EXCEL PAGHE REINSERITO! */}
-                    <button onClick={handleExportPayrollExcel} disabled={!reports || reports.length === 0} className="modern-btn" style={{background:'#6366f1'}}>📥 Excel Paghe (Griglia)</button>
+            <div className="modern-title">
+                <div>📊 {title || 'Risultati'}</div>
+                <div className="title-actions">
+                    <button onClick={handleExportExcel} disabled={!reports || reports.length === 0} className="modern-btn" style={{background:'#10b981'}}>📥 Excel</button>
+                    <button onClick={handleExportPayrollExcel} disabled={!reports || reports.length === 0} className="modern-btn" style={{background:'#6366f1'}}>📥 Paghe</button>
                     <button onClick={() => handleExportXml(reports)} disabled={!reports || reports.length === 0} className="modern-btn-outline">📥 XML</button>
                 </div>
             </div>
             <div className="modern-table-wrapper">
                 <table className="modern-table">
-                    <thead><tr><th>Dipendente</th><th>Cantiere</th><th>Data</th><th>Orari</th><th>Ore Nette</th><th>Stato Pausa</th><th style={{textAlign:'right'}}>Nota / Azioni</th></tr></thead>
+                    <thead><tr><th>Dipendente</th><th>Cantiere</th><th>Data</th><th>Orari</th><th>Ore Nette</th><th>Stato Pausa</th><th style={{textAlign:'right'}}>Azioni</th></tr></thead>
                     <tbody>
                         {reports.map((entry) => (
                             <tr key={entry.id} style={{background: entry.isAbsence ? '#fdf2f8' : 'transparent'}}>
-                                <td style={{fontWeight:'700'}}>{entry.employeeName}</td>
-                                <td>{entry.isAbsence ? <span style={{color:'#cbd5e1'}}>-</span> : <span className="modern-badge blue">{entry.areaName}</span>}</td>
-                                <td style={{color:'#64748b', fontWeight:'600'}}>{entry.clockInDate}</td>
+                                <td data-label="Dipendente" style={{fontWeight:'700'}}>{entry.employeeName}</td>
+                                <td data-label="Cantiere">{entry.isAbsence ? <span style={{color:'#cbd5e1'}}>-</span> : <span className="modern-badge blue">{entry.areaName}</span>}</td>
+                                <td data-label="Data" style={{color:'#64748b', fontWeight:'600'}}>{entry.clockInDate}</td>
                                 {entry.isAbsence ? (
                                     <>
-                                        <td colSpan={2}><span className="modern-badge purple">{entry.statusLabel}</span></td>
-                                        <td>-</td>
-                                        <td style={{textAlign:'right'}}><div style={{fontSize:'12px', color:'#64748b'}}>{entry.note}</div><button onClick={() => onEditEntry(entry)} className="modern-btn-outline" style={{marginTop:'5px', padding:'4px 8px', fontSize:'11px'}}>📝 Modifica</button></td>
+                                        <td data-label="Stato"><span className="modern-badge purple">{entry.statusLabel}</span></td>
+                                        <td data-label="Ore Nette">-</td>
+                                        <td data-label="Pausa">-</td>
+                                        <td data-label="Azioni" className="actions-cell">
+                                            <div style={{fontSize:'12px', color:'#64748b'}}>{entry.note}</div>
+                                            <button onClick={() => onEditEntry(entry)} className="modern-btn-outline" style={{padding:'4px 8px', fontSize:'11px'}}>📝 Modifica</button>
+                                        </td>
                                     </>
                                 ) : (
                                     <>
-                                        <td style={{fontFamily:'monospace', color:'#475569'}}>{entry.clockInTimeFormatted} - {entry.clockOutTimeFormatted}</td>
-                                        <td><span className="modern-badge green" style={{fontSize:'14px'}}>{entry.duration !== null ? entry.duration.toFixed(2) : '...'} h</span></td>
-                                        <td>{entry.skippedBreak ? (entry.skipBreakStatus === 'pending' ? <span className="modern-badge orange">⚠️ Verifica</span> : entry.skipBreakStatus === 'approved' ? <span className="modern-badge green">✅ Approvata</span> : <span className="modern-badge red">❌ Scalata</span>) : (<span style={{color:'#94a3b8', fontSize:'12px'}}>Standard ({entry.pauseHours !== null ? entry.pauseHours.toFixed(2) : '0.00'}h)</span>)}</td>
-                                        <td style={{textAlign:'right'}}>
-                                            <div style={{display:'flex', flexDirection:'column', alignItems:'flex-end', gap:'5px'}}>
-                                                {entry.skippedBreak && entry.skipBreakStatus === 'pending' && (
-                                                    <div style={{display:'flex', gap:'5px', marginBottom:'5px'}}>
-                                                        <button onClick={() => handleReviewSkipBreak(entry.id, 'approved')} className="modern-btn" style={{padding:'4px 8px', fontSize:'11px', background:'#16a34a'}}>Approva</button>
-                                                        <button onClick={() => handleReviewSkipBreak(entry.id, 'rejected')} className="modern-btn-danger" style={{padding:'4px 8px', fontSize:'11px'}}>Rifiuta</button>
-                                                    </div>
-                                                )}
-                                                <button onClick={() => onEditEntry(entry)} className="modern-btn-outline" style={{padding:'4px 8px', fontSize:'11px'}}>✏️ Modifica</button>
-                                                {entry.note && <span style={{fontSize:'11px', color:'#94a3b8', maxWidth:'150px', display:'inline-block', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}} title={entry.note}>{entry.note}</span>}
-                                            </div>
+                                        <td data-label="Orari" style={{fontFamily:'monospace', color:'#475569'}}>{entry.clockInTimeFormatted} - {entry.clockOutTimeFormatted}</td>
+                                        <td data-label="Ore Nette"><span className="modern-badge green" style={{fontSize:'14px'}}>{entry.duration !== null ? entry.duration.toFixed(2) : '...'} h</span></td>
+                                        <td data-label="Pausa">{entry.skippedBreak ? (entry.skipBreakStatus === 'pending' ? <span className="modern-badge orange">⚠️ Verifica</span> : entry.skipBreakStatus === 'approved' ? <span className="modern-badge green">✅ Approvata</span> : <span className="modern-badge red">❌ Scalata</span>) : (<span style={{color:'#94a3b8', fontSize:'12px'}}>Standard ({entry.pauseHours !== null ? entry.pauseHours.toFixed(2) : '0.00'}h)</span>)}</td>
+                                        <td data-label="Azioni" className="actions-cell">
+                                            {entry.skippedBreak && entry.skipBreakStatus === 'pending' && (
+                                                <div style={{display:'flex', gap:'5px'}}>
+                                                    <button onClick={() => handleReviewSkipBreak(entry.id, 'approved')} className="modern-btn" style={{padding:'4px 8px', fontSize:'11px', background:'#16a34a'}}>Approva</button>
+                                                    <button onClick={() => handleReviewSkipBreak(entry.id, 'rejected')} className="modern-btn-danger" style={{padding:'4px 8px', fontSize:'11px'}}>Rifiuta</button>
+                                                </div>
+                                            )}
+                                            <button onClick={() => onEditEntry(entry)} className="modern-btn-outline" style={{padding:'4px 8px', fontSize:'11px'}}>✏️ Modifica</button>
+                                            {entry.note && <span style={{fontSize:'11px', color:'#94a3b8', maxWidth:'150px', display:'inline-block', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}} title={entry.note}>{entry.note}</span>}
                                         </td>
                                     </>
                                 )}
@@ -462,7 +522,7 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
 };
 
 // ===========================================
-// --- DASHBOARD COMPONENT (CON CARTELLINA) ---
+// --- DASHBOARD COMPONENT ---
 // ===========================================
 const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, workAreas, adminEmployeeProfile, handleAdminPause, openModal, isActionLoading }) => {
     const [isMapMode, setIsMapMode] = useState(false);
@@ -493,22 +553,21 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
 
     return (
         <div className="modern-card" style={{borderTop: '4px solid #3b82f6'}}>
-            <div className="modern-title" style={{justifyContent: 'space-between', border: 'none'}}>
+            <div className="modern-title" style={{border: 'none'}}>
                 <div>{isMapMode ? '🌍 Mappa Cantieri' : '⚡ Monitoraggio Operativo'}</div>
-                <button onClick={() => setIsMapMode(!isMapMode)} className="modern-btn-outline">{isMapMode ? '🔙 Torna ai Dati' : '🌍 Apri Mappa'}</button>
+                <button onClick={() => setIsMapMode(!isMapMode)} className="modern-btn-outline" style={{width: window.innerWidth <= 768 ? '100%' : 'auto'}}>{isMapMode ? '🔙 Torna ai Dati' : '🌍 Apri Mappa'}</button>
             </div>
             
             {!isMapMode && (
                 <>
-                    {/* Bottoni Rapidi Ristilizzati */}
                     {adminEntry && (
-                        <div style={{background:'#f8fafc', padding:'20px', borderRadius:'12px', display:'flex', justifyContent:'center', gap:'15px', marginBottom:'30px', border:'1px solid #e2e8f0'}}>
+                        <div className="quick-actions" style={{background:'#f8fafc', padding:'20px', borderRadius:'12px', display:'flex', justifyContent:'center', gap:'15px', marginBottom:'30px', border:'1px solid #e2e8f0'}}>
                             <button onClick={handleAdminPause} disabled={isActionLoading} className="modern-btn" style={{background:'#f59e0b', fontSize:'15px'}}>☕ Inizia Pausa</button>
                             <button onClick={() => openModal('manualClockOut', adminEmployeeProfile)} disabled={isActionLoading} className="modern-btn-danger" style={{fontSize:'15px'}}>⏹️ Fine Turno</button>
                         </div>
                     )}
 
-                    <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(250px, 1fr))', gap:'20px', marginBottom:'30px'}}>
+                    <div className="dashboard-stats" style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(250px, 1fr))', gap:'20px', marginBottom:'30px'}}>
                         <div style={{background:'#fff', padding:'24px', borderRadius:'12px', borderLeft:'5px solid #3b82f6', boxShadow:'0 2px 12px rgba(0,0,0,0.04)'}}>
                             <p style={{margin:0, color:'#64748b', fontSize:'13px', fontWeight:'700', textTransform:'uppercase'}}>Forza Lavoro Attiva</p>
                             <p style={{margin:'10px 0 0 0', fontSize:'32px', fontWeight:'900', color: '#0f172a'}}>{activeEmployeesDetails.length} <span style={{fontSize:'16px', color:'#94a3b8', fontWeight:'500'}}>/ {totalEmployees}</span></p>
@@ -547,11 +606,11 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
                             <tbody>
                                 {activeEmployeesDetails.map(entry => (
                                     <tr key={entry.id}>
-                                        <td style={{fontWeight:'700', fontSize:'15px'}}>{entry.employeeName}</td>
-                                        <td><span className="modern-badge blue">{entry.areaName}</span></td>
-                                        <td style={{fontFamily:'monospace', fontSize:'14px', color:'#475569'}}>{entry.clockInTimeFormatted}</td>
-                                        <td><span className={`modern-badge ${entry.status === 'In Pausa' ? 'orange' : 'green'}`}>{entry.status}</span></td>
-                                        <td style={{fontWeight:'600', color: entry.hasCompletedPause ? '#16a34a' : '#94a3b8'}}>{entry.hasCompletedPause ? '✓ Eseguita' : '-'}</td>
+                                        <td data-label="Dipendente" style={{fontWeight:'700', fontSize:'15px'}}>{entry.employeeName}</td>
+                                        <td data-label="Cantiere"><span className="modern-badge blue">{entry.areaName}</span></td>
+                                        <td data-label="Ingresso" style={{fontFamily:'monospace', fontSize:'14px', color:'#475569'}}>{entry.clockInTimeFormatted}</td>
+                                        <td data-label="Stato"><span className={`modern-badge ${entry.status === 'In Pausa' ? 'orange' : 'green'}`}>{entry.status}</span></td>
+                                        <td data-label="Pausa" style={{fontWeight:'600', color: entry.hasCompletedPause ? '#16a34a' : '#94a3b8'}}>{entry.hasCompletedPause ? '✓ Eseguita' : '-'}</td>
                                     </tr>
                                 ))}
                                 {activeEmployeesDetails.length === 0 && <tr><td colSpan={5} style={{textAlign:'center', padding:'40px', color:'#94a3b8', fontWeight:'600'}}>Nessun dipendente in cantiere.</td></tr>}
@@ -571,7 +630,7 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
 
 
 // ===========================================
-// --- 3. COMPONENTE PRINCIPALE (LOGICA) ---
+// --- COMPONENTE PRINCIPALE (LOGICA) ---
 // ===========================================
 
 const AdminDashboard = ({ user, handleLogout, userData }) => {
@@ -767,13 +826,9 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             await fetchData();
         } catch (error) { console.error("Errore ripristino:", error); showNotification("Errore durante il ripristino.", 'error'); } finally { setIsActionLoading(false); }
     }, [fetchData, showNotification]);
-
-    const handleConfirmProcessExpense = async (expenseId, paymentMethod, note) => { setIsActionLoading(true); try { await updateDoc(doc(db, "expenses", expenseId), { status: 'closed', adminPaymentMethod: paymentMethod, adminNote: note, closedAt: Timestamp.now(), closedBy: user.email }); showNotification("Spesa archiviata!", 'success'); setExpenseToProcess(null); } catch (error) { console.error("Errore archiviazione spesa:", error); showNotification("Errore durante l'archiviazione.", 'error'); } finally { setIsActionLoading(false); } };
     
     const handleAdminPause = useCallback(async () => { if (!adminEmployeeProfile) return showNotification("Profilo non trovato.", 'error'); if (!adminActiveEntry) return showNotification("Nessuna timbratura attiva.", 'error'); if (adminActiveEntry.isOnBreak) { setIsActionLoading(true); try { const togglePauseFunction = httpsCallable(getFunctions(undefined, 'europe-west1'), 'prepostoTogglePause'); const result = await togglePauseFunction({ deviceId: 'ADMIN_MANUAL_ACTION' }); showNotification(result.data.message, 'success'); } catch (error) { showNotification(`Errore pausa: ${error.message}`, 'error'); } finally { setIsActionLoading(false); } return; } if (adminActiveEntry.hasCompletedPause) return showNotification("Pausa già completata.", 'info'); const workArea = allWorkAreas.find(area => area.id === adminActiveEntry.workAreaId); if (!workArea || !workArea.pauseDuration) return showNotification(`Pausa non configurata per l'area.`, 'info'); if (!window.confirm(`Applicare la pausa di ${workArea.pauseDuration} minuti per te stesso?`)) return; setIsActionLoading(true); try { const applyPauseFunction = httpsCallable(getFunctions(undefined, 'europe-west1'), 'applyAutoPauseEmployee'); const result = await applyPauseFunction({ timeEntryId: adminActiveEntry.id, durationMinutes: workArea.pauseDuration, deviceId: 'ADMIN_MANUAL_ACTION' }); showNotification(result.data.message, 'success'); } catch (error) { showNotification(`Errore pausa: ${error.message}`, 'error'); } finally { setIsActionLoading(false); } }, [adminActiveEntry, adminEmployeeProfile, allWorkAreas, showNotification]);
     const handleEmployeePauseClick = useCallback(async (employee) => { const timeEntryId = employee?.activeEntry?.id; if (!timeEntryId) return showNotification("Timbratura attiva non trovata.", 'error'); const workArea = allWorkAreas.find(area => area.id === employee.activeEntry.workAreaId); if (!workArea || !workArea.pauseDuration) return showNotification(`Pausa non configurata per l'area.`, 'info'); if (employee.activeEntry.hasCompletedPause) return showNotification(`Pausa già eseguita.`, 'info'); if (!window.confirm(`Inserire pausa per ${employee.name}?`)) return; setIsActionLoading(true); try { const now = new Date(); const startPause = new Date(now.getTime() - (workArea.pauseDuration * 60000)); const entryRef = doc(db, "time_entries", timeEntryId); await updateDoc(entryRef, { pauses: arrayUnion({ start: Timestamp.fromDate(startPause), end: Timestamp.fromDate(now), type: 'manual_forced', addedBy: user.email }) }); showNotification("Pausa inserita!", 'success'); } catch (error) { showNotification(`Errore: ${error.message}`, 'error'); } finally { setIsActionLoading(false); } }, [allWorkAreas, user, showNotification]);
-    
-    const handleDeleteForm = async (formId) => { if (!window.confirm("Eliminare modulo?")) return; try { await deleteDoc(doc(db, "area_forms", formId)); showNotification("Modulo eliminato.", "success"); fetchData(); } catch (error) { showNotification("Errore eliminazione.", "error"); } };
     
     const openModal = useCallback((type, item = null) => { 
         if (type === 'prepostoAddEmployeeToAreas') { setShowAddEmployeeModal(true); return; } 
@@ -781,7 +836,9 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         else { setModalType(type); setSelectedItem(item); setShowModal(true); } 
     }, []);
 
+    const handleConfirmProcessExpense = async (expenseId, paymentMethod, note) => { setIsActionLoading(true); try { await updateDoc(doc(db, "expenses", expenseId), { status: 'closed', adminPaymentMethod: paymentMethod, adminNote: note, closedAt: Timestamp.now(), closedBy: user.email }); showNotification("Spesa archiviata!", 'success'); setExpenseToProcess(null); } catch (error) { showNotification("Errore durante l'archiviazione.", 'error'); } finally { setIsActionLoading(false); } };
     const handleResetEmployeeDevice = useCallback(async (employee) => { if (!employee || !employee.id) return; if (!window.confirm(`Reset dispositivo per ${employee.name}?`)) return; setIsActionLoading(true); try { await updateDoc(doc(db, "employees", employee.id), { deviceIds: [] }); showNotification(`Reset completato.`, 'success'); fetchData(); } catch (error) { showNotification(`Errore reset: ${error.message}`, 'error'); } finally { setIsActionLoading(false); } }, [fetchData, showNotification]);
+
     const generateReport = useCallback(async () => { if (!dateRange.start || !dateRange.end) return; setIsLoading(true); try { const functions = getFunctions(undefined, 'europe-west1'); const generateReportFunction = httpsCallable(functions, 'generateTimeReport'); const result = await generateReportFunction({ startDate: dateRange.start, endDate: dateRange.end, employeeIdFilter: reportEmployeeFilter, areaIdFilter: reportAreaFilter }); let fetchedEntries = result.data.reports; if (currentUserRole === 'preposto') { const managedIds = userData?.managedAreaIds || []; fetchedEntries = fetchedEntries.filter(entry => entry.isAbsence || managedIds.includes(entry.workAreaId)); } const areaHoursMap = new Map(allWorkAreas.map(area => [area.id, 0])); const formatTime = (date, time) => { const finalTime = time === 'In corso' ? '99:99' : time; const formattedDate = date.replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3-$2-$1'); return new Date(`${formattedDate} ${finalTime}`); }; const reportData = fetchedEntries.map(entry => { const clockIn = entry.clockInTime ? new Date(entry.clockInTime) : null; const clockOut = entry.clockOutTime ? new Date(entry.clockOutTime) : null; if (!clockIn) return null; const employee = allEmployees.find(e => e.id === entry.employeeId); const area = allWorkAreas.find(a => a.id === entry.workAreaId); if (!employee) return null; let durationHours = null; let pauseHours = 0; if (entry.isAbsence) { return { id: entry.id, employeeName: `${employee.name} ${employee.surname}`, employeeId: entry.employeeId, areaName: "---", clockInDate: clockIn.toLocaleDateString('it-IT'), clockInTimeFormatted: "-", clockOutTimeFormatted: "-", duration: 0, pauseHours: 0, note: entry.note || entry.absenceType, statusLabel: entry.absenceType ? entry.absenceType.toUpperCase() : "ASSENZA", isAbsence: true, workAreaId: null }; } if (clockOut) { const totalMs = clockOut.getTime() - clockIn.getTime(); const recordedPausesMs = (entry.pauses || []).reduce((acc, p) => { if (p.start && p.end) return acc + (new Date(p.end).getTime() - new Date(p.start).getTime()); return acc; }, 0); const areaPauseMs = (area?.pauseDuration || 0) * 60000; let finalPauseMs = (entry.skippedBreak && entry.skipBreakStatus === 'approved') ? 0 : Math.max(recordedPausesMs, areaPauseMs); pauseHours = finalPauseMs / 3600000; durationHours = Math.max(0, (totalMs - finalPauseMs) / 3600000); if (area) areaHoursMap.set(area.id, (areaHoursMap.get(area.id) || 0) + durationHours); } return { id: entry.id, employeeName: `${employee.name} ${employee.surname}`, employeeId: entry.employeeId, areaName: area?.name || '---', clockInDate: clockIn.toLocaleDateString('it-IT'), clockInTimeFormatted: clockIn.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}), clockOutTimeFormatted: clockOut ? clockOut.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '---', duration: durationHours, pauseHours, note: entry.note || '', skippedBreak: entry.skippedBreak, skipBreakStatus: entry.skipBreakStatus, workAreaId: entry.workAreaId }; }).filter(Boolean).sort((a, b) => { const dateA = formatTime(a.clockInDate, a.clockInTimeFormatted); const dateB = formatTime(b.clockInDate, b.clockOutTimeFormatted); if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) { if (a.clockInDate !== b.clockInDate) return a.clockInDate.localeCompare(b.clockInDate); return a.employeeName.localeCompare(b.employeeName); } if (dateA < dateB) return -1; if (dateA > dateB) return 1; return a.employeeName.localeCompare(b.employeeName); }); setReports(reportData); setReportTitle(`Report dal ${dateRange.start} al ${dateRange.end}`); setWorkAreasWithHours(allWorkAreas.map(a => ({ ...a, totalHours: (areaHoursMap.get(a.id) || 0).toFixed(2) }))); if(reportData.length > 0) setView('reports'); } catch (error) { showNotification(`Errore: ${error.message}`, 'error'); } finally { setIsLoading(false); } }, [dateRange, reportAreaFilter, reportEmployeeFilter, allEmployees, allWorkAreas, showNotification, currentUserRole, userData]); 
     const handleReviewSkipBreak = useCallback(async (entryId, decision) => { if (!entryId || !decision) return; if (!window.confirm("Confermare revisione pausa?")) return; setIsActionLoading(true); try { const functions = getFunctions(undefined, 'europe-west1'); const reviewFunction = httpsCallable(functions, 'reviewSkipBreakRequest'); await reviewFunction({ timeEntryId: entryId, decision, adminId: user.uid }); showNotification(`Richiesta aggiornata!`, 'success'); generateReport(); } catch (error) { showNotification("Errore revisione.", 'error'); } finally { setIsActionLoading(false); } }, [user, showNotification, generateReport]);
     const handleSaveEntryEdit = async (entryId, updatedData) => { setIsActionLoading(true); try { const entryRef = doc(db, "time_entries", entryId); const updatePayload = { workAreaId: updatedData.workAreaId, note: updatedData.note, clockInTime: Timestamp.fromDate(new Date(`${updatedData.date}T${updatedData.clockInTime}:00`)) }; if (updatedData.clockOutTime) { updatePayload.clockOutTime = Timestamp.fromDate(new Date(`${updatedData.date}T${updatedData.clockOutTime}:00`)); updatePayload.status = 'clocked-out'; } await updateDoc(entryRef, updatePayload); showNotification("Aggiornato!", "success"); setEntryToEdit(null); generateReport(); } catch (error) { showNotification("Errore: " + error.message, "error"); } finally { setIsActionLoading(false); } };
@@ -798,11 +855,11 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             <ModernStyles />
             {notification && <NotificationPopup message={notification.message} type={notification.type} onClose={() => setNotification(null)} />}
             
-            <header className="modern-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <header className="modern-header">
                  {/* COLONNA SINISTRA */}
-                 <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
+                 <div className="header-left">
                      {adminEmployeeProfile && (
-                         <div style={{background: '#f8fafc', padding: '8px 16px', borderRadius: '8px', border: '1px solid #e2e8f0', display: 'flex', gap: '10px', alignItems:'center'}}>
+                         <div className="header-actions-mobile" style={{background: '#f8fafc', padding: '8px 16px', borderRadius: '8px', border: '1px solid #e2e8f0', display: 'flex', gap: '10px', alignItems:'center'}}>
                              {adminActiveEntry ? (
                                  <>
                                      <div style={{fontSize: '13px', fontWeight: 'bold', color: '#16a34a'}}>🟢 In Turno {adminActiveEntry.isOnBreak && <span style={{color: '#d97706'}}>(In Pausa)</span>}</div>
@@ -819,18 +876,18 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                      )}
                  </div>
 
-                 {/* COLONNA CENTRALE: In linea, così spinge in basso il menu e non lo copre */}
-                 <div style={{ display: 'flex', justifyContent: 'center' }}>
+                 {/* COLONNA CENTRALE */}
+                 <div className="header-center">
                      <CompanyLogo />
                  </div>
 
                  {/* COLONNA DESTRA */}
-                 <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '20px' }}>
+                 <div className="header-right">
                      <div style={{textAlign: 'right'}}>
                          <div style={{fontSize: '14px', fontWeight: '800', color: '#0f172a'}}>{userData?.name && userData?.surname ? `${userData.name} ${userData.surname}` : user?.email}</div>
                          <div style={{fontSize: '11px', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px'}}>{currentUserRole === 'admin' ? 'Amministratore' : 'Preposto'}</div>
                      </div>
-                     <button onClick={handleLogout} className="modern-btn-outline" style={{color: '#ef4444', borderColor: '#fca5a5', background: '#fef2f2', padding: '8px 16px'}}>
+                     <button onClick={handleLogout} className="modern-btn-outline" style={{color: '#ef4444', borderColor: '#fca5a5', background: '#fef2f2', padding: '8px 16px', width: window.innerWidth <= 768 ? '100%' : 'auto'}}>
                          🚪 Esci
                      </button>
                  </div>
@@ -840,34 +897,33 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                  <button onClick={() => handleSwitchView('dashboard')} className={`modern-tab ${view === 'dashboard' ? 'active' : ''}`}>🏠 Dashboard</button>
                  <button onClick={() => handleSwitchView('employees')} className={`modern-tab ${view === 'employees' ? 'active' : ''}`}>👥 Personale</button>
                  <button onClick={() => handleSwitchView('areas')} className={`modern-tab ${view === 'areas' ? 'active' : ''}`}>📍 Cantieri</button>
-                 {currentUserRole === 'admin' && <button onClick={() => handleSwitchView('admins')} className={`modern-tab ${view === 'admins' ? 'active' : ''}`}>👮 Utenti di Sistema</button>}
+                 {currentUserRole === 'admin' && <button onClick={() => handleSwitchView('admins')} className={`modern-tab ${view === 'admins' ? 'active' : ''}`}>👮 Utenti</button>}
                  {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (<button onClick={() => handleSwitchView('expenses')} className={`modern-tab ${view === 'expenses' ? 'active' : ''}`}>💰 Rimborsi {activeExpensesCount > 0 && (<span className="modern-badge red" style={{padding: '2px 6px', fontSize: '10px'}}>{activeExpensesCount}</span>)}</button>)}
-                 {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (<button onClick={() => handleSwitchView('reports')} className={`modern-tab ${view === 'reports' ? 'active' : ''}`}>📋 Estrazioni Ore {pendingRequestsCount > 0 && (<span className="modern-badge orange" style={{padding: '2px 6px', fontSize: '10px'}}>{pendingRequestsCount}</span>)}</button>)}
+                 {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (<button onClick={() => handleSwitchView('reports')} className={`modern-tab ${view === 'reports' ? 'active' : ''}`}>📋 Report Ore {pendingRequestsCount > 0 && (<span className="modern-badge orange" style={{padding: '2px 6px', fontSize: '10px'}}>{pendingRequestsCount}</span>)}</button>)}
             </nav>
 
-            <div style={{maxWidth: '1200px', margin: '0 auto', padding: '0 20px'}}>
+            <div style={{maxWidth: '1200px', margin: '0 auto', padding: '0 10px'}}>
                 <main>
                     {view === 'dashboard' && (
                         <DashboardView totalEmployees={managedEmployees.length} activeEmployeesDetails={activeEmployeesDetails} totalDayHours={totalDayHours} workAreas={activeWorkAreas} adminEmployeeProfile={adminEmployeeProfile} handleAdminPause={handleAdminPause} openModal={openModal} isActionLoading={isActionLoading} />
                     )}
                     {view === 'expenses' && (
                         <div className="modern-card">
-                            <div className="modern-title" style={{justifyContent: 'space-between'}}>
+                            <div className="modern-title">
                                 <div>💰 Gestione Rimborsi Spese</div>
-                                <div style={{display:'flex', gap:'10px'}}>
+                                <div className="title-actions">
                                     <button onClick={() => setShowAddExpenseModal(true)} className="modern-btn">➕ Registra Spesa</button>
-                                    <button onClick={() => setShowArchived(!showArchived)} className="modern-btn-outline">{showArchived ? '📂 Torna alle Attive' : '📂 Archivio Storico'}</button>
                                 </div>
                             </div>
                             <input type="text" placeholder="🔍 Cerca Dipendente..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="modern-input" style={{marginBottom: '20px'}}/>
-                            <div className="modern-table-wrapper"><ExpensesView expenses={expenses} onProcessExpense={setExpenseToProcess} onEditExpense={(exp) => { setExpenseToEdit(exp); setShowAddExpenseModal(true); }} currentUserRole={currentUserRole} user={user} searchTerm={searchTerm} showArchived={showArchived}/></div>
+                            <ExpensesView expenses={expenses} onProcessExpense={setExpenseToProcess} onEditExpense={(exp) => { setExpenseToEdit(exp); setShowAddExpenseModal(true); }} currentUserRole={currentUserRole} user={user} searchTerm={searchTerm} showArchived={showArchived}/>
                         </div>
                     )}
                     {view === 'employees' && (
                         <div className="modern-card">
-                            <div className="modern-title" style={{justifyContent: 'space-between'}}>
+                            <div className="modern-title">
                                 <div>👥 Gestione Personale Operativo</div>
-                                <div style={{display:'flex', gap:'10px'}}>
+                                <div className="title-actions">
                                     {currentUserRole === 'admin' ? <button onClick={() => openModal('newEmployee')} className="modern-btn">➕ Crea Dipendente</button> : <button onClick={() => openModal('prepostoAddEmployeeToAreas')} className="modern-btn">➕ Aggiungi a Mie Aree</button>}
                                     <button onClick={() => setShowArchived(!showArchived)} className="modern-btn-outline">{showArchived ? '📂 Nascondi Archiviati' : '📂 Mostra Archiviati'}</button>
                                 </div>
@@ -878,9 +934,9 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                     )}
                     {view === 'areas' && (
                         <div className="modern-card">
-                            <div className="modern-title" style={{justifyContent: 'space-between'}}>
+                            <div className="modern-title">
                                 <div>📍 Gestione Cantieri (Aree di Lavoro)</div>
-                                <div style={{display:'flex', gap:'10px'}}>
+                                <div className="title-actions">
                                     {currentUserRole === 'admin' && <button onClick={() => openModal('newArea')} className="modern-btn">➕ Crea Cantiere</button>}
                                 </div>
                             </div>
@@ -889,9 +945,11 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                     )}
                     {view === 'admins' && currentUserRole === 'admin' && (
                         <div className="modern-card">
-                            <div className="modern-title" style={{justifyContent: 'space-between'}}>
+                            <div className="modern-title">
                                 <div>👮 Utenti di Sistema (Admin/Preposti)</div>
-                                <button onClick={() => openModal('newAdmin')} className="modern-btn">➕ Crea Nuovo Utente</button>
+                                <div className="title-actions">
+                                    <button onClick={() => openModal('newAdmin')} className="modern-btn">➕ Crea Nuovo Utente</button>
+                                </div>
                             </div>
                             <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="🔍 Cerca Utente..." className="modern-input" style={{marginBottom: '20px'}} />
                             <AdminManagementView admins={admins} openModal={openModal} user={user} superAdminEmail={superAdminEmail} currentUserRole={currentUserRole} onDataUpdate={fetchData} searchTerm={searchTerm} />
@@ -901,12 +959,12 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                         <>
                             <div className="modern-card">
                                 <div className="modern-title">Generazione Estrazioni Ore</div>
-                                <div style={{display: 'flex', gap: '15px', flexWrap: 'wrap', alignItems: 'flex-end'}}>
-                                    <div style={{flex: 1, minWidth: '150px'}}><label style={{display:'block', fontSize:'11px', fontWeight:'700', color:'#64748b', marginBottom:'6px'}}>Da Data</label><input type="date" value={dateRange.start} onChange={e => setDateRange({ ...dateRange, start: e.target.value })} className="modern-input" /></div>
-                                    <div style={{flex: 1, minWidth: '150px'}}><label style={{display:'block', fontSize:'11px', fontWeight:'700', color:'#64748b', marginBottom:'6px'}}>A Data</label><input type="date" value={dateRange.end} onChange={e => setDateRange({ ...dateRange, end: e.target.value })} className="modern-input" /></div>
-                                    <div style={{flex: 2, minWidth: '200px'}}><label style={{display:'block', fontSize:'11px', fontWeight:'700', color:'#64748b', marginBottom:'6px'}}>Cantiere</label><select value={reportAreaFilter} onChange={e => setReportAreaFilter(e.target.value)} className="modern-input"><option value="all">Tutti i Cantieri</option>{(currentUserRole === 'admin' ? activeWorkAreas : activeWorkAreas.filter(a => userData?.managedAreaIds?.includes(a.id))).sort((a,b) => a.name.localeCompare(b.name)).map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}</select></div>
-                                    <div style={{flex: 2, minWidth: '200px'}}><label style={{display:'block', fontSize:'11px', fontWeight:'700', color:'#64748b', marginBottom:'6px'}}>Dipendente</label><select value={reportEmployeeFilter} onChange={e => setReportEmployeeFilter(e.target.value)} className="modern-input"><option value="all">Tutti i Dipendenti</option>{(currentUserRole === 'admin' ? allEmployees : managedEmployees).sort((a,b) => `${a.name} ${a.surname}`.localeCompare(`${b.name} ${b.surname}`)).map(emp => (<option key={emp.id} value={emp.id}>{emp.name} {emp.surname}</option>))}</select></div>
-                                    <button onClick={generateReport} disabled={isLoading || isActionLoading} className="modern-btn" style={{height: '42px'}}>📄 Genera</button>
+                                <div className="filters-grid">
+                                    <div><label style={{display:'block', fontSize:'11px', fontWeight:'700', color:'#64748b', marginBottom:'6px'}}>Da Data</label><input type="date" value={dateRange.start} onChange={e => setDateRange({ ...dateRange, start: e.target.value })} className="modern-input" /></div>
+                                    <div><label style={{display:'block', fontSize:'11px', fontWeight:'700', color:'#64748b', marginBottom:'6px'}}>A Data</label><input type="date" value={dateRange.end} onChange={e => setDateRange({ ...dateRange, end: e.target.value })} className="modern-input" /></div>
+                                    <div><label style={{display:'block', fontSize:'11px', fontWeight:'700', color:'#64748b', marginBottom:'6px'}}>Cantiere</label><select value={reportAreaFilter} onChange={e => setReportAreaFilter(e.target.value)} className="modern-input"><option value="all">Tutti i Cantieri</option>{(currentUserRole === 'admin' ? activeWorkAreas : activeWorkAreas.filter(a => userData?.managedAreaIds?.includes(a.id))).sort((a,b) => a.name.localeCompare(b.name)).map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}</select></div>
+                                    <div><label style={{display:'block', fontSize:'11px', fontWeight:'700', color:'#64748b', marginBottom:'6px'}}>Dipendente</label><select value={reportEmployeeFilter} onChange={e => setReportEmployeeFilter(e.target.value)} className="modern-input"><option value="all">Tutti i Dipendenti</option>{(currentUserRole === 'admin' ? allEmployees : managedEmployees).sort((a,b) => `${a.name} ${a.surname}`.localeCompare(`${b.name} ${b.surname}`)).map(emp => (<option key={emp.id} value={emp.id}>{emp.name} {emp.surname}</option>))}</select></div>
+                                    <button onClick={generateReport} disabled={isLoading || isActionLoading} className="modern-btn" style={{height: '42px'}}>📄 Genera Report</button>
                                 </div>
                             </div>
                             <ReportView reports={reports} title={reportTitle} handleExportXml={handleExportXml} dateRange={dateRange} allWorkAreas={activeWorkAreas} allEmployees={allEmployees} currentUserRole={currentUserRole} userData={userData} setDateRange={setDateRange} setReportAreaFilter={setReportAreaFilter} reportAreaFilter={reportAreaFilter} reportEmployeeFilter={reportEmployeeFilter} setReportEmployeeFilter={setReportEmployeeFilter} generateReport={generateReport} isLoading={isLoading} isActionLoading={isActionLoading} managedEmployees={managedEmployees} showNotification={showNotification} handleReviewSkipBreak={handleReviewSkipBreak} onEditEntry={(entry) => setEntryToEdit(entry)} handleSaveEntryEdit={handleSaveEntryEdit} />
@@ -920,7 +978,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                  &copy; {new Date().getFullYear()} TCS ITALIA S.R.L. - Sistema Gestionale Integrato
             </footer>
 
-            {/* --- I MODALI ORA SONO TUTTI DEFINITI CORRETTAMENTE --- */}
+            {/* --- I MODALI ORA SONO QUI --- */}
             {entryToEdit && ( <EditTimeEntryModal entry={entryToEdit} workAreas={activeWorkAreas} onClose={() => setEntryToEdit(null)} onSave={handleSaveEntryEdit} isLoading={isActionLoading} /> )}
             {showModal && ( <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} setModalType={setModalType} workAreas={activeWorkAreas} onDataUpdate={fetchData} user={user} superAdminEmail={superAdminEmail} allEmployees={allEmployees} currentUserRole={currentUserRole} userData={userData} activeEmployeesDetails={activeEmployeesDetails} onAdminApplyPause={handleEmployeePauseClick} showNotification={showNotification} /> )}
             <AddFormModal show={showAddFormModal} onClose={() => setShowAddFormModal(false)} workAreas={activeWorkAreas} user={user} onDataUpdate={fetchData} currentUserRole={currentUserRole} userData={userData} showNotification={showNotification} />
