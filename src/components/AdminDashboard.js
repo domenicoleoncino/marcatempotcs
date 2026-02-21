@@ -23,34 +23,37 @@ import { saveAs } from 'file-saver';
 const ModernStyles = () => (
     <style>
     {`
-      .modern-bg { background-color: #f4f7fe; min-height: 100vh; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1e293b; }
+      .modern-bg { background-color: #f4f7fe; min-height: 100vh; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1e293b; overflow-x: hidden; }
       
-      /* Header Layout */
-      .modern-header { position: relative; display: flex; justify-content: space-between; align-items: center; background: #ffffff; padding: 15px 40px; box-shadow: 0 2px 10px rgba(0,0,0,0.03); border-bottom: 1px solid #e2e8f0; }
+      /* Header Layout Desktop (CORRETTO PER NON SOVRAPPORSI) */
+      .modern-header { display: flex; justify-content: space-between; align-items: center; background: #ffffff; padding: 15px 40px; box-shadow: 0 2px 10px rgba(0,0,0,0.03); border-bottom: 1px solid #e2e8f0; }
+      .header-left { flex: 1; display: flex; align-items: center; justify-content: flex-start; }
+      .header-center { flex: 1; display: flex; justify-content: center; align-items: center; padding: 10px 0; }
+      .header-right { flex: 1; display: flex; justify-content: flex-end; align-items: center; gap: 20px; }
       
-      /* Navigation */
+      /* Navigation Desktop */
       .modern-nav { background: #ffffff; padding: 10px 20px 0 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.03); display: flex; justify-content: center; flex-wrap: wrap; margin-bottom: 30px; border-radius: 0 0 16px 16px; }
-      .modern-tab { border: none; background: transparent; padding: 14px 24px; font-weight: 600; color: #64748b; cursor: pointer; transition: 0.3s; margin: 0 4px; font-size: 14px; border-bottom: 3px solid transparent; display: flex; align-items: center; gap: 8px; }
+      .modern-tab { border: none; background: transparent; padding: 14px 24px; font-weight: 600; color: #64748b; cursor: pointer; transition: 0.3s; margin: 0 4px; font-size: 14px; border-bottom: 3px solid transparent; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
       .modern-tab:hover { color: #3b82f6; background: #f8fafc; border-radius: 8px 8px 0 0; }
       .modern-tab.active { color: #2563eb; border-bottom: 3px solid #2563eb; background: #eff6ff; border-radius: 8px 8px 0 0; }
       
-      /* Cards & Titles */
+      /* Cards & Titles Desktop */
       .modern-card { background: #ffffff; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.04); padding: 28px; margin-bottom: 24px; border: 1px solid #e2e8f0; animation: fadeIn 0.4s ease-out; }
       .modern-title { font-size: 22px; font-weight: 800; color: #0f172a; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 2px solid #f1f5f9; padding-bottom: 12px; flex-wrap: wrap; }
       .title-actions { display: flex; gap: 10px; flex-wrap: wrap; }
       
-      /* Inputs */
+      /* Inputs Desktop */
       .modern-input { width: 100%; padding: 12px 16px; border-radius: 8px; border: 1px solid #cbd5e1; outline: none; transition: 0.2s; font-size: 14px; background: #f8fafc; box-sizing: border-box; }
       .modern-input:focus { border-color: #3b82f6; background: #ffffff; box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
       
-      /* Default Desktop Tables */
+      /* Tables Desktop */
       .modern-table-wrapper { overflow-x: auto; border-radius: 12px; border: 1px solid #e2e8f0; margin-top: 20px; }
       .modern-table { width: 100%; border-collapse: collapse; text-align: left; background: #fff; min-width: 600px; }
       .modern-table th { background: #f8fafc; padding: 16px 20px; font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #e2e8f0; }
       .modern-table td { padding: 16px 20px; border-bottom: 1px solid #f1f5f9; color: #334155; font-size: 14px; vertical-align: middle; transition: background 0.2s; }
       .modern-table tr:hover td { background: #f8fafc; }
       
-      /* Buttons */
+      /* Buttons Desktop */
       .modern-btn { background: #2563eb; color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.2s; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px; box-shadow: 0 2px 4px rgba(37,99,235,0.1); white-space: nowrap; }
       .modern-btn:hover { background: #1d4ed8; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(37,99,235,0.25); }
       .modern-btn-danger { background: #ef4444; color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.2s; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; white-space: nowrap; }
@@ -58,7 +61,7 @@ const ModernStyles = () => (
       .modern-btn-outline { background: white; color: #475569; border: 1px solid #cbd5e1; padding: 10px 18px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.2s; display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
       .modern-btn-outline:hover { background: #f8fafc; color: #0f172a; border-color: #94a3b8; }
       
-      /* Badges */
+      /* Badges Desktop */
       .modern-badge { padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; border: 1px solid transparent; }
       .modern-badge.green { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
       .modern-badge.red { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
@@ -73,22 +76,34 @@ const ModernStyles = () => (
       /* ADATTAMENTO SMARTPHONE E TABLET PICCOLI   */
       /* ========================================= */
       @media (max-width: 768px) {
-          .modern-header { flex-direction: column; padding: 15px; gap: 15px; }
-          .modern-header > div { position: static !important; transform: none !important; width: 100%; justify-content: center !important; text-align: center; }
-          .header-actions-mobile { flex-direction: column; width: 100%; }
-          .header-actions-mobile > button { width: 100%; margin-top: 10px; }
+          .modern-bg { padding: 0 !important; }
           
-          .modern-nav { padding: 10px; flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; -webkit-overflow-scrolling: touch; border-radius: 0; }
+          /* Header Mobile */
+          .modern-header { flex-direction: column; padding: 15px; gap: 15px; }
+          .header-left, .header-center, .header-right { width: 100%; display: flex; justify-content: center; text-align: center; }
+          .header-right { flex-direction: column; gap: 10px; }
+          .header-actions-mobile { flex-direction: column !important; width: 100% !important; }
+          .header-actions-mobile button { width: 100% !important; margin-top: 5px !important; }
+          
+          /* Nav Mobile */
+          .modern-nav { padding: 10px; flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; -webkit-overflow-scrolling: touch; border-radius: 0; margin-bottom: 15px; }
           .modern-tab { flex: 0 0 auto; white-space: nowrap; font-size: 13px; padding: 10px 15px; }
           
-          .modern-card { padding: 15px; }
+          .modern-card { padding: 15px; margin: 10px; border-radius: 12px; }
+          .modern-title { flex-direction: column; align-items: flex-start; font-size: 18px; }
           .title-actions { width: 100%; flex-direction: column; }
           .title-actions button { width: 100%; }
           
-          /* TRUCCO PER TRASFORMARE LE TABELLE IN SCHEDE SU MOBILE */
+          /* Dashboard Stats Mobile */
+          .dashboard-stats { display: flex !important; flex-direction: column !important; gap: 10px !important; margin-bottom: 15px !important; }
+          .stat-card { padding: 15px !important; }
+          .stat-label { font-size: 11px !important; }
+          .stat-value { font-size: 24px !important; }
+          
+          /* Tables to Cards Mobile */
           .modern-table-wrapper { border: none; overflow-x: visible; }
           .modern-table { min-width: 100%; background: transparent; display: block; }
-          .modern-table thead { display: none; } /* Nascondi intestazione tabella */
+          .modern-table thead { display: none; }
           .modern-table tbody { display: block; width: 100%; }
           .modern-table tr { 
               display: flex; flex-direction: column; 
@@ -103,7 +118,6 @@ const ModernStyles = () => (
           }
           .modern-table td:last-child { border-bottom: none; padding-bottom: 0; }
           
-          /* Questo inserisce il nome della colonna prima del valore */
           .modern-table td::before { 
               content: attr(data-label); 
               font-weight: 700; color: #64748b; 
@@ -111,8 +125,11 @@ const ModernStyles = () => (
               margin-right: 15px; text-align: left; flex-shrink: 0;
           }
           
-          .actions-cell { flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
-          .actions-cell button { flex: 1 1 auto; min-width: 100px; }
+          .actions-cell { flex-direction: column; gap: 8px; align-items: stretch; }
+          .actions-cell button { width: 100%; margin: 0; }
+          
+          .filters-grid { display: flex; flex-direction: column; gap: 10px; }
+          .filters-grid > div, .filters-grid > button { width: 100%; }
       }
     `}
     </style>
@@ -139,7 +156,7 @@ const NotificationPopup = ({ message, type, onClose }) => {
 };
 
 // ===========================================
-// --- 2. SOTTO-COMPONENTI (MODALI MANCANTI) ---
+// --- 2. SOTTO-COMPONENTI MODALI ---
 // ===========================================
 
 const AddExpenseModal = ({ show, onClose, user, userData, showNotification, expenseToEdit }) => {
@@ -560,6 +577,7 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
             
             {!isMapMode && (
                 <>
+                    {/* Bottoni Rapidi Ristilizzati */}
                     {adminEntry && (
                         <div className="quick-actions" style={{background:'#f8fafc', padding:'20px', borderRadius:'12px', display:'flex', justifyContent:'center', gap:'15px', marginBottom:'30px', border:'1px solid #e2e8f0'}}>
                             <button onClick={handleAdminPause} disabled={isActionLoading} className="modern-btn" style={{background:'#f59e0b', fontSize:'15px'}}>☕ Inizia Pausa</button>
@@ -568,13 +586,13 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
                     )}
 
                     <div className="dashboard-stats" style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(250px, 1fr))', gap:'20px', marginBottom:'30px'}}>
-                        <div style={{background:'#fff', padding:'24px', borderRadius:'12px', borderLeft:'5px solid #3b82f6', boxShadow:'0 2px 12px rgba(0,0,0,0.04)'}}>
-                            <p style={{margin:0, color:'#64748b', fontSize:'13px', fontWeight:'700', textTransform:'uppercase'}}>Forza Lavoro Attiva</p>
-                            <p style={{margin:'10px 0 0 0', fontSize:'32px', fontWeight:'900', color: '#0f172a'}}>{activeEmployeesDetails.length} <span style={{fontSize:'16px', color:'#94a3b8', fontWeight:'500'}}>/ {totalEmployees}</span></p>
+                        <div className="stat-card" style={{background:'#fff', padding:'24px', borderRadius:'12px', borderLeft:'5px solid #3b82f6', boxShadow:'0 2px 12px rgba(0,0,0,0.04)'}}>
+                            <p className="stat-label" style={{margin:0, color:'#64748b', fontSize:'13px', fontWeight:'700', textTransform:'uppercase'}}>Forza Lavoro Attiva</p>
+                            <p className="stat-value" style={{margin:'10px 0 0 0', fontSize:'32px', fontWeight:'900', color: '#0f172a'}}>{activeEmployeesDetails.length} <span style={{fontSize:'16px', color:'#94a3b8', fontWeight:'500'}}>/ {totalEmployees}</span></p>
                         </div>
-                        <div style={{background:'#fff', padding:'24px', borderRadius:'12px', borderLeft:'5px solid #10b981', boxShadow:'0 2px 12px rgba(0,0,0,0.04)'}}>
-                            <p style={{margin:0, color:'#64748b', fontSize:'13px', fontWeight:'700', textTransform:'uppercase'}}>Ore Erogate Oggi</p>
-                            <p style={{margin:'10px 0 0 0', fontSize:'32px', fontWeight:'900', color: '#0f172a'}}>{totalDayHours}</p>
+                        <div className="stat-card" style={{background:'#fff', padding:'24px', borderRadius:'12px', borderLeft:'5px solid #10b981', boxShadow:'0 2px 12px rgba(0,0,0,0.04)'}}>
+                            <p className="stat-label" style={{margin:0, color:'#64748b', fontSize:'13px', fontWeight:'700', textTransform:'uppercase'}}>Ore Erogate Oggi</p>
+                            <p className="stat-value" style={{margin:'10px 0 0 0', fontSize:'32px', fontWeight:'900', color: '#0f172a'}}>{totalDayHours}</p>
                         </div>
                     </div>
 
@@ -665,6 +683,8 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const [workAreasWithHours, setWorkAreasWithHours] = useState([]);
     const [pendingRequestsCount, setPendingRequestsCount] = useState(0); 
     const [notification, setNotification] = useState(null); 
+    
+    // STATI CHE ERANO STATI PERSI E CHE CAUSAVANO L'ERRORE!
     const [entryToEdit, setEntryToEdit] = useState(null);
     const [showAddEmployeeModal, setShowAddEmployeeModal] = useState(false);
     const [showAddFormModal, setShowAddFormModal] = useState(false);
@@ -827,17 +847,25 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         } catch (error) { console.error("Errore ripristino:", error); showNotification("Errore durante il ripristino.", 'error'); } finally { setIsActionLoading(false); }
     }, [fetchData, showNotification]);
     
+    // FUNZIONE RECUPERATA: Salva l'archiviazione di una spesa da parte dell'Admin
+    const handleConfirmProcessExpense = async (expenseId, paymentMethod, note) => { setIsActionLoading(true); try { await updateDoc(doc(db, "expenses", expenseId), { status: 'closed', adminPaymentMethod: paymentMethod, adminNote: note, closedAt: Timestamp.now(), closedBy: user.email }); showNotification("Spesa archiviata!", 'success'); setExpenseToProcess(null); } catch (error) { console.error("Errore archiviazione spesa:", error); showNotification("Errore durante l'archiviazione.", 'error'); } finally { setIsActionLoading(false); } };
+    
+    // FUNZIONE RECUPERATA: Resetta i device ID di un dipendente
+    const handleResetEmployeeDevice = useCallback(async (employee) => { if (!employee || !employee.id) return; if (!window.confirm(`Reset dispositivo per ${employee.name}?`)) return; setIsActionLoading(true); try { await updateDoc(doc(db, "employees", employee.id), { deviceIds: [] }); showNotification(`Reset completato.`, 'success'); fetchData(); } catch (error) { showNotification(`Errore reset: ${error.message}`, 'error'); } finally { setIsActionLoading(false); } }, [fetchData, showNotification]);
+
+    // FUNZIONE RECUPERATA: Cancella un Modulo
+    const handleDeleteForm = async (formId) => { if (!window.confirm("Eliminare modulo?")) return; try { await deleteDoc(doc(db, "area_forms", formId)); showNotification("Modulo eliminato.", "success"); fetchData(); } catch (error) { showNotification("Errore eliminazione.", "error"); } };
+
     const handleAdminPause = useCallback(async () => { if (!adminEmployeeProfile) return showNotification("Profilo non trovato.", 'error'); if (!adminActiveEntry) return showNotification("Nessuna timbratura attiva.", 'error'); if (adminActiveEntry.isOnBreak) { setIsActionLoading(true); try { const togglePauseFunction = httpsCallable(getFunctions(undefined, 'europe-west1'), 'prepostoTogglePause'); const result = await togglePauseFunction({ deviceId: 'ADMIN_MANUAL_ACTION' }); showNotification(result.data.message, 'success'); } catch (error) { showNotification(`Errore pausa: ${error.message}`, 'error'); } finally { setIsActionLoading(false); } return; } if (adminActiveEntry.hasCompletedPause) return showNotification("Pausa già completata.", 'info'); const workArea = allWorkAreas.find(area => area.id === adminActiveEntry.workAreaId); if (!workArea || !workArea.pauseDuration) return showNotification(`Pausa non configurata per l'area.`, 'info'); if (!window.confirm(`Applicare la pausa di ${workArea.pauseDuration} minuti per te stesso?`)) return; setIsActionLoading(true); try { const applyPauseFunction = httpsCallable(getFunctions(undefined, 'europe-west1'), 'applyAutoPauseEmployee'); const result = await applyPauseFunction({ timeEntryId: adminActiveEntry.id, durationMinutes: workArea.pauseDuration, deviceId: 'ADMIN_MANUAL_ACTION' }); showNotification(result.data.message, 'success'); } catch (error) { showNotification(`Errore pausa: ${error.message}`, 'error'); } finally { setIsActionLoading(false); } }, [adminActiveEntry, adminEmployeeProfile, allWorkAreas, showNotification]);
+    
     const handleEmployeePauseClick = useCallback(async (employee) => { const timeEntryId = employee?.activeEntry?.id; if (!timeEntryId) return showNotification("Timbratura attiva non trovata.", 'error'); const workArea = allWorkAreas.find(area => area.id === employee.activeEntry.workAreaId); if (!workArea || !workArea.pauseDuration) return showNotification(`Pausa non configurata per l'area.`, 'info'); if (employee.activeEntry.hasCompletedPause) return showNotification(`Pausa già eseguita.`, 'info'); if (!window.confirm(`Inserire pausa per ${employee.name}?`)) return; setIsActionLoading(true); try { const now = new Date(); const startPause = new Date(now.getTime() - (workArea.pauseDuration * 60000)); const entryRef = doc(db, "time_entries", timeEntryId); await updateDoc(entryRef, { pauses: arrayUnion({ start: Timestamp.fromDate(startPause), end: Timestamp.fromDate(now), type: 'manual_forced', addedBy: user.email }) }); showNotification("Pausa inserita!", 'success'); } catch (error) { showNotification(`Errore: ${error.message}`, 'error'); } finally { setIsActionLoading(false); } }, [allWorkAreas, user, showNotification]);
     
     const openModal = useCallback((type, item = null) => { 
         if (type === 'prepostoAddEmployeeToAreas') { setShowAddEmployeeModal(true); return; } 
-        if (type === 'newForm') { setShowAddFormModal(true); } 
-        else { setModalType(type); setSelectedItem(item); setShowModal(true); } 
+        if (type === 'newForm') { setShowAddFormModal(true); return; }
+        if (type === 'addExpense') { setShowAddExpenseModal(true); return; }
+        setModalType(type); setSelectedItem(item); setShowModal(true); 
     }, []);
-
-    const handleConfirmProcessExpense = async (expenseId, paymentMethod, note) => { setIsActionLoading(true); try { await updateDoc(doc(db, "expenses", expenseId), { status: 'closed', adminPaymentMethod: paymentMethod, adminNote: note, closedAt: Timestamp.now(), closedBy: user.email }); showNotification("Spesa archiviata!", 'success'); setExpenseToProcess(null); } catch (error) { showNotification("Errore durante l'archiviazione.", 'error'); } finally { setIsActionLoading(false); } };
-    const handleResetEmployeeDevice = useCallback(async (employee) => { if (!employee || !employee.id) return; if (!window.confirm(`Reset dispositivo per ${employee.name}?`)) return; setIsActionLoading(true); try { await updateDoc(doc(db, "employees", employee.id), { deviceIds: [] }); showNotification(`Reset completato.`, 'success'); fetchData(); } catch (error) { showNotification(`Errore reset: ${error.message}`, 'error'); } finally { setIsActionLoading(false); } }, [fetchData, showNotification]);
 
     const generateReport = useCallback(async () => { if (!dateRange.start || !dateRange.end) return; setIsLoading(true); try { const functions = getFunctions(undefined, 'europe-west1'); const generateReportFunction = httpsCallable(functions, 'generateTimeReport'); const result = await generateReportFunction({ startDate: dateRange.start, endDate: dateRange.end, employeeIdFilter: reportEmployeeFilter, areaIdFilter: reportAreaFilter }); let fetchedEntries = result.data.reports; if (currentUserRole === 'preposto') { const managedIds = userData?.managedAreaIds || []; fetchedEntries = fetchedEntries.filter(entry => entry.isAbsence || managedIds.includes(entry.workAreaId)); } const areaHoursMap = new Map(allWorkAreas.map(area => [area.id, 0])); const formatTime = (date, time) => { const finalTime = time === 'In corso' ? '99:99' : time; const formattedDate = date.replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3-$2-$1'); return new Date(`${formattedDate} ${finalTime}`); }; const reportData = fetchedEntries.map(entry => { const clockIn = entry.clockInTime ? new Date(entry.clockInTime) : null; const clockOut = entry.clockOutTime ? new Date(entry.clockOutTime) : null; if (!clockIn) return null; const employee = allEmployees.find(e => e.id === entry.employeeId); const area = allWorkAreas.find(a => a.id === entry.workAreaId); if (!employee) return null; let durationHours = null; let pauseHours = 0; if (entry.isAbsence) { return { id: entry.id, employeeName: `${employee.name} ${employee.surname}`, employeeId: entry.employeeId, areaName: "---", clockInDate: clockIn.toLocaleDateString('it-IT'), clockInTimeFormatted: "-", clockOutTimeFormatted: "-", duration: 0, pauseHours: 0, note: entry.note || entry.absenceType, statusLabel: entry.absenceType ? entry.absenceType.toUpperCase() : "ASSENZA", isAbsence: true, workAreaId: null }; } if (clockOut) { const totalMs = clockOut.getTime() - clockIn.getTime(); const recordedPausesMs = (entry.pauses || []).reduce((acc, p) => { if (p.start && p.end) return acc + (new Date(p.end).getTime() - new Date(p.start).getTime()); return acc; }, 0); const areaPauseMs = (area?.pauseDuration || 0) * 60000; let finalPauseMs = (entry.skippedBreak && entry.skipBreakStatus === 'approved') ? 0 : Math.max(recordedPausesMs, areaPauseMs); pauseHours = finalPauseMs / 3600000; durationHours = Math.max(0, (totalMs - finalPauseMs) / 3600000); if (area) areaHoursMap.set(area.id, (areaHoursMap.get(area.id) || 0) + durationHours); } return { id: entry.id, employeeName: `${employee.name} ${employee.surname}`, employeeId: entry.employeeId, areaName: area?.name || '---', clockInDate: clockIn.toLocaleDateString('it-IT'), clockInTimeFormatted: clockIn.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}), clockOutTimeFormatted: clockOut ? clockOut.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '---', duration: durationHours, pauseHours, note: entry.note || '', skippedBreak: entry.skippedBreak, skipBreakStatus: entry.skipBreakStatus, workAreaId: entry.workAreaId }; }).filter(Boolean).sort((a, b) => { const dateA = formatTime(a.clockInDate, a.clockInTimeFormatted); const dateB = formatTime(b.clockInDate, b.clockOutTimeFormatted); if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) { if (a.clockInDate !== b.clockInDate) return a.clockInDate.localeCompare(b.clockInDate); return a.employeeName.localeCompare(b.employeeName); } if (dateA < dateB) return -1; if (dateA > dateB) return 1; return a.employeeName.localeCompare(b.employeeName); }); setReports(reportData); setReportTitle(`Report dal ${dateRange.start} al ${dateRange.end}`); setWorkAreasWithHours(allWorkAreas.map(a => ({ ...a, totalHours: (areaHoursMap.get(a.id) || 0).toFixed(2) }))); if(reportData.length > 0) setView('reports'); } catch (error) { showNotification(`Errore: ${error.message}`, 'error'); } finally { setIsLoading(false); } }, [dateRange, reportAreaFilter, reportEmployeeFilter, allEmployees, allWorkAreas, showNotification, currentUserRole, userData]); 
     const handleReviewSkipBreak = useCallback(async (entryId, decision) => { if (!entryId || !decision) return; if (!window.confirm("Confermare revisione pausa?")) return; setIsActionLoading(true); try { const functions = getFunctions(undefined, 'europe-west1'); const reviewFunction = httpsCallable(functions, 'reviewSkipBreakRequest'); await reviewFunction({ timeEntryId: entryId, decision, adminId: user.uid }); showNotification(`Richiesta aggiornata!`, 'success'); generateReport(); } catch (error) { showNotification("Errore revisione.", 'error'); } finally { setIsActionLoading(false); } }, [user, showNotification, generateReport]);
@@ -887,7 +915,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                          <div style={{fontSize: '14px', fontWeight: '800', color: '#0f172a'}}>{userData?.name && userData?.surname ? `${userData.name} ${userData.surname}` : user?.email}</div>
                          <div style={{fontSize: '11px', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px'}}>{currentUserRole === 'admin' ? 'Amministratore' : 'Preposto'}</div>
                      </div>
-                     <button onClick={handleLogout} className="modern-btn-outline" style={{color: '#ef4444', borderColor: '#fca5a5', background: '#fef2f2', padding: '8px 16px', width: window.innerWidth <= 768 ? '100%' : 'auto'}}>
+                     <button onClick={handleLogout} className="modern-btn-outline" style={{color: '#ef4444', borderColor: '#fca5a5', background: '#fef2f2', padding: '8px 16px'}}>
                          🚪 Esci
                      </button>
                  </div>
@@ -912,11 +940,12 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                             <div className="modern-title">
                                 <div>💰 Gestione Rimborsi Spese</div>
                                 <div className="title-actions">
-                                    <button onClick={() => setShowAddExpenseModal(true)} className="modern-btn">➕ Registra Spesa</button>
+                                    <button onClick={() => openModal('addExpense')} className="modern-btn">➕ Registra Spesa</button>
+                                    <button onClick={() => setShowArchived(!showArchived)} className="modern-btn-outline">{showArchived ? '📂 Torna alle Attive' : '📂 Archivio Storico'}</button>
                                 </div>
                             </div>
                             <input type="text" placeholder="🔍 Cerca Dipendente..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="modern-input" style={{marginBottom: '20px'}}/>
-                            <ExpensesView expenses={expenses} onProcessExpense={setExpenseToProcess} onEditExpense={(exp) => { setExpenseToEdit(exp); setShowAddExpenseModal(true); }} currentUserRole={currentUserRole} user={user} searchTerm={searchTerm} showArchived={showArchived}/>
+                            <ExpensesView expenses={expenses} onProcessExpense={(exp) => { setExpenseToProcess(exp); openModal('processExpense'); }} onEditExpense={(exp) => { setExpenseToEdit(exp); openModal('editExpense'); }} currentUserRole={currentUserRole} user={user} searchTerm={searchTerm} showArchived={showArchived}/>
                         </div>
                     )}
                     {view === 'employees' && (
@@ -967,7 +996,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                                     <button onClick={generateReport} disabled={isLoading || isActionLoading} className="modern-btn" style={{height: '42px'}}>📄 Genera Report</button>
                                 </div>
                             </div>
-                            <ReportView reports={reports} title={reportTitle} handleExportXml={handleExportXml} dateRange={dateRange} allWorkAreas={activeWorkAreas} allEmployees={allEmployees} currentUserRole={currentUserRole} userData={userData} setDateRange={setDateRange} setReportAreaFilter={setReportAreaFilter} reportAreaFilter={reportAreaFilter} reportEmployeeFilter={reportEmployeeFilter} setReportEmployeeFilter={setReportEmployeeFilter} generateReport={generateReport} isLoading={isLoading} isActionLoading={isActionLoading} managedEmployees={managedEmployees} showNotification={showNotification} handleReviewSkipBreak={handleReviewSkipBreak} onEditEntry={(entry) => setEntryToEdit(entry)} handleSaveEntryEdit={handleSaveEntryEdit} />
+                            <ReportView reports={reports} title={reportTitle} handleExportXml={handleExportXml} dateRange={dateRange} allWorkAreas={activeWorkAreas} allEmployees={allEmployees} currentUserRole={currentUserRole} userData={userData} setDateRange={setDateRange} setReportAreaFilter={setReportAreaFilter} reportAreaFilter={reportAreaFilter} reportEmployeeFilter={reportEmployeeFilter} setReportEmployeeFilter={setReportEmployeeFilter} generateReport={generateReport} isLoading={isLoading} isActionLoading={isActionLoading} managedEmployees={managedEmployees} showNotification={showNotification} handleReviewSkipBreak={handleReviewSkipBreak} onEditEntry={(entry) => { setEntryToEdit(entry); openModal('editTimeEntry'); }} handleSaveEntryEdit={handleSaveEntryEdit} />
                         </>
                     )}
                 </main>
@@ -978,13 +1007,12 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                  &copy; {new Date().getFullYear()} TCS ITALIA S.R.L. - Sistema Gestionale Integrato
             </footer>
 
-            {/* --- I MODALI ORA SONO QUI --- */}
-            {entryToEdit && ( <EditTimeEntryModal entry={entryToEdit} workAreas={activeWorkAreas} onClose={() => setEntryToEdit(null)} onSave={handleSaveEntryEdit} isLoading={isActionLoading} /> )}
-            {showModal && ( <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} setModalType={setModalType} workAreas={activeWorkAreas} onDataUpdate={fetchData} user={user} superAdminEmail={superAdminEmail} allEmployees={allEmployees} currentUserRole={currentUserRole} userData={userData} activeEmployeesDetails={activeEmployeesDetails} onAdminApplyPause={handleEmployeePauseClick} showNotification={showNotification} /> )}
-            <AddFormModal show={showAddFormModal} onClose={() => setShowAddFormModal(false)} workAreas={activeWorkAreas} user={user} onDataUpdate={fetchData} currentUserRole={currentUserRole} userData={userData} showNotification={showNotification} />
-            <AddExpenseModal show={showAddExpenseModal} onClose={() => setShowAddExpenseModal(false)} user={user} userData={userData} showNotification={showNotification} expenseToEdit={expenseToEdit} />
-            {expenseToProcess && ( <ProcessExpenseModal show={true} onClose={() => setExpenseToProcess(null)} expense={expenseToProcess} onConfirm={handleConfirmProcessExpense} isProcessing={isActionLoading} /> )}
-            <AddEmployeeToAreaModal show={showAddEmployeeModal} onClose={() => setShowAddEmployeeModal(false)} allEmployees={allEmployees} workAreas={activeWorkAreas} userData={userData} showNotification={showNotification} onDataUpdate={fetchData} />
+            {/* --- I MODALI ORA SONO DEFINITI E INCLUSI CORRETTAMENTE --- */}
+            {showModal && modalType === 'editTimeEntry' && entryToEdit && ( <EditTimeEntryModal entry={entryToEdit} workAreas={activeWorkAreas} onClose={() => { setShowModal(false); setEntryToEdit(null); }} onSave={handleSaveEntryEdit} isLoading={isActionLoading} /> )}
+            {showModal && modalType === 'addExpense' && ( <AddExpenseModal show={true} onClose={() => setShowModal(false)} user={user} userData={userData} showNotification={showNotification} /> )}
+            {showModal && modalType === 'editExpense' && expenseToEdit && ( <AddExpenseModal show={true} onClose={() => { setShowModal(false); setExpenseToEdit(null); }} user={user} userData={userData} showNotification={showNotification} expenseToEdit={expenseToEdit} /> )}
+            {showModal && modalType === 'processExpense' && expenseToProcess && ( <ProcessExpenseModal show={true} onClose={() => { setShowModal(false); setExpenseToProcess(null); }} expense={expenseToProcess} onConfirm={handleConfirmProcessExpense} isProcessing={isActionLoading} /> )}
+            {showModal && !['editTimeEntry', 'addExpense', 'editExpense', 'processExpense'].includes(modalType) && ( <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} setModalType={setModalType} workAreas={activeWorkAreas} onDataUpdate={fetchData} user={user} superAdminEmail={superAdminEmail} allEmployees={allEmployees} currentUserRole={currentUserRole} userData={userData} activeEmployeesDetails={activeEmployeesDetails} onAdminApplyPause={handleEmployeePauseClick} showNotification={showNotification} /> )}
         </div>
     );
 };
