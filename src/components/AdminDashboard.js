@@ -55,11 +55,11 @@ const ModernStyles = () => (
       
       /* Buttons Desktop */
       .modern-btn { background: #2563eb; color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.2s; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px; box-shadow: 0 2px 4px rgba(37,99,235,0.1); white-space: nowrap; }
-      .modern-btn:hover { background: #1d4ed8; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(37,99,235,0.25); }
+      .modern-btn:hover:not(:disabled) { background: #1d4ed8; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(37,99,235,0.25); }
       .modern-btn-danger { background: #ef4444; color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.2s; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; white-space: nowrap; }
-      .modern-btn-danger:hover { background: #dc2626; box-shadow: 0 4px 12px rgba(239,68,68,0.25); }
+      .modern-btn-danger:hover:not(:disabled) { background: #dc2626; box-shadow: 0 4px 12px rgba(239,68,68,0.25); }
       .modern-btn-outline { background: white; color: #475569; border: 1px solid #cbd5e1; padding: 10px 18px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.2s; display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
-      .modern-btn-outline:hover { background: #f8fafc; color: #0f172a; border-color: #94a3b8; }
+      .modern-btn-outline:hover:not(:disabled) { background: #f8fafc; color: #0f172a; border-color: #94a3b8; }
       
       /* Badges Desktop */
       .modern-badge { padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; border: 1px solid transparent; }
@@ -82,8 +82,6 @@ const ModernStyles = () => (
           .modern-header { flex-direction: column; padding: 15px; gap: 15px; }
           .header-left, .header-center, .header-right { width: 100%; display: flex; justify-content: center; text-align: center; }
           .header-right { flex-direction: column; gap: 10px; }
-          .header-actions-mobile { flex-direction: column !important; width: 100% !important; }
-          .header-actions-mobile button { width: 100% !important; margin-top: 5px !important; }
           
           /* Nav Mobile */
           .modern-nav { padding: 10px; flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; -webkit-overflow-scrolling: touch; border-radius: 0; margin-bottom: 15px; }
@@ -210,7 +208,6 @@ const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) =>
     const formatDateForInput = (dateStr) => { if (!dateStr) return ''; const parts = dateStr.split('/'); if (parts.length === 3) return `${parts[2]}-${parts[1]}-${parts[0]}`; return dateStr; };
     const [skipPause, setSkipPause] = useState(!!entry.skippedBreak);
     
-    // --- FIX: ASSICURA CHE L'ORARIO DI USCITA VUOTO SIA UN TESTO VUOTO VERO E PROPRIO, NON I TRATTINI ---
     const isOngoing = !entry.clockOutTimeFormatted || entry.clockOutTimeFormatted === 'In corso' || entry.clockOutTimeFormatted.includes('-');
     
     const [formData, setFormData] = useState({ 
@@ -275,7 +272,7 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                 <tbody>
                     {employees.map(emp => {
                         const isClockedIn = !!emp.activeEntry;
-                        const isPaused = isClockedIn && (emp.activeEntry.status === 'In Pausa' || emp.activeEntry.pauses?.some(p => !p.end));
+                        const hasCompletedPause = emp.activeEntry?.pauses && emp.activeEntry.pauses.length > 0;
                         const initial = emp.name ? emp.name.charAt(0).toUpperCase() : '?';
 
                         return (
@@ -296,8 +293,8 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                         emp.activeEntry && emp.activeEntry.isAbsence ? 
                                             <span className="modern-badge purple">{emp.activeEntry.note || 'GIUSTIFICATO'}</span> 
                                         : 
-                                            <span className={`modern-badge ${isPaused ? 'orange' : (isClockedIn ? 'green' : 'red')}`}>
-                                                {isPaused ? '☕ In Pausa' : (isClockedIn ? '🟢 Al Lavoro' : '🔴 Non al lavoro')}
+                                            <span className={`modern-badge ${isClockedIn ? 'green' : 'red'}`}>
+                                                {isClockedIn ? '🟢 Al Lavoro' : '🔴 Non al lavoro'}
                                             </span>
                                     }
                                 </td>
@@ -587,6 +584,7 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
     }, [adminEmployeeProfile]);
 
     const adminEntry = activeEmployeesDetails.find(e => e.employeeId === adminEmployeeProfile?.id);
+    const hasCompletedPause = adminEntry?.pauses && adminEntry.pauses.length > 0;
 
     return (
         <div className="modern-card" style={{borderTop: '4px solid #3b82f6'}}>
@@ -597,11 +595,46 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
             
             {!isMapMode && (
                 <>
-                    {/* Bottoni Rapidi Ristilizzati */}
-                    {adminEntry && (
-                        <div className="quick-actions" style={{background:'#f8fafc', padding:'20px', borderRadius:'12px', display:'flex', justifyContent:'center', gap:'15px', marginBottom:'30px', border:'1px solid #e2e8f0'}}>
-                            <button onClick={handleAdminPause} disabled={isActionLoading} className="modern-btn" style={{background:'#f59e0b', fontSize:'15px'}}>☕ Inizia Pausa</button>
-                            <button onClick={() => openModal('manualClockOut', adminEmployeeProfile)} disabled={isActionLoading} className="modern-btn-danger" style={{fontSize:'15px'}}>⏹️ Fine Turno</button>
+                    {/* BOTTONI CENTRALI AGGIORNATI E POTENZIATI */}
+                    {adminEmployeeProfile && (
+                        <div className="quick-actions" style={{background:'#f8fafc', padding:'20px', borderRadius:'12px', display:'flex', flexWrap: 'wrap', justifyContent:'center', alignItems: 'center', gap:'15px', marginBottom:'30px', border:'1px solid #e2e8f0'}}>
+                            {!adminEntry ? (
+                                <>
+                                    <div style={{fontSize: '16px', fontWeight: 'bold', color: '#64748b'}}>⚪ Fuori Turno</div>
+                                    <button onClick={() => openModal('manualClockIn', adminEmployeeProfile)} disabled={isActionLoading} className="modern-btn" style={{background: '#16a34a', fontSize:'16px', padding: '12px 24px'}}>▶️ Entra in Turno</button>
+                                </>
+                            ) : (
+                                <>
+                                    <div style={{fontSize: '16px', fontWeight: 'bold', color: '#16a34a', display: 'flex', alignItems: 'center', gap: '8px'}}>
+                                        🟢 In Turno
+                                    </div>
+
+                                    <button 
+                                        onClick={handleAdminPause} 
+                                        disabled={isActionLoading || hasCompletedPause} 
+                                        className="modern-btn-outline" 
+                                        style={{
+                                            fontSize:'15px', 
+                                            padding: '10px 20px',
+                                            background: hasCompletedPause ? '#f1f5f9' : '#fff',
+                                            color: hasCompletedPause ? '#94a3b8' : '#475569',
+                                            borderColor: '#cbd5e1',
+                                            cursor: hasCompletedPause ? 'not-allowed' : 'pointer'
+                                        }}
+                                    >
+                                        {hasCompletedPause ? '✔️ Pausa Eseguita' : '☕ Applica Pausa'}
+                                    </button>
+
+                                    <button 
+                                        onClick={() => openModal('manualClockOut', adminEmployeeProfile)} 
+                                        disabled={isActionLoading} 
+                                        className="modern-btn-danger" 
+                                        style={{fontSize:'15px', padding: '10px 20px'}}
+                                    >
+                                        ⏹️ Esci Turno
+                                    </button>
+                                </>
+                            )}
                         </div>
                     )}
 
@@ -642,15 +675,18 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
                         <table className="modern-table">
                             <thead><tr><th>Dipendente</th><th>Cantiere</th><th>Ingresso</th><th>Stato</th><th>Pausa Default</th></tr></thead>
                             <tbody>
-                                {activeEmployeesDetails.map(entry => (
-                                    <tr key={entry.id}>
-                                        <td data-label="Dipendente" style={{fontWeight:'700', fontSize:'15px'}}>{entry.employeeName}</td>
-                                        <td data-label="Cantiere"><span className="modern-badge blue">{entry.areaName}</span></td>
-                                        <td data-label="Ingresso" style={{fontFamily:'monospace', fontSize:'14px', color:'#475569'}}>{entry.clockInTimeFormatted}</td>
-                                        <td data-label="Stato"><span className={`modern-badge ${entry.status === 'In Pausa' ? 'orange' : 'green'}`}>{entry.status}</span></td>
-                                        <td data-label="Pausa" style={{fontWeight:'600', color: entry.hasCompletedPause ? '#16a34a' : '#94a3b8'}}>{entry.hasCompletedPause ? '✓ Eseguita' : '-'}</td>
-                                    </tr>
-                                ))}
+                                {activeEmployeesDetails.map(entry => {
+                                    const pauseDone = entry.pauses && entry.pauses.length > 0;
+                                    return (
+                                        <tr key={entry.id}>
+                                            <td data-label="Dipendente" style={{fontWeight:'700', fontSize:'15px'}}>{entry.employeeName}</td>
+                                            <td data-label="Cantiere"><span className="modern-badge blue">{entry.areaName}</span></td>
+                                            <td data-label="Ingresso" style={{fontFamily:'monospace', fontSize:'14px', color:'#475569'}}>{entry.clockInTimeFormatted}</td>
+                                            <td data-label="Stato"><span className="modern-badge green">Al Lavoro</span></td>
+                                            <td data-label="Pausa" style={{fontWeight:'600', color: pauseDone ? '#16a34a' : '#94a3b8'}}>{pauseDone ? '✓ Eseguita' : '-'}</td>
+                                        </tr>
+                                    );
+                                })}
                                 {activeEmployeesDetails.length === 0 && <tr><td colSpan={5} style={{textAlign:'center', padding:'40px', color:'#94a3b8', fontWeight:'600'}}>Nessun dipendente in cantiere.</td></tr>}
                             </tbody>
                         </table>
@@ -805,9 +841,46 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         const qActive = query(collection(db, "time_entries"), where("status", "==", "clocked-in"));
         const unsubscribeActive = onSnapshot(qActive, (snapshot) => {
             if (!isMounted) return; 
-            const activeEntriesList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            if (adminEmployeeProfile) { const adminEntry = activeEntriesList.find(entry => entry.employeeId === adminEmployeeProfile.id); const hasCompletedPause = adminEntry?.pauses?.some(p => p.start && p.end) || false; setAdminActiveEntry(adminEntry ? { ...adminEntry, id: adminEntry.id, isOnBreak: adminEntry.pauses?.some(p => !p.end) || false, hasCompletedPause: hasCompletedPause } : null); }
-            const details = activeEntriesList.filter(entry => entry.clockInTime).map(entry => { const employee = allEmployees.find(emp => emp.id === entry.employeeId); const area = allWorkAreas.find(ar => ar.id === entry.workAreaId); const isOnBreak = entry.pauses?.some(p => !p.end) || false; const hasCompletedPause = entry.pauses?.some(p => p.start && p.end) || false; let clockInFormatted = 'N/D'; if (entry.clockInTime && typeof entry.clockInTime.toDate === 'function') { try { const clockInDate = entry.clockInTime.toDate(); clockInFormatted = new Intl.DateTimeFormat('it-IT', {hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome'}).format(clockInDate); } catch (e) { console.error("Errore formattazione ora entrata:", e); } } return { id: entry.id, employeeId: entry.employeeId, employeeName: employee ? `${employee.name} ${employee.surname}` : 'Sconosciuto', areaName: area ? area.name : 'Sconosciuta', workAreaId: entry.workAreaId, clockInTimeFormatted: clockInFormatted, status: isOnBreak ? 'In Pausa' : 'Al Lavoro', pauses: entry.pauses || [], hasCompletedPause: hasCompletedPause, isAbsence: false }; });
+            const rawEntriesList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+            // --- INIZIO FILTRO ANTI-DOPPIONI (DEVICE RESET) ---
+            // Se un dipendente ha due turni "In corso", teniamo solo il più recente
+            const latestEntriesMap = new Map();
+            rawEntriesList.forEach(entry => {
+                if (!entry.clockInTime) return;
+                const existing = latestEntriesMap.get(entry.employeeId);
+                const currentTime = entry.clockInTime.toMillis ? entry.clockInTime.toMillis() : new Date(entry.clockInTime).getTime();
+                const existingTime = existing ? (existing.clockInTime.toMillis ? existing.clockInTime.toMillis() : new Date(existing.clockInTime).getTime()) : 0;
+                
+                if (!existing || currentTime > existingTime) {
+                    latestEntriesMap.set(entry.employeeId, entry);
+                }
+            });
+            const activeEntriesList = Array.from(latestEntriesMap.values());
+            // --- FINE FILTRO ---
+
+            if (adminEmployeeProfile) { 
+                const adminEntry = activeEntriesList.find(entry => entry.employeeId === adminEmployeeProfile.id); 
+                const hasCompletedPause = adminEntry?.pauses && adminEntry.pauses.length > 0;
+                setAdminActiveEntry(adminEntry ? { ...adminEntry, id: adminEntry.id, hasCompletedPause: hasCompletedPause } : null); 
+            }
+            const details = activeEntriesList.filter(entry => entry.clockInTime).map(entry => { 
+                const employee = allEmployees.find(emp => emp.id === entry.employeeId); 
+                const area = allWorkAreas.find(ar => ar.id === entry.workAreaId); 
+                const hasCompletedPause = entry.pauses && entry.pauses.length > 0;
+                let clockInFormatted = 'N/D'; 
+                if (entry.clockInTime && typeof entry.clockInTime.toDate === 'function') { 
+                    try { 
+                        const clockInDate = entry.clockInTime.toDate(); 
+                        clockInFormatted = new Intl.DateTimeFormat('it-IT', {hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome'}).format(clockInDate); 
+                    } catch (e) { console.error("Errore formattazione ora entrata:", e); } 
+                } 
+                return { 
+                    id: entry.id, employeeId: entry.employeeId, employeeName: employee ? `${employee.name} ${employee.surname}` : 'Sconosciuto', 
+                    areaName: area ? area.name : 'Sconosciuta', workAreaId: entry.workAreaId, clockInTimeFormatted: clockInFormatted, 
+                    status: 'Al Lavoro', pauses: entry.pauses || [], hasCompletedPause: hasCompletedPause, isAbsence: false 
+                }; 
+            });
             setActiveWorkers(details);
         }, (error) => { if (isMounted) { console.error("Errore listener timbratura attive:", error); showNotification("Errore aggiornamento presenze.", 'error'); } });
 
@@ -840,6 +913,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         return () => { isMounted = false; unsubscribeActive(); unsubscribeAbsence(); unsubscribePending(); };
     }, [allEmployees, allWorkAreas, adminEmployeeProfile, currentUserRole, userData, showNotification]);
 
+    // ====== MOTORE CALCOLO ORE LIVE PERFETTO ======
     useEffect(() => {
         if (!allWorkAreas || allWorkAreas.length === 0) return;
 
@@ -864,19 +938,29 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 } 
                 
                 const clockIn = entry.clockInTime.toDate(); 
-                const clockOut = entry.clockOutTime ? entry.clockOutTime.toDate() : (entry.status === 'clocked-in' ? now : clockIn); 
+                let clockOut = now;
+
+                if (entry.clockOutTime) {
+                    clockOut = entry.clockOutTime.toDate();
+                } else if (entry.status !== 'clocked-in') {
+                    clockOut = clockIn; 
+                }
                 
                 const totalMs = clockOut.getTime() - clockIn.getTime();
                 if (totalMs <= 0) return;
 
-                const recordedPausesMs = (entry.pauses || []).reduce((acc, p) => { 
-                    if (p.start && p.end) { 
-                        const startMillis = p.start.toMillis ? p.start.toMillis() : new Date(p.start).getTime(); 
-                        const endMillis = p.end.toMillis ? p.end.toMillis() : new Date(p.end).getTime(); 
-                        return acc + (endMillis - startMillis); 
-                    } 
-                    return acc; 
-                }, 0); 
+                let recordedPausesMs = 0;
+                if (entry.pauses && Array.isArray(entry.pauses)) {
+                    entry.pauses.forEach(p => {
+                        if (p.start && p.end) {
+                            const startMillis = p.start.toMillis ? p.start.toMillis() : new Date(p.start).getTime();
+                            const endMillis = p.end.toMillis ? p.end.toMillis() : new Date(p.end).getTime();
+                            recordedPausesMs += (endMillis - startMillis);
+                        } else if (p.duration) {
+                            recordedPausesMs += (p.duration * 60000);
+                        }
+                    });
+                }
 
                 const area = allWorkAreas.find(a => a.id === entry.workAreaId);
                 const areaPauseMs = (area?.pauseDuration || 0) * 60000;
@@ -886,10 +970,10 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 if (entry.skippedBreak && entry.skipBreakStatus === 'approved') {
                     finalPauseMs = 0;
                 } else {
-                    if (entry.clockOutTime || entry.status === 'clocked-out') {
+                    if (entry.clockOutTime || entry.status === 'clocked-out' || recordedPausesMs > 0) {
                         finalPauseMs = Math.max(recordedPausesMs, areaPauseMs);
                     } else {
-                        finalPauseMs = recordedPausesMs;
+                        finalPauseMs = 0;
                     }
                 }
                 
@@ -933,7 +1017,28 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
     const handleDeleteForm = async (formId) => { if (!window.confirm("Eliminare modulo?")) return; try { await deleteDoc(doc(db, "area_forms", formId)); showNotification("Modulo eliminato.", "success"); fetchData(); } catch (error) { showNotification("Errore eliminazione.", "error"); } };
 
-    const handleAdminPause = useCallback(async () => { if (!adminEmployeeProfile) return showNotification("Profilo non trovato.", 'error'); if (!adminActiveEntry) return showNotification("Nessuna timbratura attiva.", 'error'); if (adminActiveEntry.isOnBreak) { setIsActionLoading(true); try { const togglePauseFunction = httpsCallable(getFunctions(undefined, 'europe-west1'), 'prepostoTogglePause'); const result = await togglePauseFunction({ deviceId: 'ADMIN_MANUAL_ACTION' }); showNotification(result.data.message, 'success'); } catch (error) { showNotification(`Errore pausa: ${error.message}`, 'error'); } finally { setIsActionLoading(false); } return; } if (adminActiveEntry.hasCompletedPause) return showNotification("Pausa già completata.", 'info'); const workArea = allWorkAreas.find(area => area.id === adminActiveEntry.workAreaId); if (!workArea || !workArea.pauseDuration) return showNotification(`Pausa non configurata per l'area.`, 'info'); if (!window.confirm(`Applicare la pausa di ${workArea.pauseDuration} minuti per te stesso?`)) return; setIsActionLoading(true); try { const applyPauseFunction = httpsCallable(getFunctions(undefined, 'europe-west1'), 'applyAutoPauseEmployee'); const result = await applyPauseFunction({ timeEntryId: adminActiveEntry.id, durationMinutes: workArea.pauseDuration, deviceId: 'ADMIN_MANUAL_ACTION' }); showNotification(result.data.message, 'success'); } catch (error) { showNotification(`Errore pausa: ${error.message}`, 'error'); } finally { setIsActionLoading(false); } }, [adminActiveEntry, adminEmployeeProfile, allWorkAreas, showNotification]);
+    const handleAdminPause = useCallback(async () => { 
+        if (!adminEmployeeProfile) return showNotification("Profilo non trovato.", 'error'); 
+        if (!adminActiveEntry) return showNotification("Nessuna timbratura attiva.", 'error'); 
+        
+        if (adminActiveEntry.hasCompletedPause) return showNotification("Pausa già completata.", 'info'); 
+        
+        const workArea = allWorkAreas.find(area => area.id === adminActiveEntry.workAreaId); 
+        if (!workArea || !workArea.pauseDuration) return showNotification(`Pausa non configurata per l'area.`, 'info'); 
+        
+        if (!window.confirm(`Vuoi registrare sùbito la pausa di ${workArea.pauseDuration} minuti?`)) return; 
+        
+        setIsActionLoading(true); 
+        try { 
+            const applyPauseFunction = httpsCallable(getFunctions(undefined, 'europe-west1'), 'applyAutoPauseEmployee'); 
+            const result = await applyPauseFunction({ timeEntryId: adminActiveEntry.id, durationMinutes: workArea.pauseDuration, deviceId: 'ADMIN_MANUAL_ACTION' }); 
+            showNotification(result.data.message || "Pausa applicata!", 'success'); 
+        } catch (error) { 
+            showNotification(`Errore pausa: ${error.message}`, 'error'); 
+        } finally { 
+            setIsActionLoading(false); 
+        } 
+    }, [adminActiveEntry, adminEmployeeProfile, allWorkAreas, showNotification]);
     
     const handleEmployeePauseClick = useCallback(async (employee) => { const timeEntryId = employee?.activeEntry?.id; if (!timeEntryId) return showNotification("Timbratura attiva non trovata.", 'error'); const workArea = allWorkAreas.find(area => area.id === employee.activeEntry.workAreaId); if (!workArea || !workArea.pauseDuration) return showNotification(`Pausa non configurata per l'area.`, 'info'); if (employee.activeEntry.hasCompletedPause) return showNotification(`Pausa già eseguita.`, 'info'); if (!window.confirm(`Inserire pausa per ${employee.name}?`)) return; setIsActionLoading(true); try { const now = new Date(); const startPause = new Date(now.getTime() - (workArea.pauseDuration * 60000)); const entryRef = doc(db, "time_entries", timeEntryId); await updateDoc(entryRef, { pauses: arrayUnion({ start: Timestamp.fromDate(startPause), end: Timestamp.fromDate(now), type: 'manual_forced', addedBy: user.email }) }); showNotification("Pausa inserita!", 'success'); } catch (error) { showNotification(`Errore: ${error.message}`, 'error'); } finally { setIsActionLoading(false); } }, [allWorkAreas, user, showNotification]);
     
@@ -947,20 +1052,17 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const generateReport = useCallback(async () => { if (!dateRange.start || !dateRange.end) return; setIsLoading(true); try { const functions = getFunctions(undefined, 'europe-west1'); const generateReportFunction = httpsCallable(functions, 'generateTimeReport'); const result = await generateReportFunction({ startDate: dateRange.start, endDate: dateRange.end, employeeIdFilter: reportEmployeeFilter, areaIdFilter: reportAreaFilter }); let fetchedEntries = result.data.reports; if (currentUserRole === 'preposto') { const managedIds = userData?.managedAreaIds || []; fetchedEntries = fetchedEntries.filter(entry => entry.isAbsence || managedIds.includes(entry.workAreaId)); } const areaHoursMap = new Map(allWorkAreas.map(area => [area.id, 0])); const formatTime = (date, time) => { const finalTime = time === 'In corso' ? '99:99' : time; const formattedDate = date.replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3-$2-$1'); return new Date(`${formattedDate} ${finalTime}`); }; const reportData = fetchedEntries.map(entry => { const clockIn = entry.clockInTime ? new Date(entry.clockInTime) : null; const clockOut = entry.clockOutTime ? new Date(entry.clockOutTime) : null; if (!clockIn) return null; const employee = allEmployees.find(e => e.id === entry.employeeId); const area = allWorkAreas.find(a => a.id === entry.workAreaId); if (!employee) return null; let durationHours = null; let pauseHours = 0; if (entry.isAbsence) { return { id: entry.id, employeeName: `${employee.name} ${employee.surname}`, employeeId: entry.employeeId, areaName: "---", clockInDate: clockIn.toLocaleDateString('it-IT'), clockInTimeFormatted: "-", clockOutTimeFormatted: "-", duration: 0, pauseHours: 0, note: entry.note || entry.absenceType, statusLabel: entry.absenceType ? entry.absenceType.toUpperCase() : "ASSENZA", isAbsence: true, workAreaId: null }; } if (clockOut) { const totalMs = clockOut.getTime() - clockIn.getTime(); const recordedPausesMs = (entry.pauses || []).reduce((acc, p) => { if (p.start && p.end) return acc + (new Date(p.end).getTime() - new Date(p.start).getTime()); return acc; }, 0); const areaPauseMs = (area?.pauseDuration || 0) * 60000; let finalPauseMs = (entry.skippedBreak && entry.skipBreakStatus === 'approved') ? 0 : Math.max(recordedPausesMs, areaPauseMs); pauseHours = finalPauseMs / 3600000; durationHours = Math.max(0, (totalMs - finalPauseMs) / 3600000); if (area) areaHoursMap.set(area.id, (areaHoursMap.get(area.id) || 0) + durationHours); } return { id: entry.id, employeeName: `${employee.name} ${employee.surname}`, employeeId: entry.employeeId, areaName: area?.name || '---', clockInDate: clockIn.toLocaleDateString('it-IT'), clockInTimeFormatted: clockIn.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}), clockOutTimeFormatted: clockOut ? clockOut.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '---', duration: durationHours, pauseHours, note: entry.note || '', skippedBreak: entry.skippedBreak, skipBreakStatus: entry.skipBreakStatus, workAreaId: entry.workAreaId }; }).filter(Boolean).sort((a, b) => { const dateA = formatTime(a.clockInDate, a.clockInTimeFormatted); const dateB = formatTime(b.clockInDate, b.clockOutTimeFormatted); if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) { if (a.clockInDate !== b.clockInDate) return a.clockInDate.localeCompare(b.clockInDate); return a.employeeName.localeCompare(b.employeeName); } if (dateA < dateB) return -1; if (dateA > dateB) return 1; return a.employeeName.localeCompare(b.employeeName); }); setReports(reportData); setReportTitle(`Report dal ${dateRange.start} al ${dateRange.end}`); setWorkAreasWithHours(allWorkAreas.map(a => ({ ...a, totalHours: (areaHoursMap.get(a.id) || 0).toFixed(2) }))); if(reportData.length > 0) setView('reports'); } catch (error) { showNotification(`Errore: ${error.message}`, 'error'); } finally { setIsLoading(false); } }, [dateRange, reportAreaFilter, reportEmployeeFilter, allEmployees, allWorkAreas, showNotification, currentUserRole, userData]); 
     const handleReviewSkipBreak = useCallback(async (entryId, decision) => { if (!entryId || !decision) return; if (!window.confirm("Confermare revisione pausa?")) return; setIsActionLoading(true); try { const functions = getFunctions(undefined, 'europe-west1'); const reviewFunction = httpsCallable(functions, 'reviewSkipBreakRequest'); await reviewFunction({ timeEntryId: entryId, decision, adminId: user.uid }); showNotification(`Richiesta aggiornata!`, 'success'); generateReport(); } catch (error) { showNotification("Errore revisione.", 'error'); } finally { setIsActionLoading(false); } }, [user, showNotification, generateReport]);
     
-    // --- FIX: SALVATAGGIO MODIFICA ORE RISOLTO ---
     const handleSaveEntryEdit = async (entryId, updatedData) => { 
         setIsActionLoading(true); 
         try { 
             const entryRef = doc(db, "time_entries", entryId); 
             
-            // Salviamo sicuramente il cantiere, le note e l'ora d'ingresso
             const updatePayload = { 
                 workAreaId: updatedData.workAreaId, 
                 note: updatedData.note, 
                 clockInTime: Timestamp.fromDate(new Date(`${updatedData.date}T${updatedData.clockInTime}:00`)) 
             }; 
             
-            // Se c'è un orario di uscita VALIDO (es. "15:30"), lo aggiorniamo e chiudiamo il turno
             if (updatedData.clockOutTime && updatedData.clockOutTime.includes(':') && updatedData.clockOutTime.trim() !== '') { 
                 updatePayload.clockOutTime = Timestamp.fromDate(new Date(`${updatedData.date}T${updatedData.clockOutTime}:00`)); 
                 updatePayload.status = 'clocked-out'; 
@@ -991,24 +1093,9 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             {notification && <NotificationPopup message={notification.message} type={notification.type} onClose={() => setNotification(null)} />}
             
             <header className="modern-header">
-                 {/* COLONNA SINISTRA */}
+                 {/* COLONNA SINISTRA RIPULITA DAI DOPPIONI */}
                  <div className="header-left">
-                     {adminEmployeeProfile && (
-                         <div className="header-actions-mobile" style={{background: '#f8fafc', padding: '8px 16px', borderRadius: '8px', border: '1px solid #e2e8f0', display: 'flex', gap: '10px', alignItems:'center'}}>
-                             {adminActiveEntry ? (
-                                 <>
-                                     <div style={{fontSize: '13px', fontWeight: 'bold', color: '#16a34a'}}>🟢 In Turno {adminActiveEntry.isOnBreak && <span style={{color: '#d97706'}}>(In Pausa)</span>}</div>
-                                     <button onClick={handleAdminPause} disabled={isActionLoading || (!adminActiveEntry.isOnBreak && adminActiveEntry.hasCompletedPause)} className="modern-btn-outline" style={{padding:'4px 8px', fontSize:'11px'}}>{adminActiveEntry.isOnBreak ? 'Termina Pausa' : '☕ Pausa'}</button>
-                                     <button onClick={() => openModal('manualClockOut', adminEmployeeProfile)} disabled={adminActiveEntry.isOnBreak || isActionLoading} className="modern-btn-danger" style={{padding:'4px 8px', fontSize:'11px'}}>⏹️ Esci Turno</button>
-                                 </>
-                             ) : (
-                                 <>
-                                     <div style={{fontSize: '13px', fontWeight: 'bold', color: '#64748b'}}>⚪ Fuori Turno</div>
-                                     <button onClick={() => openModal('manualClockIn', adminEmployeeProfile)} disabled={isActionLoading} className="modern-btn" style={{padding:'4px 8px', fontSize:'11px'}}>▶️ Entra</button>
-                                 </>
-                             )}
-                          </div>
-                     )}
+                     {/* Lo spazio resta vuoto per mantenere centrato il logo */}
                  </div>
 
                  {/* COLONNA CENTRALE */}
