@@ -844,7 +844,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             const rawEntriesList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
             // --- INIZIO FILTRO ANTI-DOPPIONI (DEVICE RESET) ---
-            // Se un dipendente ha due turni "In corso", teniamo solo il più recente
             const latestEntriesMap = new Map();
             rawEntriesList.forEach(entry => {
                 if (!entry.clockInTime) return;
@@ -965,16 +964,16 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 const area = allWorkAreas.find(a => a.id === entry.workAreaId);
                 const areaPauseMs = (area?.pauseDuration || 0) * 60000;
                 
+                // --- FIX: SE È STATA PREMUTA LA PAUSA, USA QUELLA, ALTRIMENTI USA IL DEFAULT DEL CANTIERE ---
                 let finalPauseMs = 0;
-                
                 if (entry.skippedBreak && entry.skipBreakStatus === 'approved') {
                     finalPauseMs = 0;
+                } else if (recordedPausesMs > 0) {
+                    finalPauseMs = recordedPausesMs; // Usa i minuti effettivi registrati nel database storicamente!
+                } else if (entry.clockOutTime || entry.status === 'clocked-out') {
+                    finalPauseMs = areaPauseMs; // Scala default solo se chiude il turno senza aver registrato pause
                 } else {
-                    if (entry.clockOutTime || entry.status === 'clocked-out' || recordedPausesMs > 0) {
-                        finalPauseMs = Math.max(recordedPausesMs, areaPauseMs);
-                    } else {
-                        finalPauseMs = 0;
-                    }
+                    finalPauseMs = 0;
                 }
                 
                 const durationMs = totalMs - finalPauseMs; 
@@ -1049,7 +1048,98 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         setModalType(type); setSelectedItem(item); setShowModal(true); 
     }, []);
 
-    const generateReport = useCallback(async () => { if (!dateRange.start || !dateRange.end) return; setIsLoading(true); try { const functions = getFunctions(undefined, 'europe-west1'); const generateReportFunction = httpsCallable(functions, 'generateTimeReport'); const result = await generateReportFunction({ startDate: dateRange.start, endDate: dateRange.end, employeeIdFilter: reportEmployeeFilter, areaIdFilter: reportAreaFilter }); let fetchedEntries = result.data.reports; if (currentUserRole === 'preposto') { const managedIds = userData?.managedAreaIds || []; fetchedEntries = fetchedEntries.filter(entry => entry.isAbsence || managedIds.includes(entry.workAreaId)); } const areaHoursMap = new Map(allWorkAreas.map(area => [area.id, 0])); const formatTime = (date, time) => { const finalTime = time === 'In corso' ? '99:99' : time; const formattedDate = date.replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3-$2-$1'); return new Date(`${formattedDate} ${finalTime}`); }; const reportData = fetchedEntries.map(entry => { const clockIn = entry.clockInTime ? new Date(entry.clockInTime) : null; const clockOut = entry.clockOutTime ? new Date(entry.clockOutTime) : null; if (!clockIn) return null; const employee = allEmployees.find(e => e.id === entry.employeeId); const area = allWorkAreas.find(a => a.id === entry.workAreaId); if (!employee) return null; let durationHours = null; let pauseHours = 0; if (entry.isAbsence) { return { id: entry.id, employeeName: `${employee.name} ${employee.surname}`, employeeId: entry.employeeId, areaName: "---", clockInDate: clockIn.toLocaleDateString('it-IT'), clockInTimeFormatted: "-", clockOutTimeFormatted: "-", duration: 0, pauseHours: 0, note: entry.note || entry.absenceType, statusLabel: entry.absenceType ? entry.absenceType.toUpperCase() : "ASSENZA", isAbsence: true, workAreaId: null }; } if (clockOut) { const totalMs = clockOut.getTime() - clockIn.getTime(); const recordedPausesMs = (entry.pauses || []).reduce((acc, p) => { if (p.start && p.end) return acc + (new Date(p.end).getTime() - new Date(p.start).getTime()); return acc; }, 0); const areaPauseMs = (area?.pauseDuration || 0) * 60000; let finalPauseMs = (entry.skippedBreak && entry.skipBreakStatus === 'approved') ? 0 : Math.max(recordedPausesMs, areaPauseMs); pauseHours = finalPauseMs / 3600000; durationHours = Math.max(0, (totalMs - finalPauseMs) / 3600000); if (area) areaHoursMap.set(area.id, (areaHoursMap.get(area.id) || 0) + durationHours); } return { id: entry.id, employeeName: `${employee.name} ${employee.surname}`, employeeId: entry.employeeId, areaName: area?.name || '---', clockInDate: clockIn.toLocaleDateString('it-IT'), clockInTimeFormatted: clockIn.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}), clockOutTimeFormatted: clockOut ? clockOut.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '---', duration: durationHours, pauseHours, note: entry.note || '', skippedBreak: entry.skippedBreak, skipBreakStatus: entry.skipBreakStatus, workAreaId: entry.workAreaId }; }).filter(Boolean).sort((a, b) => { const dateA = formatTime(a.clockInDate, a.clockInTimeFormatted); const dateB = formatTime(b.clockInDate, b.clockOutTimeFormatted); if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) { if (a.clockInDate !== b.clockInDate) return a.clockInDate.localeCompare(b.clockInDate); return a.employeeName.localeCompare(b.employeeName); } if (dateA < dateB) return -1; if (dateA > dateB) return 1; return a.employeeName.localeCompare(b.employeeName); }); setReports(reportData); setReportTitle(`Report dal ${dateRange.start} al ${dateRange.end}`); setWorkAreasWithHours(allWorkAreas.map(a => ({ ...a, totalHours: (areaHoursMap.get(a.id) || 0).toFixed(2) }))); if(reportData.length > 0) setView('reports'); } catch (error) { showNotification(`Errore: ${error.message}`, 'error'); } finally { setIsLoading(false); } }, [dateRange, reportAreaFilter, reportEmployeeFilter, allEmployees, allWorkAreas, showNotification, currentUserRole, userData]); 
+    const generateReport = useCallback(async () => { 
+        if (!dateRange.start || !dateRange.end) return; 
+        setIsLoading(true); 
+        try { 
+            const functions = getFunctions(undefined, 'europe-west1'); 
+            const generateReportFunction = httpsCallable(functions, 'generateTimeReport'); 
+            const result = await generateReportFunction({ startDate: dateRange.start, endDate: dateRange.end, employeeIdFilter: reportEmployeeFilter, areaIdFilter: reportAreaFilter }); 
+            let fetchedEntries = result.data.reports; 
+            
+            if (currentUserRole === 'preposto') { 
+                const managedIds = userData?.managedAreaIds || []; 
+                fetchedEntries = fetchedEntries.filter(entry => entry.isAbsence || managedIds.includes(entry.workAreaId)); 
+            } 
+            
+            const areaHoursMap = new Map(allWorkAreas.map(area => [area.id, 0])); 
+            
+            const formatTime = (date, time) => { 
+                const finalTime = time === 'In corso' ? '99:99' : time; 
+                const formattedDate = date.replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3-$2-$1'); 
+                return new Date(`${formattedDate} ${finalTime}`); 
+            }; 
+            
+            const reportData = fetchedEntries.map(entry => { 
+                const clockIn = entry.clockInTime ? new Date(entry.clockInTime) : null; 
+                const clockOut = entry.clockOutTime ? new Date(entry.clockOutTime) : null; 
+                
+                if (!clockIn) return null; 
+                
+                const employee = allEmployees.find(e => e.id === entry.employeeId); 
+                const area = allWorkAreas.find(a => a.id === entry.workAreaId); 
+                
+                if (!employee) return null; 
+                
+                let durationHours = null; 
+                let pauseHours = 0; 
+                
+                if (entry.isAbsence) { 
+                    return { id: entry.id, employeeName: `${employee.name} ${employee.surname}`, employeeId: entry.employeeId, areaName: "---", clockInDate: clockIn.toLocaleDateString('it-IT'), clockInTimeFormatted: "-", clockOutTimeFormatted: "-", duration: 0, pauseHours: 0, note: entry.note || entry.absenceType, statusLabel: entry.absenceType ? entry.absenceType.toUpperCase() : "ASSENZA", isAbsence: true, workAreaId: null }; 
+                } 
+                
+                if (clockOut) { 
+                    const totalMs = clockOut.getTime() - clockIn.getTime(); 
+                    
+                    const recordedPausesMs = (entry.pauses || []).reduce((acc, p) => { 
+                        if (p.start && p.end) return acc + (new Date(p.end).getTime() - new Date(p.start).getTime()); 
+                        return acc; 
+                    }, 0); 
+                    
+                    const areaPauseMs = (area?.pauseDuration || 0) * 60000; 
+                    
+                    // --- FIX REPORT: IDENTICO AL LIVE ---
+                    let finalPauseMs = 0;
+                    if (entry.skippedBreak && entry.skipBreakStatus === 'approved') {
+                        finalPauseMs = 0;
+                    } else if (recordedPausesMs > 0) {
+                        finalPauseMs = recordedPausesMs; // Usa i minuti registrati
+                    } else {
+                        finalPauseMs = areaPauseMs; // Scala il default se non ci sono pause registrate
+                    }
+                    
+                    pauseHours = finalPauseMs / 3600000; 
+                    durationHours = Math.max(0, (totalMs - finalPauseMs) / 3600000); 
+                    
+                    if (area) areaHoursMap.set(area.id, (areaHoursMap.get(area.id) || 0) + durationHours); 
+                } 
+                
+                return { id: entry.id, employeeName: `${employee.name} ${employee.surname}`, employeeId: entry.employeeId, areaName: area?.name || '---', clockInDate: clockIn.toLocaleDateString('it-IT'), clockInTimeFormatted: clockIn.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}), clockOutTimeFormatted: clockOut ? clockOut.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '---', duration: durationHours, pauseHours, note: entry.note || '', skippedBreak: entry.skippedBreak, skipBreakStatus: entry.skipBreakStatus, workAreaId: entry.workAreaId }; 
+            }).filter(Boolean).sort((a, b) => { 
+                const dateA = formatTime(a.clockInDate, a.clockInTimeFormatted); 
+                const dateB = formatTime(b.clockInDate, b.clockOutTimeFormatted); 
+                if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) { 
+                    if (a.clockInDate !== b.clockInDate) return a.clockInDate.localeCompare(b.clockInDate); 
+                    return a.employeeName.localeCompare(b.employeeName); 
+                } 
+                if (dateA < dateB) return -1; 
+                if (dateA > dateB) return 1; 
+                return a.employeeName.localeCompare(b.employeeName); 
+            }); 
+            
+            setReports(reportData); 
+            setReportTitle(`Report dal ${dateRange.start} al ${dateRange.end}`); 
+            setWorkAreasWithHours(allWorkAreas.map(a => ({ ...a, totalHours: (areaHoursMap.get(a.id) || 0).toFixed(2) }))); 
+            
+            if(reportData.length > 0) setView('reports'); 
+            
+        } catch (error) { 
+            showNotification(`Errore: ${error.message}`, 'error'); 
+        } finally { 
+            setIsLoading(false); 
+        } 
+    }, [dateRange, reportAreaFilter, reportEmployeeFilter, allEmployees, allWorkAreas, showNotification, currentUserRole, userData]); 
+
     const handleReviewSkipBreak = useCallback(async (entryId, decision) => { if (!entryId || !decision) return; if (!window.confirm("Confermare revisione pausa?")) return; setIsActionLoading(true); try { const functions = getFunctions(undefined, 'europe-west1'); const reviewFunction = httpsCallable(functions, 'reviewSkipBreakRequest'); await reviewFunction({ timeEntryId: entryId, decision, adminId: user.uid }); showNotification(`Richiesta aggiornata!`, 'success'); generateReport(); } catch (error) { showNotification("Errore revisione.", 'error'); } finally { setIsActionLoading(false); } }, [user, showNotification, generateReport]);
     
     const handleSaveEntryEdit = async (entryId, updatedData) => { 
