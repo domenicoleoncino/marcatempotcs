@@ -25,7 +25,7 @@ const ModernStyles = () => (
     {`
       .modern-bg { background-color: #f4f7fe; min-height: 100vh; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1e293b; overflow-x: hidden; }
       
-      /* Header Layout Desktop (CORRETTO PER NON SOVRAPPORSI) */
+      /* Header Layout Desktop */
       .modern-header { display: flex; justify-content: space-between; align-items: center; background: #ffffff; padding: 15px 40px; box-shadow: 0 2px 10px rgba(0,0,0,0.03); border-bottom: 1px solid #e2e8f0; }
       .header-left { flex: 1; display: flex; align-items: center; justify-content: flex-start; }
       .header-center { flex: 1; display: flex; justify-content: center; align-items: center; padding: 10px 0; }
@@ -209,11 +209,31 @@ const ProcessExpenseModal = ({ show, onClose, expense, onConfirm, isProcessing }
 const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) => {
     const formatDateForInput = (dateStr) => { if (!dateStr) return ''; const parts = dateStr.split('/'); if (parts.length === 3) return `${parts[2]}-${parts[1]}-${parts[0]}`; return dateStr; };
     const [skipPause, setSkipPause] = useState(!!entry.skippedBreak);
-    const [formData, setFormData] = useState({ workAreaId: entry.workAreaId || '', note: entry.note || '', date: formatDateForInput(entry.clockInDate), clockInTime: entry.clockInTimeFormatted || '08:00', clockOutTime: entry.clockOutTimeFormatted !== 'In corso' ? entry.clockOutTimeFormatted : '' });
+    
+    // --- FIX: ASSICURA CHE L'ORARIO DI USCITA VUOTO SIA UN TESTO VUOTO VERO E PROPRIO, NON I TRATTINI ---
+    const isOngoing = !entry.clockOutTimeFormatted || entry.clockOutTimeFormatted === 'In corso' || entry.clockOutTimeFormatted.includes('-');
+    
+    const [formData, setFormData] = useState({ 
+        workAreaId: entry.workAreaId || '', 
+        note: entry.note || '', 
+        date: formatDateForInput(entry.clockInDate), 
+        clockInTime: entry.clockInTimeFormatted || '08:00', 
+        clockOutTime: isOngoing ? '' : entry.clockOutTimeFormatted 
+    });
+
     const handleChange = (e) => { setFormData({ ...formData, [e.target.name]: e.target.value }); };
-    const handleSubmit = (e) => { e.preventDefault(); if (skipPause && (!formData.note || formData.note.trim() === '')) { alert("Nota obbligatoria se salti la pausa."); return; } onSave(entry.id, { ...formData, skippedBreak: skipPause }); };
+    
+    const handleSubmit = (e) => { 
+        e.preventDefault(); 
+        if (skipPause && (!formData.note || formData.note.trim() === '')) { 
+            alert("Nota obbligatoria se salti la pausa."); 
+            return; 
+        } 
+        onSave(entry.id, { ...formData, skippedBreak: skipPause }); 
+    };
+
     const inputStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', marginBottom: '15px', boxSizing: 'border-box' };
-    return ReactDOM.createPortal( <><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',backgroundColor:'rgba(0,0,0,0.6)',zIndex:99998}} onClick={onClose}/><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',zIndex:99999,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}><div style={{backgroundColor:'#fff',width:'100%',maxWidth:'500px',borderRadius:'12px',overflow:'hidden',pointerEvents:'auto', margin: '0 15px'}} onClick={e=>e.stopPropagation()}><div style={{padding:'20px'}}><h3 style={{margin:0, marginBottom:'20px', fontSize:'18px', fontWeight:'bold', color:'#0f172a'}}>✏️ Modifica Timbratura</h3><form onSubmit={handleSubmit}><div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Data</label><input type="date" name="date" value={formData.date} onChange={handleChange} style={inputStyle}/></div>{!entry.isAbsence && <div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Area/Cantiere</label><select name="workAreaId" value={formData.workAreaId} onChange={handleChange} style={inputStyle}>{workAreas.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></div>}<div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Ora Ingresso</label><input type="time" name="clockInTime" value={formData.clockInTime} onChange={handleChange} style={inputStyle}/></div>{!entry.isAbsence && <div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Ora Uscita</label><input type="time" name="clockOutTime" value={formData.clockOutTime} onChange={handleChange} style={inputStyle}/></div>}<div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'15px'}}><input type="checkbox" checked={skipPause} onChange={e=>setSkipPause(e.target.checked)} style={{width:'18px', height:'18px'}}/><label style={{fontWeight:'bold', color:'#0f172a'}}>Rimuovi Pausa (Nessuna pausa effettuata)</label></div><div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Note</label><textarea name="note" value={formData.note} onChange={handleChange} style={inputStyle}/></div><div style={{display:'flex', justifyContent:'flex-end', gap:'10px'}}><button type="button" onClick={onClose} className="modern-btn-outline">Annulla</button><button type="submit" disabled={isLoading} className="modern-btn">Salva Modifiche</button></div></form></div></div></div></>, document.body );
+    return ReactDOM.createPortal( <><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',backgroundColor:'rgba(0,0,0,0.6)',zIndex:99998}} onClick={onClose}/><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',zIndex:99999,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}><div style={{backgroundColor:'#fff',width:'100%',maxWidth:'500px',borderRadius:'12px',overflow:'hidden',pointerEvents:'auto', margin: '0 15px'}} onClick={e=>e.stopPropagation()}><div style={{padding:'20px'}}><h3 style={{margin:0, marginBottom:'20px', fontSize:'18px', fontWeight:'bold', color:'#0f172a'}}>✏️ Modifica Timbratura</h3><form onSubmit={handleSubmit}><div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Data</label><input type="date" name="date" value={formData.date} onChange={handleChange} style={inputStyle}/></div>{!entry.isAbsence && <div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Area/Cantiere</label><select name="workAreaId" value={formData.workAreaId} onChange={handleChange} style={inputStyle}>{workAreas.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></div>}<div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Ora Ingresso</label><input type="time" name="clockInTime" value={formData.clockInTime} onChange={handleChange} style={inputStyle}/></div>{!entry.isAbsence && <div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Ora Uscita (Lascia vuoto se ancora a lavoro)</label><input type="time" name="clockOutTime" value={formData.clockOutTime} onChange={handleChange} style={inputStyle}/></div>}<div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'15px'}}><input type="checkbox" checked={skipPause} onChange={e=>setSkipPause(e.target.checked)} style={{width:'18px', height:'18px'}}/><label style={{fontWeight:'bold', color:'#0f172a'}}>Rimuovi Pausa (Nessuna pausa effettuata)</label></div><div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Note</label><textarea name="note" value={formData.note} onChange={handleChange} style={inputStyle}/></div><div style={{display:'flex', justifyContent:'flex-end', gap:'10px'}}><button type="button" onClick={onClose} className="modern-btn-outline">Annulla</button><button type="submit" disabled={isLoading} className="modern-btn">Salva Modifiche</button></div></form></div></div></div></>, document.body );
 };
 
 const AddEmployeeToAreaModal = ({ show, onClose, allEmployees, workAreas, userData, showNotification, onDataUpdate }) => {
@@ -684,7 +704,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const [pendingRequestsCount, setPendingRequestsCount] = useState(0); 
     const [notification, setNotification] = useState(null); 
     
-    // STATI CHE ERANO STATI PERSI E CHE CAUSAVANO L'ERRORE!
     const [entryToEdit, setEntryToEdit] = useState(null);
     const [showAddEmployeeModal, setShowAddEmployeeModal] = useState(false);
     const [showAddFormModal, setShowAddFormModal] = useState(false);
@@ -822,10 +841,71 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     }, [allEmployees, allWorkAreas, adminEmployeeProfile, currentUserRole, userData, showNotification]);
 
     useEffect(() => {
-        let isMounted = true; const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0); const q = query(collection(db, "time_entries"), where("clockInTime", ">=", Timestamp.fromDate(startOfDay)));
-        const unsubscribe = onSnapshot(q, (snapshot) => { if (!isMounted) return; let totalMinutes = 0; const now = new Date(); snapshot.docs.forEach(doc => { const entry = doc.data(); if (!entry.clockInTime) return; if (currentUserRole === 'preposto') { const managedAreaIds = userData?.managedAreaIds || []; if (!entry.workAreaId || !managedAreaIds.includes(entry.workAreaId)) return; } const clockIn = entry.clockInTime.toDate(); const clockOut = entry.clockOutTime ? entry.clockOutTime.toDate() : (entry.status === 'clocked-in' ? now : clockIn); const pauseDurationMs = (entry.pauses || []).reduce((acc, p) => { if (p.start && p.end) { const startMillis = p.start.toMillis ? p.start.toMillis() : new Date(p.start).getTime(); const endMillis = p.end.toMillis ? p.end.toMillis() : new Date(p.end).getTime(); return acc + (endMillis - startMillis); } return acc; }, 0); const durationMs = (clockOut.getTime() - clockIn.getTime()) - pauseDurationMs; if (durationMs > 0) totalMinutes += (durationMs / 60000); }); setTotalDayHours((totalMinutes / 60).toFixed(2)); }, (error) => { if (isMounted) { console.error("Errore listener ore totali:", error); showNotification("Errore aggiornamento ore totali.", 'error'); } });
+        if (!allWorkAreas || allWorkAreas.length === 0) return;
+
+        let isMounted = true; 
+        const startOfDay = new Date(); 
+        startOfDay.setHours(0, 0, 0, 0); 
+        
+        const q = query(collection(db, "time_entries"), where("clockInTime", ">=", Timestamp.fromDate(startOfDay)));
+        
+        const unsubscribe = onSnapshot(q, (snapshot) => { 
+            if (!isMounted) return; 
+            let totalMinutes = 0; 
+            const now = new Date(); 
+            
+            snapshot.docs.forEach(doc => { 
+                const entry = doc.data(); 
+                if (!entry.clockInTime || entry.isAbsence) return; 
+                
+                if (currentUserRole === 'preposto') { 
+                    const managedAreaIds = userData?.managedAreaIds || []; 
+                    if (!entry.workAreaId || !managedAreaIds.includes(entry.workAreaId)) return; 
+                } 
+                
+                const clockIn = entry.clockInTime.toDate(); 
+                const clockOut = entry.clockOutTime ? entry.clockOutTime.toDate() : (entry.status === 'clocked-in' ? now : clockIn); 
+                
+                const totalMs = clockOut.getTime() - clockIn.getTime();
+                if (totalMs <= 0) return;
+
+                const recordedPausesMs = (entry.pauses || []).reduce((acc, p) => { 
+                    if (p.start && p.end) { 
+                        const startMillis = p.start.toMillis ? p.start.toMillis() : new Date(p.start).getTime(); 
+                        const endMillis = p.end.toMillis ? p.end.toMillis() : new Date(p.end).getTime(); 
+                        return acc + (endMillis - startMillis); 
+                    } 
+                    return acc; 
+                }, 0); 
+
+                const area = allWorkAreas.find(a => a.id === entry.workAreaId);
+                const areaPauseMs = (area?.pauseDuration || 0) * 60000;
+                
+                let finalPauseMs = 0;
+                
+                if (entry.skippedBreak && entry.skipBreakStatus === 'approved') {
+                    finalPauseMs = 0;
+                } else {
+                    if (entry.clockOutTime || entry.status === 'clocked-out') {
+                        finalPauseMs = Math.max(recordedPausesMs, areaPauseMs);
+                    } else {
+                        finalPauseMs = recordedPausesMs;
+                    }
+                }
+                
+                const durationMs = totalMs - finalPauseMs; 
+                if (durationMs > 0) {
+                    totalMinutes += (durationMs / 60000); 
+                }
+            }); 
+            
+            setTotalDayHours((totalMinutes / 60).toFixed(2)); 
+        }, (error) => { 
+            if (isMounted) console.error("Errore listener ore totali:", error); 
+        });
+        
         return () => { isMounted = false; unsubscribe(); };
-    }, [currentUserRole, userData, showNotification]); 
+    }, [currentUserRole, userData, allWorkAreas]); 
 
     const handleArchiveArea = useCallback(async (area) => {
         if (!window.confirm(`Sei sicuro di voler archiviare l'area "${area.name}"?`)) return;
@@ -847,13 +927,10 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         } catch (error) { console.error("Errore ripristino:", error); showNotification("Errore durante il ripristino.", 'error'); } finally { setIsActionLoading(false); }
     }, [fetchData, showNotification]);
     
-    // FUNZIONE RECUPERATA: Salva l'archiviazione di una spesa da parte dell'Admin
     const handleConfirmProcessExpense = async (expenseId, paymentMethod, note) => { setIsActionLoading(true); try { await updateDoc(doc(db, "expenses", expenseId), { status: 'closed', adminPaymentMethod: paymentMethod, adminNote: note, closedAt: Timestamp.now(), closedBy: user.email }); showNotification("Spesa archiviata!", 'success'); setExpenseToProcess(null); } catch (error) { console.error("Errore archiviazione spesa:", error); showNotification("Errore durante l'archiviazione.", 'error'); } finally { setIsActionLoading(false); } };
     
-    // FUNZIONE RECUPERATA: Resetta i device ID di un dipendente
     const handleResetEmployeeDevice = useCallback(async (employee) => { if (!employee || !employee.id) return; if (!window.confirm(`Reset dispositivo per ${employee.name}?`)) return; setIsActionLoading(true); try { await updateDoc(doc(db, "employees", employee.id), { deviceIds: [] }); showNotification(`Reset completato.`, 'success'); fetchData(); } catch (error) { showNotification(`Errore reset: ${error.message}`, 'error'); } finally { setIsActionLoading(false); } }, [fetchData, showNotification]);
 
-    // FUNZIONE RECUPERATA: Cancella un Modulo
     const handleDeleteForm = async (formId) => { if (!window.confirm("Eliminare modulo?")) return; try { await deleteDoc(doc(db, "area_forms", formId)); showNotification("Modulo eliminato.", "success"); fetchData(); } catch (error) { showNotification("Errore eliminazione.", "error"); } };
 
     const handleAdminPause = useCallback(async () => { if (!adminEmployeeProfile) return showNotification("Profilo non trovato.", 'error'); if (!adminActiveEntry) return showNotification("Nessuna timbratura attiva.", 'error'); if (adminActiveEntry.isOnBreak) { setIsActionLoading(true); try { const togglePauseFunction = httpsCallable(getFunctions(undefined, 'europe-west1'), 'prepostoTogglePause'); const result = await togglePauseFunction({ deviceId: 'ADMIN_MANUAL_ACTION' }); showNotification(result.data.message, 'success'); } catch (error) { showNotification(`Errore pausa: ${error.message}`, 'error'); } finally { setIsActionLoading(false); } return; } if (adminActiveEntry.hasCompletedPause) return showNotification("Pausa già completata.", 'info'); const workArea = allWorkAreas.find(area => area.id === adminActiveEntry.workAreaId); if (!workArea || !workArea.pauseDuration) return showNotification(`Pausa non configurata per l'area.`, 'info'); if (!window.confirm(`Applicare la pausa di ${workArea.pauseDuration} minuti per te stesso?`)) return; setIsActionLoading(true); try { const applyPauseFunction = httpsCallable(getFunctions(undefined, 'europe-west1'), 'applyAutoPauseEmployee'); const result = await applyPauseFunction({ timeEntryId: adminActiveEntry.id, durationMinutes: workArea.pauseDuration, deviceId: 'ADMIN_MANUAL_ACTION' }); showNotification(result.data.message, 'success'); } catch (error) { showNotification(`Errore pausa: ${error.message}`, 'error'); } finally { setIsActionLoading(false); } }, [adminActiveEntry, adminEmployeeProfile, allWorkAreas, showNotification]);
@@ -869,7 +946,37 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
     const generateReport = useCallback(async () => { if (!dateRange.start || !dateRange.end) return; setIsLoading(true); try { const functions = getFunctions(undefined, 'europe-west1'); const generateReportFunction = httpsCallable(functions, 'generateTimeReport'); const result = await generateReportFunction({ startDate: dateRange.start, endDate: dateRange.end, employeeIdFilter: reportEmployeeFilter, areaIdFilter: reportAreaFilter }); let fetchedEntries = result.data.reports; if (currentUserRole === 'preposto') { const managedIds = userData?.managedAreaIds || []; fetchedEntries = fetchedEntries.filter(entry => entry.isAbsence || managedIds.includes(entry.workAreaId)); } const areaHoursMap = new Map(allWorkAreas.map(area => [area.id, 0])); const formatTime = (date, time) => { const finalTime = time === 'In corso' ? '99:99' : time; const formattedDate = date.replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3-$2-$1'); return new Date(`${formattedDate} ${finalTime}`); }; const reportData = fetchedEntries.map(entry => { const clockIn = entry.clockInTime ? new Date(entry.clockInTime) : null; const clockOut = entry.clockOutTime ? new Date(entry.clockOutTime) : null; if (!clockIn) return null; const employee = allEmployees.find(e => e.id === entry.employeeId); const area = allWorkAreas.find(a => a.id === entry.workAreaId); if (!employee) return null; let durationHours = null; let pauseHours = 0; if (entry.isAbsence) { return { id: entry.id, employeeName: `${employee.name} ${employee.surname}`, employeeId: entry.employeeId, areaName: "---", clockInDate: clockIn.toLocaleDateString('it-IT'), clockInTimeFormatted: "-", clockOutTimeFormatted: "-", duration: 0, pauseHours: 0, note: entry.note || entry.absenceType, statusLabel: entry.absenceType ? entry.absenceType.toUpperCase() : "ASSENZA", isAbsence: true, workAreaId: null }; } if (clockOut) { const totalMs = clockOut.getTime() - clockIn.getTime(); const recordedPausesMs = (entry.pauses || []).reduce((acc, p) => { if (p.start && p.end) return acc + (new Date(p.end).getTime() - new Date(p.start).getTime()); return acc; }, 0); const areaPauseMs = (area?.pauseDuration || 0) * 60000; let finalPauseMs = (entry.skippedBreak && entry.skipBreakStatus === 'approved') ? 0 : Math.max(recordedPausesMs, areaPauseMs); pauseHours = finalPauseMs / 3600000; durationHours = Math.max(0, (totalMs - finalPauseMs) / 3600000); if (area) areaHoursMap.set(area.id, (areaHoursMap.get(area.id) || 0) + durationHours); } return { id: entry.id, employeeName: `${employee.name} ${employee.surname}`, employeeId: entry.employeeId, areaName: area?.name || '---', clockInDate: clockIn.toLocaleDateString('it-IT'), clockInTimeFormatted: clockIn.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}), clockOutTimeFormatted: clockOut ? clockOut.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '---', duration: durationHours, pauseHours, note: entry.note || '', skippedBreak: entry.skippedBreak, skipBreakStatus: entry.skipBreakStatus, workAreaId: entry.workAreaId }; }).filter(Boolean).sort((a, b) => { const dateA = formatTime(a.clockInDate, a.clockInTimeFormatted); const dateB = formatTime(b.clockInDate, b.clockOutTimeFormatted); if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) { if (a.clockInDate !== b.clockInDate) return a.clockInDate.localeCompare(b.clockInDate); return a.employeeName.localeCompare(b.employeeName); } if (dateA < dateB) return -1; if (dateA > dateB) return 1; return a.employeeName.localeCompare(b.employeeName); }); setReports(reportData); setReportTitle(`Report dal ${dateRange.start} al ${dateRange.end}`); setWorkAreasWithHours(allWorkAreas.map(a => ({ ...a, totalHours: (areaHoursMap.get(a.id) || 0).toFixed(2) }))); if(reportData.length > 0) setView('reports'); } catch (error) { showNotification(`Errore: ${error.message}`, 'error'); } finally { setIsLoading(false); } }, [dateRange, reportAreaFilter, reportEmployeeFilter, allEmployees, allWorkAreas, showNotification, currentUserRole, userData]); 
     const handleReviewSkipBreak = useCallback(async (entryId, decision) => { if (!entryId || !decision) return; if (!window.confirm("Confermare revisione pausa?")) return; setIsActionLoading(true); try { const functions = getFunctions(undefined, 'europe-west1'); const reviewFunction = httpsCallable(functions, 'reviewSkipBreakRequest'); await reviewFunction({ timeEntryId: entryId, decision, adminId: user.uid }); showNotification(`Richiesta aggiornata!`, 'success'); generateReport(); } catch (error) { showNotification("Errore revisione.", 'error'); } finally { setIsActionLoading(false); } }, [user, showNotification, generateReport]);
-    const handleSaveEntryEdit = async (entryId, updatedData) => { setIsActionLoading(true); try { const entryRef = doc(db, "time_entries", entryId); const updatePayload = { workAreaId: updatedData.workAreaId, note: updatedData.note, clockInTime: Timestamp.fromDate(new Date(`${updatedData.date}T${updatedData.clockInTime}:00`)) }; if (updatedData.clockOutTime) { updatePayload.clockOutTime = Timestamp.fromDate(new Date(`${updatedData.date}T${updatedData.clockOutTime}:00`)); updatePayload.status = 'clocked-out'; } await updateDoc(entryRef, updatePayload); showNotification("Aggiornato!", "success"); setEntryToEdit(null); generateReport(); } catch (error) { showNotification("Errore: " + error.message, "error"); } finally { setIsActionLoading(false); } };
+    
+    // --- FIX: SALVATAGGIO MODIFICA ORE RISOLTO ---
+    const handleSaveEntryEdit = async (entryId, updatedData) => { 
+        setIsActionLoading(true); 
+        try { 
+            const entryRef = doc(db, "time_entries", entryId); 
+            
+            // Salviamo sicuramente il cantiere, le note e l'ora d'ingresso
+            const updatePayload = { 
+                workAreaId: updatedData.workAreaId, 
+                note: updatedData.note, 
+                clockInTime: Timestamp.fromDate(new Date(`${updatedData.date}T${updatedData.clockInTime}:00`)) 
+            }; 
+            
+            // Se c'è un orario di uscita VALIDO (es. "15:30"), lo aggiorniamo e chiudiamo il turno
+            if (updatedData.clockOutTime && updatedData.clockOutTime.includes(':') && updatedData.clockOutTime.trim() !== '') { 
+                updatePayload.clockOutTime = Timestamp.fromDate(new Date(`${updatedData.date}T${updatedData.clockOutTime}:00`)); 
+                updatePayload.status = 'clocked-out'; 
+            } 
+            
+            await updateDoc(entryRef, updatePayload); 
+            showNotification("Aggiornato!", "success"); 
+            setEntryToEdit(null); 
+            generateReport(); 
+        } catch (error) { 
+            showNotification("Errore: " + error.message, "error"); 
+        } finally { 
+            setIsActionLoading(false); 
+        } 
+    };
+
     const handleExportXml = useCallback((data) => { let xml = '<?xml version="1.0"?><Report>'; data.forEach(e => xml += `<Timbratura><Dip>${e.employeeName}</Dip><Area>${e.areaName}</Area><Data>${e.clockInDate}</Data><Ore>${e.duration?.toFixed(2)}</Ore></Timbratura>`); xml += '</Report>'; const blob = new Blob([xml], { type: "application/xml" }); saveAs(blob, `Report.xml`); }, []);
     const requestSort = useCallback((key) => { setSortConfig(p => ({ key, direction: p.key === key && p.direction === 'ascending' ? 'descending' : 'ascending' })); }, []);
     
@@ -915,7 +1022,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                          <div style={{fontSize: '14px', fontWeight: '800', color: '#0f172a'}}>{userData?.name && userData?.surname ? `${userData.name} ${userData.surname}` : user?.email}</div>
                          <div style={{fontSize: '11px', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px'}}>{currentUserRole === 'admin' ? 'Amministratore' : 'Preposto'}</div>
                      </div>
-                     <button onClick={handleLogout} className="modern-btn-outline" style={{color: '#ef4444', borderColor: '#fca5a5', background: '#fef2f2', padding: '8px 16px'}}>
+                     <button onClick={handleLogout} className="modern-btn-outline" style={{color: '#ef4444', borderColor: '#fca5a5', background: '#fef2f2', padding: '8px 16px', width: window.innerWidth <= 768 ? '100%' : 'auto'}}>
                          🚪 Esci
                      </button>
                  </div>
@@ -1007,7 +1114,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                  &copy; {new Date().getFullYear()} TCS ITALIA S.R.L. - Sistema Gestionale Integrato
             </footer>
 
-            {/* --- I MODALI ORA SONO DEFINITI E INCLUSI CORRETTAMENTE --- */}
+            {/* --- I MODALI --- */}
             {showModal && modalType === 'editTimeEntry' && entryToEdit && ( <EditTimeEntryModal entry={entryToEdit} workAreas={activeWorkAreas} onClose={() => { setShowModal(false); setEntryToEdit(null); }} onSave={handleSaveEntryEdit} isLoading={isActionLoading} /> )}
             {showModal && modalType === 'addExpense' && ( <AddExpenseModal show={true} onClose={() => setShowModal(false)} user={user} userData={userData} showNotification={showNotification} /> )}
             {showModal && modalType === 'editExpense' && expenseToEdit && ( <AddExpenseModal show={true} onClose={() => { setShowModal(false); setExpenseToEdit(null); }} user={user} userData={userData} showNotification={showNotification} expenseToEdit={expenseToEdit} /> )}
