@@ -16,6 +16,9 @@ import AdminModal from './AdminModal';
 import MappaPresenze from './MappaPresenze'; 
 import { utils, writeFile } from 'xlsx-js-style'; 
 import { saveAs } from 'file-saver';
+import { Modal, Table, Tag, Button, Tooltip } from 'antd'; 
+import { InfoCircleOutlined } from '@ant-design/icons';
+import dayjs from 'dayjs';
 
 // ===========================================
 // --- STILE MAGICO "MUTAFORMA" (PC + MOBILE) ---
@@ -558,11 +561,12 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
 // ===========================================
 // --- DASHBOARD COMPONENT ---
 // ===========================================
-const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, workAreas, adminEmployeeProfile, adminActiveEntry, handleAdminPause, openModal, isActionLoading, dashboardAreaFilter, setDashboardAreaFilter }) => {
+const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, workAreas, adminEmployeeProfile, adminActiveEntry, handleAdminPause, openModal, isActionLoading, dashboardAreaFilter, setDashboardAreaFilter, todayHoursDetail }) => {
     const [isMapMode, setIsMapMode] = useState(false);
     const [myEquipment, setMyEquipment] = useState([]);
     const [myVehicles, setMyVehicles] = useState([]);
     const [showAssets, setShowAssets] = useState(false);
+    const [isHoursModalVisible, setIsHoursModalVisible] = useState(false); 
 
     useEffect(() => {
         if (!adminEmployeeProfile?.id) return;
@@ -599,7 +603,6 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
                             style={{width: 'auto', minWidth: '200px', margin: 0, padding: '8px 12px', fontWeight: 'bold'}}
                         >
                             <option value="all">Tutti i Miei Cantieri</option>
-                            {/* ORDINAMENTO ALFABETICO DEI CANTIERI NELLA TENDINA */}
                             {[...workAreas].sort((a,b) => a.name.localeCompare(b.name)).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                         </select>
                     )}
@@ -657,8 +660,18 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
                             <p className="stat-label" style={{margin:0, color:'#64748b', fontSize:'13px', fontWeight:'700', textTransform:'uppercase'}}>Forza Lavoro Attiva</p>
                             <p className="stat-value" style={{margin:'10px 0 0 0', fontSize:'32px', fontWeight:'900', color: '#0f172a'}}>{activeEmployeesDetails.length} <span style={{fontSize:'16px', color:'#94a3b8', fontWeight:'500'}}>/ {totalEmployees}</span></p>
                         </div>
-                        <div className="stat-card" style={{background:'#fff', padding:'24px', borderRadius:'12px', borderLeft:'5px solid #10b981', boxShadow:'0 2px 12px rgba(0,0,0,0.04)'}}>
-                            <p className="stat-label" style={{margin:0, color:'#64748b', fontSize:'13px', fontWeight:'700', textTransform:'uppercase'}}>Ore Erogate Oggi {dashboardAreaFilter !== 'all' ? '(Area Sel.)' : ''}</p>
+                        {/* RIQUADRO ORE CLICCABILE */}
+                        <div 
+                            className="stat-card" 
+                            style={{background:'#fff', padding:'24px', borderRadius:'12px', borderLeft:'5px solid #10b981', boxShadow:'0 2px 12px rgba(0,0,0,0.04)', cursor: 'pointer', transition: '0.2s'}}
+                            onClick={() => setIsHoursModalVisible(true)}
+                            onMouseOver={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+                            onMouseOut={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+                        >
+                            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start'}}>
+                                <p className="stat-label" style={{margin:0, color:'#64748b', fontSize:'13px', fontWeight:'700', textTransform:'uppercase'}}>Ore Erogate Oggi {dashboardAreaFilter !== 'all' ? '(Area Sel.)' : ''}</p>
+                                <Tooltip title="Clicca per vedere i dettagli"><InfoCircleOutlined style={{color: '#10b981', fontSize: '18px'}}/></Tooltip>
+                            </div>
                             <p className="stat-value" style={{margin:'10px 0 0 0', fontSize:'32px', fontWeight:'900', color: '#0f172a'}}>{totalDayHours}</p>
                         </div>
                     </div>
@@ -712,6 +725,30 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
                     <MappaPresenze aree={workAreas} presenzeAttive={activeEmployeesDetails} />
                 </div>
             )}
+
+            {/* MODALE TRASPARENZA ORE */}
+            <Modal 
+                title={<span><InfoCircleOutlined style={{color:'#10b981'}} /> Dettaglio Matematico Ore di Oggi</span>} 
+                open={isHoursModalVisible} 
+                onCancel={() => setIsHoursModalVisible(false)} 
+                footer={[<Button key="close" onClick={() => setIsHoursModalVisible(false)}>Chiudi</Button>]}
+            >
+                <div style={{marginBottom: 15, fontSize: 13, color: '#64748b'}}>
+                    Questo pannello ti mostra esattamente chi ha lavorato oggi nel cantiere selezionato e quante ore ha prodotto fino a questo momento (incluse le persone che hanno già staccato). Se vedi righe doppie, controlla in "Report Ore".
+                </div>
+                <Table 
+                    dataSource={todayHoursDetail} 
+                    size="small" 
+                    pagination={false} 
+                    rowKey="id"
+                    columns={[
+                        {title: 'Dipendente', dataIndex: 'employeeName', render: t => <b>{t}</b>},
+                        {title: 'Stato', dataIndex: 'status', render: s => s === 'clocked-in' ? <Tag color="green">Attivo</Tag> : <Tag color="default">Chiuso</Tag>},
+                        {title: 'Orario', render: (_, r) => <span style={{fontFamily: 'monospace', fontSize: 12}}>{r.clockIn} - {r.clockOut}</span>},
+                        {title: 'Ore Nette', dataIndex: 'hours', align: 'right', render: h => <b style={{color: '#10b981'}}>{h} h</b>}
+                    ]}
+                />
+            </Modal>
         </div>
     );
 };
@@ -750,11 +787,12 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const [adminEmployeeProfile, setAdminEmployeeProfile] = useState(null);
     const [adminActiveEntry, setAdminActiveEntry] = useState(null);
     const [totalDayHours, setTotalDayHours] = useState('0.00');
+    const [todayHoursDetail, setTodayHoursDetail] = useState([]); 
+
     const [workAreasWithHours, setWorkAreasWithHours] = useState([]);
     const [pendingRequestsCount, setPendingRequestsCount] = useState(0); 
     const [notification, setNotification] = useState(null); 
     
-    // --- NUOVO STATO: FILTRO CANTIERE NELLA DASHBOARD ---
     const [dashboardAreaFilter, setDashboardAreaFilter] = useState('all');
 
     const [entryToEdit, setEntryToEdit] = useState(null);
@@ -822,7 +860,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     useEffect(() => {
         const combined = [...activeWorkers, ...absentWorkers];
         const filteredDetails = combined.filter(detail => { 
-            // --- FIX: APPLICA IL NUOVO FILTRO CANTIERE ANCHE QUI ---
             if (dashboardAreaFilter !== 'all' && detail.workAreaId !== dashboardAreaFilter) return false;
 
             if (currentUserRole === 'admin') return true; 
@@ -852,10 +889,8 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         return [];
     }, [workAreasWithHours, currentUserRole, userData]);
 
-    // --- FIX PROPS: PASSA SOLO LE AREE VISIBILI AL PREPOSTO ---
     const activeVisibleWorkAreas = useMemo(() => visibleWorkAreas.filter(a => !a.isArchived), [visibleWorkAreas]);
 
-    // Calcolo Dipendenti da mostrare nella Dashboard in base al Filtro
     const dashboardTotalEmployees = useMemo(() => {
         let baseList = managedEmployees.filter(e => !e.isDeleted);
         if (dashboardAreaFilter !== 'all') {
@@ -864,6 +899,9 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         return baseList.length;
     }, [managedEmployees, dashboardAreaFilter]);
 
+    // ==========================================
+    // LISTA PRESENZE LIVE (CHI È IN CANTIERE ORA)
+    // ==========================================
     useEffect(() => {
         if (!allEmployees.length || !allWorkAreas.length) return;
         let isMounted = true; 
@@ -873,7 +911,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             if (!isMounted) return; 
             const rawEntriesList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-            // --- INIZIO FILTRO ANTI-DOPPIONI (DEVICE RESET) ---
+            // --- FILTRO ANTI-DOPPIONI (DEVICE RESET) ---
             const oldestEntriesMap = new Map();
             rawEntriesList.forEach(entry => {
                 if (!entry.clockInTime) return;
@@ -881,30 +919,41 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 const currentTime = entry.clockInTime.toMillis ? entry.clockInTime.toMillis() : new Date(entry.clockInTime).getTime();
                 const existingTime = existing ? (existing.clockInTime.toMillis ? existing.clockInTime.toMillis() : new Date(existing.clockInTime).getTime()) : Infinity;
                 
-                // Manteniamo solo il PIÙ VECCHIO ingresso della giornata (quello vero)
                 if (!existing || currentTime < existingTime) {
                     oldestEntriesMap.set(entry.employeeId, entry);
                 }
             });
             const activeEntriesList = Array.from(oldestEntriesMap.values());
-            // --- FINE FILTRO ---
 
             if (adminEmployeeProfile) { 
                 const adminEntry = activeEntriesList.find(entry => entry.employeeId === adminEmployeeProfile.id); 
                 const hasCompletedPause = adminEntry?.pauses && adminEntry.pauses.length > 0;
                 setAdminActiveEntry(adminEntry ? { ...adminEntry, id: adminEntry.id, hasCompletedPause: hasCompletedPause } : null); 
             }
+            
+            const todayStr = dayjs().format('DD/MM/YYYY');
+            
             const details = activeEntriesList.filter(entry => entry.clockInTime).map(entry => { 
                 const employee = allEmployees.find(emp => emp.id === entry.employeeId); 
                 const area = allWorkAreas.find(ar => ar.id === entry.workAreaId); 
                 const hasCompletedPause = entry.pauses && entry.pauses.length > 0;
                 let clockInFormatted = 'N/D'; 
+                
                 if (entry.clockInTime && typeof entry.clockInTime.toDate === 'function') { 
                     try { 
-                        const clockInDate = entry.clockInTime.toDate(); 
-                        clockInFormatted = new Intl.DateTimeFormat('it-IT', {hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome'}).format(clockInDate); 
+                        const clockInDateObj = entry.clockInTime.toDate();
+                        const timeStr = dayjs(clockInDateObj).format('HH:mm'); 
+                        const actualDateStr = dayjs(clockInDateObj).format('DD/MM/YYYY');
+                        
+                        // FIX: Se l'ingresso non è di oggi (FANTASMA), mostro la data reale
+                        if (actualDateStr !== todayStr) {
+                            clockInFormatted = `${actualDateStr} ${timeStr}`; 
+                        } else {
+                            clockInFormatted = timeStr;
+                        }
                     } catch (e) { console.error("Errore formattazione ora entrata:", e); } 
                 } 
+                
                 return { 
                     id: entry.id, employeeId: entry.employeeId, employeeName: employee ? `${employee.name} ${employee.surname}` : 'Sconosciuto', 
                     areaName: area ? area.name : 'Sconosciuta', workAreaId: entry.workAreaId, clockInTimeFormatted: clockInFormatted, 
@@ -943,62 +992,76 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         return () => { isMounted = false; unsubscribeActive(); unsubscribeAbsence(); unsubscribePending(); };
     }, [allEmployees, allWorkAreas, adminEmployeeProfile, currentUserRole, userData, showNotification]);
 
-    // ====== MOTORE CALCOLO ORE LIVE PERFETTO CON FILTRO CANTIERE ======
+    // ==========================================
+    // MOTORE CALCOLO ORE LIVE (CORAZZATO CONTRO FUSI ORARI)
+    // ==========================================
     useEffect(() => {
-        if (!allWorkAreas || allWorkAreas.length === 0) return;
+        if (!allWorkAreas || allWorkAreas.length === 0 || !allEmployees || allEmployees.length === 0) return;
 
         let isMounted = true; 
-        const startOfDay = new Date(); 
-        startOfDay.setHours(0, 0, 0, 0); 
         
-        const q = query(collection(db, "time_entries"), where("clockInTime", ">=", Timestamp.fromDate(startOfDay)));
+        // Uso un margine ampio per prendere tutto il giorno, ma poi filtro chirurgicamente su JavaScript
+        const safeStartOfDay = dayjs().subtract(1, 'day').endOf('day').subtract(2, 'hours').toDate();
+        
+        const q = query(collection(db, "time_entries"), where("clockInTime", ">=", Timestamp.fromDate(safeStartOfDay)));
         
         const unsubscribe = onSnapshot(q, (snapshot) => { 
             if (!isMounted) return; 
             let totalMinutes = 0; 
             const now = new Date(); 
+            const todayStr = dayjs().format('DD/MM/YYYY');
             
             const rawEntries = [];
+            const tempDetails = [];
+
             snapshot.docs.forEach(doc => { 
                 const entry = doc.data(); 
+                
                 if (!entry.clockInTime || entry.isAbsence) return; 
+                
+                // --- LA MAGIA: Controllo matematico della data, scarta tutto ciò che non è "oggi" ---
+                const clockInDateObj = entry.clockInTime.toDate ? entry.clockInTime.toDate() : new Date(entry.clockInTime);
+                if (!dayjs(clockInDateObj).isSame(dayjs(), 'day')) return; 
                 
                 if (currentUserRole === 'preposto') { 
                     const managedAreaIds = userData?.managedAreaIds || []; 
                     if (!entry.workAreaId || !managedAreaIds.includes(entry.workAreaId)) return; 
                 } 
 
-                // --- FIX: FILTRA LE ORE IN BASE AL MENU A TENDINA SELEZIONATO ---
                 if (dashboardAreaFilter !== 'all' && entry.workAreaId !== dashboardAreaFilter) {
                     return;
                 }
                 
-                rawEntries.push({ id: doc.id, ...entry });
+                rawEntries.push({ id: doc.id, clockInDateObj, ...entry });
             });
             
-            // --- FILTRO ANTI-DOPPIONI SULLE ORE TOTALI ---
-            const closedEntries = rawEntries.filter(e => e.clockOutTime || e.status === 'clocked-out');
-            const openEntries = rawEntries.filter(e => !e.clockOutTime && e.status === 'clocked-in');
-            
-            const uniqueOpenEntriesMap = new Map();
-            openEntries.forEach(entry => {
-                const existing = uniqueOpenEntriesMap.get(entry.employeeId);
-                const currentTime = entry.clockInTime.toMillis ? entry.clockInTime.toMillis() : new Date(entry.clockInTime).getTime();
-                const existingTime = existing ? (existing.clockInTime.toMillis ? existing.clockInTime.toMillis() : new Date(existing.clockInTime).getTime()) : Infinity;
-                
-                if (!existing || currentTime < existingTime) {
-                    uniqueOpenEntriesMap.set(entry.employeeId, entry);
+            // FILTRO ANTI-DOPPIONI SULLE ORE
+            const entriesByUser = {};
+            rawEntries.forEach(d => {
+                if (!entriesByUser[d.employeeId]) entriesByUser[d.employeeId] = [];
+                entriesByUser[d.employeeId].push(d);
+            });
+
+            const validEntries = [];
+            Object.values(entriesByUser).forEach(userEntries => {
+                const openEntries = userEntries.filter(e => e.status === 'clocked-in');
+                const closedEntries = userEntries.filter(e => e.status !== 'clocked-in');
+
+                closedEntries.forEach(e => validEntries.push(e));
+
+                if (openEntries.length > 0) {
+                    // Ordina e tieni solo la timbratura più VECCHIA aperta
+                    openEntries.sort((a, b) => a.clockInDateObj.getTime() - b.clockInDateObj.getTime());
+                    validEntries.push(openEntries[0]); 
                 }
             });
 
-            const validEntries = [...closedEntries, ...Array.from(uniqueOpenEntriesMap.values())];
-
             validEntries.forEach(entry => { 
-                const clockIn = entry.clockInTime.toDate(); 
+                const clockIn = entry.clockInDateObj;
                 let clockOut = now;
 
                 if (entry.clockOutTime) {
-                    clockOut = entry.clockOutTime.toDate();
+                    clockOut = entry.clockOutTime.toDate ? entry.clockOutTime.toDate() : new Date(entry.clockOutTime);
                 } else if (entry.status !== 'clocked-in') {
                     clockOut = clockIn; 
                 }
@@ -1035,17 +1098,31 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 
                 const durationMs = totalMs - finalPauseMs; 
                 if (durationMs > 0) {
+                    const hrs = durationMs / 3600000;
                     totalMinutes += (durationMs / 60000); 
+
+                    const empObj = allEmployees.find(e => e.id === entry.employeeId);
+                    tempDetails.push({
+                        id: entry.id,
+                        employeeName: empObj ? `${empObj.name} ${empObj.surname}` : 'Sconosciuto',
+                        status: entry.status,
+                        clockIn: dayjs(clockIn).format('HH:mm'),
+                        clockOut: entry.clockOutTime ? dayjs(clockOut).format('HH:mm') : 'In corso',
+                        hours: hrs.toFixed(2)
+                    });
                 }
             }); 
             
+            tempDetails.sort((a,b) => a.employeeName.localeCompare(b.employeeName));
+
+            setTodayHoursDetail(tempDetails);
             setTotalDayHours((totalMinutes / 60).toFixed(2)); 
         }, (error) => { 
             if (isMounted) console.error("Errore listener ore totali:", error); 
         });
         
         return () => { isMounted = false; unsubscribe(); };
-    }, [currentUserRole, userData, allWorkAreas, dashboardAreaFilter]); 
+    }, [currentUserRole, userData, allWorkAreas, dashboardAreaFilter, allEmployees]); 
 
     const handleArchiveArea = useCallback(async (area) => {
         if (!window.confirm(`Sei sicuro di voler archiviare l'area "${area.name}"?`)) return;
@@ -1280,6 +1357,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                             isActionLoading={isActionLoading} 
                             dashboardAreaFilter={dashboardAreaFilter}
                             setDashboardAreaFilter={setDashboardAreaFilter}
+                            todayHoursDetail={todayHoursDetail}
                         />
                     )}
                     {view === 'expenses' && (
