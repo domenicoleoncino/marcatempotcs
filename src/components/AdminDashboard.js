@@ -599,7 +599,8 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
                             style={{width: 'auto', minWidth: '200px', margin: 0, padding: '8px 12px', fontWeight: 'bold'}}
                         >
                             <option value="all">Tutti i Miei Cantieri</option>
-                            {workAreas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                            {/* ORDINAMENTO ALFABETICO DEI CANTIERI NELLA TENDINA */}
+                            {[...workAreas].sort((a,b) => a.name.localeCompare(b.name)).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                         </select>
                     )}
                     <button onClick={() => setIsMapMode(!isMapMode)} className="modern-btn-outline" style={{width: window.innerWidth <= 768 ? '100%' : 'auto'}}>{isMapMode ? '🔙 Torna ai Dati' : '🌍 Apri Mappa'}</button>
@@ -851,6 +852,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         return [];
     }, [workAreasWithHours, currentUserRole, userData]);
 
+    // --- FIX PROPS: PASSA SOLO LE AREE VISIBILI AL PREPOSTO ---
     const activeVisibleWorkAreas = useMemo(() => visibleWorkAreas.filter(a => !a.isArchived), [visibleWorkAreas]);
 
     // Calcolo Dipendenti da mostrare nella Dashboard in base al Filtro
@@ -984,13 +986,11 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 const currentTime = entry.clockInTime.toMillis ? entry.clockInTime.toMillis() : new Date(entry.clockInTime).getTime();
                 const existingTime = existing ? (existing.clockInTime.toMillis ? existing.clockInTime.toMillis() : new Date(existing.clockInTime).getTime()) : Infinity;
                 
-                // Mantiene il turno vivo più vecchio della giornata per quello specifico dipendente
                 if (!existing || currentTime < existingTime) {
                     uniqueOpenEntriesMap.set(entry.employeeId, entry);
                 }
             });
 
-            // Uniamo i turni chiusi regolarmente e i turni attualmente in corso (depurati dai reset telefono)
             const validEntries = [...closedEntries, ...Array.from(uniqueOpenEntriesMap.values())];
 
             validEntries.forEach(entry => { 
@@ -1272,7 +1272,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                             totalEmployees={dashboardTotalEmployees} 
                             activeEmployeesDetails={activeEmployeesDetails} 
                             totalDayHours={totalDayHours} 
-                            workAreas={activeWorkAreas} 
+                            workAreas={activeVisibleWorkAreas} 
                             adminEmployeeProfile={adminEmployeeProfile} 
                             adminActiveEntry={adminActiveEntry} 
                             handleAdminPause={handleAdminPause} 
@@ -1355,11 +1355,11 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             </footer>
 
             {/* --- I MODALI --- */}
-            {showModal && modalType === 'editTimeEntry' && entryToEdit && ( <EditTimeEntryModal entry={entryToEdit} workAreas={activeWorkAreas} onClose={() => { setShowModal(false); setEntryToEdit(null); }} onSave={handleSaveEntryEdit} isLoading={isActionLoading} /> )}
+            {showModal && modalType === 'editTimeEntry' && entryToEdit && ( <EditTimeEntryModal entry={entryToEdit} workAreas={activeVisibleWorkAreas} onClose={() => { setShowModal(false); setEntryToEdit(null); }} onSave={handleSaveEntryEdit} isLoading={isActionLoading} /> )}
             {showModal && modalType === 'addExpense' && ( <AddExpenseModal show={true} onClose={() => setShowModal(false)} user={user} userData={userData} showNotification={showNotification} /> )}
             {showModal && modalType === 'editExpense' && expenseToEdit && ( <AddExpenseModal show={true} onClose={() => { setShowModal(false); setExpenseToEdit(null); }} user={user} userData={userData} showNotification={showNotification} expenseToEdit={expenseToEdit} /> )}
             {showModal && modalType === 'processExpense' && expenseToProcess && ( <ProcessExpenseModal show={true} onClose={() => { setShowModal(false); setExpenseToProcess(null); }} expense={expenseToProcess} onConfirm={handleConfirmProcessExpense} isProcessing={isActionLoading} /> )}
-            {showModal && !['editTimeEntry', 'addExpense', 'editExpense', 'processExpense'].includes(modalType) && ( <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} setModalType={setModalType} workAreas={activeWorkAreas} onDataUpdate={fetchData} user={user} superAdminEmail={superAdminEmail} allEmployees={allEmployees} currentUserRole={currentUserRole} userData={userData} activeEmployeesDetails={activeEmployeesDetails} onAdminApplyPause={handleEmployeePauseClick} showNotification={showNotification} /> )}
+            {showModal && !['editTimeEntry', 'addExpense', 'editExpense', 'processExpense'].includes(modalType) && ( <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} setModalType={setModalType} workAreas={activeVisibleWorkAreas} onDataUpdate={fetchData} user={user} superAdminEmail={superAdminEmail} allEmployees={allEmployees} currentUserRole={currentUserRole} userData={userData} activeEmployeesDetails={activeEmployeesDetails} onAdminApplyPause={handleEmployeePauseClick} showNotification={showNotification} /> )}
         </div>
     );
 };
