@@ -558,7 +558,7 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
 // ===========================================
 // --- DASHBOARD COMPONENT ---
 // ===========================================
-const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, workAreas, adminEmployeeProfile, handleAdminPause, openModal, isActionLoading }) => {
+const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, workAreas, adminEmployeeProfile, adminActiveEntry, handleAdminPause, openModal, isActionLoading, dashboardAreaFilter, setDashboardAreaFilter }) => {
     const [isMapMode, setIsMapMode] = useState(false);
     const [myEquipment, setMyEquipment] = useState([]);
     const [myVehicles, setMyVehicles] = useState([]);
@@ -583,14 +583,27 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
         return () => { isMounted = false; };
     }, [adminEmployeeProfile]);
 
-    const adminEntry = activeEmployeesDetails.find(e => e.employeeId === adminEmployeeProfile?.id);
-    const hasCompletedPause = adminEntry?.pauses && adminEntry.pauses.length > 0;
+    const isOnBreak = adminActiveEntry?.status === 'In Pausa' || adminActiveEntry?.isOnBreak;
+    const hasCompletedPause = adminActiveEntry?.hasCompletedPause || false;
 
     return (
         <div className="modern-card" style={{borderTop: '4px solid #3b82f6'}}>
-            <div className="modern-title" style={{border: 'none'}}>
+            <div className="modern-title" style={{border: 'none', display: 'flex', flexWrap: 'wrap', gap: '15px'}}>
                 <div>{isMapMode ? '🌍 Mappa Cantieri' : '⚡ Monitoraggio Operativo'}</div>
-                <button onClick={() => setIsMapMode(!isMapMode)} className="modern-btn-outline" style={{width: window.innerWidth <= 768 ? '100%' : 'auto'}}>{isMapMode ? '🔙 Torna ai Dati' : '🌍 Apri Mappa'}</button>
+                <div style={{display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap'}}>
+                    {!isMapMode && (
+                        <select 
+                            className="modern-input" 
+                            value={dashboardAreaFilter} 
+                            onChange={e => setDashboardAreaFilter(e.target.value)}
+                            style={{width: 'auto', minWidth: '200px', margin: 0, padding: '8px 12px', fontWeight: 'bold'}}
+                        >
+                            <option value="all">Tutti i Miei Cantieri</option>
+                            {workAreas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                        </select>
+                    )}
+                    <button onClick={() => setIsMapMode(!isMapMode)} className="modern-btn-outline" style={{width: window.innerWidth <= 768 ? '100%' : 'auto'}}>{isMapMode ? '🔙 Torna ai Dati' : '🌍 Apri Mappa'}</button>
+                </div>
             </div>
             
             {!isMapMode && (
@@ -598,7 +611,7 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
                     {/* BOTTONI CENTRALI AGGIORNATI E POTENZIATI */}
                     {adminEmployeeProfile && (
                         <div className="quick-actions" style={{background:'#f8fafc', padding:'20px', borderRadius:'12px', display:'flex', flexWrap: 'wrap', justifyContent:'center', alignItems: 'center', gap:'15px', marginBottom:'30px', border:'1px solid #e2e8f0'}}>
-                            {!adminEntry ? (
+                            {!adminActiveEntry ? (
                                 <>
                                     <div style={{fontSize: '16px', fontWeight: 'bold', color: '#64748b'}}>⚪ Fuori Turno</div>
                                     <button onClick={() => openModal('manualClockIn', adminEmployeeProfile)} disabled={isActionLoading} className="modern-btn" style={{background: '#16a34a', fontSize:'16px', padding: '12px 24px'}}>▶️ Entra in Turno</button>
@@ -606,30 +619,30 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
                             ) : (
                                 <>
                                     <div style={{fontSize: '16px', fontWeight: 'bold', color: '#16a34a', display: 'flex', alignItems: 'center', gap: '8px'}}>
-                                        🟢 In Turno
+                                        🟢 In Turno {isOnBreak && <span style={{color: '#d97706', fontSize: '14px'}}>(In Pausa)</span>}
                                     </div>
 
                                     <button 
                                         onClick={handleAdminPause} 
-                                        disabled={isActionLoading || hasCompletedPause} 
+                                        disabled={isActionLoading || (!isOnBreak && hasCompletedPause)} 
                                         className="modern-btn-outline" 
                                         style={{
                                             fontSize:'15px', 
                                             padding: '10px 20px',
-                                            background: hasCompletedPause ? '#f1f5f9' : '#fff',
-                                            color: hasCompletedPause ? '#94a3b8' : '#475569',
-                                            borderColor: '#cbd5e1',
-                                            cursor: hasCompletedPause ? 'not-allowed' : 'pointer'
+                                            background: (!isOnBreak && hasCompletedPause) ? '#f1f5f9' : (isOnBreak ? '#fef08a' : '#fff'),
+                                            color: (!isOnBreak && hasCompletedPause) ? '#94a3b8' : (isOnBreak ? '#d97706' : '#475569'),
+                                            borderColor: (!isOnBreak && hasCompletedPause) ? '#cbd5e1' : (isOnBreak ? '#fde047' : '#cbd5e1'),
+                                            cursor: (!isOnBreak && hasCompletedPause) ? 'not-allowed' : 'pointer'
                                         }}
                                     >
-                                        {hasCompletedPause ? '✔️ Pausa Eseguita' : '☕ Applica Pausa'}
+                                        {isOnBreak ? '▶️ Termina Pausa' : (hasCompletedPause ? '✔️ Pausa Eseguita' : '☕ Pausa')}
                                     </button>
 
                                     <button 
                                         onClick={() => openModal('manualClockOut', adminEmployeeProfile)} 
-                                        disabled={isActionLoading} 
+                                        disabled={isOnBreak || isActionLoading} 
                                         className="modern-btn-danger" 
-                                        style={{fontSize:'15px', padding: '10px 20px'}}
+                                        style={{fontSize:'15px', padding: '10px 20px', opacity: isOnBreak ? 0.5 : 1, cursor: isOnBreak ? 'not-allowed' : 'pointer'}}
                                     >
                                         ⏹️ Esci Turno
                                     </button>
@@ -644,7 +657,7 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
                             <p className="stat-value" style={{margin:'10px 0 0 0', fontSize:'32px', fontWeight:'900', color: '#0f172a'}}>{activeEmployeesDetails.length} <span style={{fontSize:'16px', color:'#94a3b8', fontWeight:'500'}}>/ {totalEmployees}</span></p>
                         </div>
                         <div className="stat-card" style={{background:'#fff', padding:'24px', borderRadius:'12px', borderLeft:'5px solid #10b981', boxShadow:'0 2px 12px rgba(0,0,0,0.04)'}}>
-                            <p className="stat-label" style={{margin:0, color:'#64748b', fontSize:'13px', fontWeight:'700', textTransform:'uppercase'}}>Ore Erogate Oggi</p>
+                            <p className="stat-label" style={{margin:0, color:'#64748b', fontSize:'13px', fontWeight:'700', textTransform:'uppercase'}}>Ore Erogate Oggi {dashboardAreaFilter !== 'all' ? '(Area Sel.)' : ''}</p>
                             <p className="stat-value" style={{margin:'10px 0 0 0', fontSize:'32px', fontWeight:'900', color: '#0f172a'}}>{totalDayHours}</p>
                         </div>
                     </div>
@@ -740,6 +753,9 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const [pendingRequestsCount, setPendingRequestsCount] = useState(0); 
     const [notification, setNotification] = useState(null); 
     
+    // --- NUOVO STATO: FILTRO CANTIERE NELLA DASHBOARD ---
+    const [dashboardAreaFilter, setDashboardAreaFilter] = useState('all');
+
     const [entryToEdit, setEntryToEdit] = useState(null);
     const [showAddEmployeeModal, setShowAddEmployeeModal] = useState(false);
     const [showAddFormModal, setShowAddFormModal] = useState(false);
@@ -805,6 +821,9 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     useEffect(() => {
         const combined = [...activeWorkers, ...absentWorkers];
         const filteredDetails = combined.filter(detail => { 
+            // --- FIX: APPLICA IL NUOVO FILTRO CANTIERE ANCHE QUI ---
+            if (dashboardAreaFilter !== 'all' && detail.workAreaId !== dashboardAreaFilter) return false;
+
             if (currentUserRole === 'admin') return true; 
             if (currentUserRole === 'preposto') { 
                 const managedAreaIds = userData?.managedAreaIds || []; 
@@ -814,7 +833,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             return false; 
         }).sort((a, b) => a.employeeName.localeCompare(b.employeeName)); 
         setActiveEmployeesDetails(filteredDetails);
-    }, [activeWorkers, absentWorkers, currentUserRole, userData]);
+    }, [activeWorkers, absentWorkers, currentUserRole, userData, dashboardAreaFilter]);
 
     const sortedAndFilteredEmployees = useMemo(() => {
         let baseList = managedEmployees;
@@ -834,6 +853,15 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
     const activeVisibleWorkAreas = useMemo(() => visibleWorkAreas.filter(a => !a.isArchived), [visibleWorkAreas]);
 
+    // Calcolo Dipendenti da mostrare nella Dashboard in base al Filtro
+    const dashboardTotalEmployees = useMemo(() => {
+        let baseList = managedEmployees.filter(e => !e.isDeleted);
+        if (dashboardAreaFilter !== 'all') {
+            baseList = baseList.filter(emp => emp.workAreaIds && emp.workAreaIds.includes(dashboardAreaFilter));
+        }
+        return baseList.length;
+    }, [managedEmployees, dashboardAreaFilter]);
+
     useEffect(() => {
         if (!allEmployees.length || !allWorkAreas.length) return;
         let isMounted = true; 
@@ -844,18 +872,19 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             const rawEntriesList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
             // --- INIZIO FILTRO ANTI-DOPPIONI (DEVICE RESET) ---
-            const latestEntriesMap = new Map();
+            const oldestEntriesMap = new Map();
             rawEntriesList.forEach(entry => {
                 if (!entry.clockInTime) return;
-                const existing = latestEntriesMap.get(entry.employeeId);
+                const existing = oldestEntriesMap.get(entry.employeeId);
                 const currentTime = entry.clockInTime.toMillis ? entry.clockInTime.toMillis() : new Date(entry.clockInTime).getTime();
-                const existingTime = existing ? (existing.clockInTime.toMillis ? existing.clockInTime.toMillis() : new Date(existing.clockInTime).getTime()) : 0;
+                const existingTime = existing ? (existing.clockInTime.toMillis ? existing.clockInTime.toMillis() : new Date(existing.clockInTime).getTime()) : Infinity;
                 
-                if (!existing || currentTime > existingTime) {
-                    latestEntriesMap.set(entry.employeeId, entry);
+                // Manteniamo solo il PIÙ VECCHIO ingresso della giornata (quello vero)
+                if (!existing || currentTime < existingTime) {
+                    oldestEntriesMap.set(entry.employeeId, entry);
                 }
             });
-            const activeEntriesList = Array.from(latestEntriesMap.values());
+            const activeEntriesList = Array.from(oldestEntriesMap.values());
             // --- FINE FILTRO ---
 
             if (adminEmployeeProfile) { 
@@ -912,7 +941,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         return () => { isMounted = false; unsubscribeActive(); unsubscribeAbsence(); unsubscribePending(); };
     }, [allEmployees, allWorkAreas, adminEmployeeProfile, currentUserRole, userData, showNotification]);
 
-    // ====== MOTORE CALCOLO ORE LIVE PERFETTO ======
+    // ====== MOTORE CALCOLO ORE LIVE PERFETTO CON FILTRO CANTIERE ======
     useEffect(() => {
         if (!allWorkAreas || allWorkAreas.length === 0) return;
 
@@ -927,6 +956,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             let totalMinutes = 0; 
             const now = new Date(); 
             
+            const rawEntries = [];
             snapshot.docs.forEach(doc => { 
                 const entry = doc.data(); 
                 if (!entry.clockInTime || entry.isAbsence) return; 
@@ -935,7 +965,35 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                     const managedAreaIds = userData?.managedAreaIds || []; 
                     if (!entry.workAreaId || !managedAreaIds.includes(entry.workAreaId)) return; 
                 } 
+
+                // --- FIX: FILTRA LE ORE IN BASE AL MENU A TENDINA SELEZIONATO ---
+                if (dashboardAreaFilter !== 'all' && entry.workAreaId !== dashboardAreaFilter) {
+                    return;
+                }
                 
+                rawEntries.push({ id: doc.id, ...entry });
+            });
+            
+            // --- FILTRO ANTI-DOPPIONI SULLE ORE TOTALI ---
+            const closedEntries = rawEntries.filter(e => e.clockOutTime || e.status === 'clocked-out');
+            const openEntries = rawEntries.filter(e => !e.clockOutTime && e.status === 'clocked-in');
+            
+            const uniqueOpenEntriesMap = new Map();
+            openEntries.forEach(entry => {
+                const existing = uniqueOpenEntriesMap.get(entry.employeeId);
+                const currentTime = entry.clockInTime.toMillis ? entry.clockInTime.toMillis() : new Date(entry.clockInTime).getTime();
+                const existingTime = existing ? (existing.clockInTime.toMillis ? existing.clockInTime.toMillis() : new Date(existing.clockInTime).getTime()) : Infinity;
+                
+                // Mantiene il turno vivo più vecchio della giornata per quello specifico dipendente
+                if (!existing || currentTime < existingTime) {
+                    uniqueOpenEntriesMap.set(entry.employeeId, entry);
+                }
+            });
+
+            // Uniamo i turni chiusi regolarmente e i turni attualmente in corso (depurati dai reset telefono)
+            const validEntries = [...closedEntries, ...Array.from(uniqueOpenEntriesMap.values())];
+
+            validEntries.forEach(entry => { 
                 const clockIn = entry.clockInTime.toDate(); 
                 let clockOut = now;
 
@@ -964,14 +1022,13 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 const area = allWorkAreas.find(a => a.id === entry.workAreaId);
                 const areaPauseMs = (area?.pauseDuration || 0) * 60000;
                 
-                // --- FIX: SE È STATA PREMUTA LA PAUSA, USA QUELLA, ALTRIMENTI USA IL DEFAULT DEL CANTIERE ---
                 let finalPauseMs = 0;
                 if (entry.skippedBreak && entry.skipBreakStatus === 'approved') {
                     finalPauseMs = 0;
                 } else if (recordedPausesMs > 0) {
-                    finalPauseMs = recordedPausesMs; // Usa i minuti effettivi registrati nel database storicamente!
+                    finalPauseMs = recordedPausesMs;
                 } else if (entry.clockOutTime || entry.status === 'clocked-out') {
-                    finalPauseMs = areaPauseMs; // Scala default solo se chiude il turno senza aver registrato pause
+                    finalPauseMs = areaPauseMs;
                 } else {
                     finalPauseMs = 0;
                 }
@@ -988,7 +1045,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         });
         
         return () => { isMounted = false; unsubscribe(); };
-    }, [currentUserRole, userData, allWorkAreas]); 
+    }, [currentUserRole, userData, allWorkAreas, dashboardAreaFilter]); 
 
     const handleArchiveArea = useCallback(async (area) => {
         if (!window.confirm(`Sei sicuro di voler archiviare l'area "${area.name}"?`)) return;
@@ -1098,14 +1155,13 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                     
                     const areaPauseMs = (area?.pauseDuration || 0) * 60000; 
                     
-                    // --- FIX REPORT: IDENTICO AL LIVE ---
                     let finalPauseMs = 0;
                     if (entry.skippedBreak && entry.skipBreakStatus === 'approved') {
                         finalPauseMs = 0;
                     } else if (recordedPausesMs > 0) {
-                        finalPauseMs = recordedPausesMs; // Usa i minuti registrati
+                        finalPauseMs = recordedPausesMs; 
                     } else {
-                        finalPauseMs = areaPauseMs; // Scala il default se non ci sono pause registrate
+                        finalPauseMs = areaPauseMs; 
                     }
                     
                     pauseHours = finalPauseMs / 3600000; 
@@ -1183,17 +1239,12 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             {notification && <NotificationPopup message={notification.message} type={notification.type} onClose={() => setNotification(null)} />}
             
             <header className="modern-header">
-                 {/* COLONNA SINISTRA RIPULITA DAI DOPPIONI */}
-                 <div className="header-left">
-                     {/* Lo spazio resta vuoto per mantenere centrato il logo */}
-                 </div>
+                 <div className="header-left"></div>
 
-                 {/* COLONNA CENTRALE */}
                  <div className="header-center">
                      <CompanyLogo />
                  </div>
 
-                 {/* COLONNA DESTRA */}
                  <div className="header-right">
                      <div style={{textAlign: 'right'}}>
                          <div style={{fontSize: '14px', fontWeight: '800', color: '#0f172a'}}>{userData?.name && userData?.surname ? `${userData.name} ${userData.surname}` : user?.email}</div>
@@ -1217,7 +1268,19 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             <div style={{maxWidth: '1200px', margin: '0 auto', padding: '0 10px'}}>
                 <main>
                     {view === 'dashboard' && (
-                        <DashboardView totalEmployees={managedEmployees.length} activeEmployeesDetails={activeEmployeesDetails} totalDayHours={totalDayHours} workAreas={activeWorkAreas} adminEmployeeProfile={adminEmployeeProfile} handleAdminPause={handleAdminPause} openModal={openModal} isActionLoading={isActionLoading} />
+                        <DashboardView 
+                            totalEmployees={dashboardTotalEmployees} 
+                            activeEmployeesDetails={activeEmployeesDetails} 
+                            totalDayHours={totalDayHours} 
+                            workAreas={activeWorkAreas} 
+                            adminEmployeeProfile={adminEmployeeProfile} 
+                            adminActiveEntry={adminActiveEntry} 
+                            handleAdminPause={handleAdminPause} 
+                            openModal={openModal} 
+                            isActionLoading={isActionLoading} 
+                            dashboardAreaFilter={dashboardAreaFilter}
+                            setDashboardAreaFilter={setDashboardAreaFilter}
+                        />
                     )}
                     {view === 'expenses' && (
                         <div className="modern-card">
