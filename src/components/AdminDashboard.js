@@ -198,13 +198,28 @@ const AddExpenseModal = ({ show, onClose, user, userData, showNotification, expe
     );
 };
 
-const ProcessExpenseModal = ({ show, onClose, expense, onConfirm, isProcessing }) => {
+// --- MODIFICATO: AGGIUNTO SUPPORTO SALDO MULTIPLO ---
+const ProcessExpenseModal = ({ show, onClose, expense, bulkExpenses, isBulk, onConfirm, isProcessing }) => {
     const [adminPaymentMethod, setAdminPaymentMethod] = useState('Rimborso in Busta Paga');
     const [adminNote, setAdminNote] = useState('');
-    if (!show || !expense) return null;
-    const handleSubmit = (e) => { e.preventDefault(); onConfirm(expense.id, adminPaymentMethod, adminNote); };
+    
+    if (!show || (!expense && !isBulk)) return null;
+
+    const totalAmount = isBulk 
+        ? bulkExpenses.reduce((sum, e) => sum + parseFloat(e.amount || 0), 0) 
+        : parseFloat(expense?.amount || 0);
+
+    const employeeName = isBulk 
+        ? [...new Set(bulkExpenses.map(e => e.userName))].join(', ') 
+        : expense?.userName;
+
+    const handleSubmit = (e) => { e.preventDefault(); onConfirm(adminPaymentMethod, adminNote); };
     const inputStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', marginBottom: '15px', boxSizing: 'border-box' };
-    return ReactDOM.createPortal( <><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',backgroundColor:'rgba(0,0,0,0.6)',zIndex:99998}} onClick={onClose} /><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',zIndex:99999,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}><div style={{backgroundColor:'#fff',width:'100%',maxWidth:'500px',borderRadius:'12px',overflow:'hidden',pointerEvents:'auto', margin: '0 15px'}} onClick={(e) => e.stopPropagation()}><div style={{padding:'16px 24px',borderBottom:'1px solid #e5e7eb',display:'flex',justifyContent:'space-between',alignItems:'center',background:'#f0fdf4'}}><h3 style={{margin:0,fontSize:'18px',fontWeight:'bold',color:'#166534'}}>✅ Chiudi Spesa</h3><button onClick={onClose} style={{border:'none',background:'none',fontSize:'24px',cursor:'pointer',color:'#166534'}}>&times;</button></div><div style={{padding:'24px'}}><div style={{marginBottom:'20px', background:'#f8fafc', padding:'15px', borderRadius:'8px', border:'1px solid #e2e8f0'}}><p><strong>Dipendente:</strong> {expense.userName}</p><p><strong>Importo:</strong> € {parseFloat(expense.amount).toFixed(2)}</p></div><form id="process-expense-form" onSubmit={handleSubmit}><select value={adminPaymentMethod} onChange={e => setAdminPaymentMethod(e.target.value)} style={inputStyle}><option>Rimborso in Busta Paga</option><option>Bonifico Effettuato</option><option>Rimborso Cassa</option></select><textarea value={adminNote} onChange={e => setAdminNote(e.target.value)} style={inputStyle} placeholder="Note amministrative..." /></form></div><div style={{padding:'16px 24px',backgroundColor:'#f8fafc',borderTop:'1px solid #e2e8f0',display:'flex',justifyContent:'flex-end',gap:'10px'}}><button onClick={onClose} className="modern-btn-outline">Annulla</button><button type="submit" form="process-expense-form" disabled={isProcessing} className="modern-btn" style={{background:'#16a34a'}}>{isProcessing ? '...' : 'Conferma'}</button></div></div></div></>, document.body );
+    
+    return ReactDOM.createPortal( <><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',backgroundColor:'rgba(0,0,0,0.6)',zIndex:99998}} onClick={onClose} /><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',zIndex:99999,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}><div style={{backgroundColor:'#fff',width:'100%',maxWidth:'500px',borderRadius:'12px',overflow:'hidden',pointerEvents:'auto', margin: '0 15px'}} onClick={(e) => e.stopPropagation()}><div style={{padding:'16px 24px',borderBottom:'1px solid #e5e7eb',display:'flex',justifyContent:'space-between',alignItems:'center',background:'#f0fdf4'}}><h3 style={{margin:0,fontSize:'18px',fontWeight:'bold',color:'#166534'}}>{isBulk ? '✅ Salda Tutte le Spese Visibili' : '✅ Chiudi Spesa'}</h3><button onClick={onClose} style={{border:'none',background:'none',fontSize:'24px',cursor:'pointer',color:'#166534'}}>&times;</button></div><div style={{padding:'24px'}}><div style={{marginBottom:'20px', background:'#f8fafc', padding:'15px', borderRadius:'8px', border:'1px solid #e2e8f0'}}>
+        <p>Stai per saldare <b>{isBulk ? 'TUTTE le spese in elenco' : 'la singola spesa'}</b>.</p>
+        <p><strong>Dipendente:</strong> {employeeName}</p>
+        <p><strong>Importo Totale:</strong> <span style={{color: '#cf1322', fontWeight: 'bold'}}>€ {totalAmount.toFixed(2)}</span></p></div><form id="process-expense-form" onSubmit={handleSubmit}><select value={adminPaymentMethod} onChange={e => setAdminPaymentMethod(e.target.value)} style={inputStyle}><option>Rimborso in Busta Paga</option><option>Bonifico Effettuato</option><option>Rimborso Cassa</option><option>Saldato da Dashboard</option></select><textarea value={adminNote} onChange={e => setAdminNote(e.target.value)} style={inputStyle} placeholder="Es: Bonifico nr. 1234..." required /></form></div><div style={{padding:'16px 24px',backgroundColor:'#f8fafc',borderTop:'1px solid #e2e8f0',display:'flex',justifyContent:'flex-end',gap:'10px'}}><button onClick={onClose} className="modern-btn-outline">Annulla</button><button type="submit" form="process-expense-form" disabled={isProcessing || !adminNote.trim()} className="modern-btn" style={{background:'#16a34a'}}>{isProcessing ? 'Attendere...' : 'Conferma Saldo'}</button></div></div></div></>, document.body );
 };
 
 const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) => {
@@ -397,8 +412,10 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
     );
 };
 
-const ExpensesView = ({ expenses, onProcessExpense, onEditExpense, currentUserRole, user, searchTerm, showArchived }) => {
+// --- MODIFICATO: AGGIUNTO IL PULSANTE SALDA TUTTI ALLA VIEW DELLE SPESE ---
+const ExpensesView = ({ expenses, onProcessExpense, onBulkProcessExpense, onEditExpense, currentUserRole, user, searchTerm, showArchived }) => {
     const displayedExpenses = expenses.filter(exp => {
+        // PERMETTO SINCRONIZZAZIONE CON GESTIONALE: controllo sia 'closed' che 'paid'
         const isClosed = exp.status === 'closed' || exp.status === 'paid';
         const matchesArchive = showArchived ? isClosed : !isClosed;
         const isOwner = exp.userId === user.uid;
@@ -407,30 +424,49 @@ const ExpensesView = ({ expenses, onProcessExpense, onEditExpense, currentUserRo
         return matchesArchive;
     });
 
+    const totalAmount = displayedExpenses.reduce((sum, exp) => sum + parseFloat(exp.amount || 0), 0);
+
     return (
-        <table className="modern-table">
-            <thead><tr><th>Data</th><th>Dipendente</th><th>Dettaglio</th><th>Allegato</th><th>Importo</th><th style={{textAlign:'right'}}>Azione</th></tr></thead>
-            <tbody>
-                {displayedExpenses.map(exp => (
-                    <tr key={exp.id}>
-                        <td data-label="Data" style={{color: '#64748b', fontWeight:'600'}}>{exp.date && exp.date.toDate ? exp.date.toDate().toLocaleDateString('it-IT') : new Date(exp.date).toLocaleDateString('it-IT')}</td>
-                        <td data-label="Dipendente"><div style={{fontWeight: '700', color: '#0f172a'}}>{exp.userName}</div></td>
-                        <td data-label="Dettaglio"><div style={{fontWeight: '600'}}>{exp.description}</div><div style={{fontSize:'12px', color:'#94a3b8'}}>{exp.note}</div></td>
-                        <td data-label="Allegato">{exp.receiptUrl ? <a href={exp.receiptUrl} target="_blank" rel="noreferrer" style={{color:'#2563eb', fontWeight:'bold', textDecoration:'none'}}>📎 Apri</a> : <span style={{color:'#cbd5e1'}}>-</span>}</td>
-                        <td data-label="Importo"><span className="modern-badge green" style={{fontSize:'14px'}}>€ {parseFloat(exp.amount).toFixed(2)}</span></td>
-                        <td data-label="Azioni" className="actions-cell">
-                            {!showArchived ? (
-                                currentUserRole === 'admin' ? <button onClick={() => onProcessExpense(exp)} className="modern-btn" style={{background:'#16a34a'}}>✅ Gestisci</button> 
-                                : <button onClick={() => onEditExpense(exp)} className="modern-btn" style={{background:'#f59e0b'}}>✏️ Modifica</button>
-                            ) : (
-                                <span className="modern-badge outline" style={{border:'1px solid #cbd5e1', color:'#64748b'}}>Chiuso: {exp.adminPaymentMethod}</span>
-                            )}
-                        </td>
-                    </tr>
-                ))}
-                {displayedExpenses.length === 0 && <tr><td colSpan={6} style={{textAlign:'center', padding:'30px', color:'#94a3b8'}}>Nessuna spesa trovata.</td></tr>}
-            </tbody>
-        </table>
+        <div>
+            {/* PULSANTE SALDA TUTTI I VISIBILI */}
+            {!showArchived && currentUserRole === 'admin' && displayedExpenses.length > 0 && (
+                <div style={{marginBottom: 15, display: 'flex', justifyContent: 'flex-end'}}>
+                     <button 
+                         onClick={() => onBulkProcessExpense(displayedExpenses)} 
+                         className="modern-btn" 
+                         style={{background: '#52c41a', fontSize: '15px'}}
+                     >
+                         ✅ Salda Tutte le Spese Visibili (€ {totalAmount.toFixed(2)})
+                     </button>
+                </div>
+            )}
+            
+            <div className="modern-table-wrapper">
+                <table className="modern-table">
+                    <thead><tr><th>Data</th><th>Dipendente</th><th>Dettaglio</th><th>Allegato</th><th>Importo</th><th style={{textAlign:'right'}}>Azione</th></tr></thead>
+                    <tbody>
+                        {displayedExpenses.map(exp => (
+                            <tr key={exp.id}>
+                                <td data-label="Data" style={{color: '#64748b', fontWeight:'600'}}>{exp.date && exp.date.toDate ? exp.date.toDate().toLocaleDateString('it-IT') : new Date(exp.date).toLocaleDateString('it-IT')}</td>
+                                <td data-label="Dipendente"><div style={{fontWeight: '700', color: '#0f172a'}}>{exp.userName}</div></td>
+                                <td data-label="Dettaglio"><div style={{fontWeight: '600'}}>{exp.description}</div><div style={{fontSize:'12px', color:'#94a3b8'}}>{exp.note}</div></td>
+                                <td data-label="Allegato">{exp.receiptUrl ? <a href={exp.receiptUrl} target="_blank" rel="noreferrer" style={{color:'#2563eb', fontWeight:'bold', textDecoration:'none'}}>📎 Apri</a> : <span style={{color:'#cbd5e1'}}>-</span>}</td>
+                                <td data-label="Importo"><span className="modern-badge green" style={{fontSize:'14px'}}>€ {parseFloat(exp.amount).toFixed(2)}</span></td>
+                                <td data-label="Azioni" className="actions-cell">
+                                    {!showArchived ? (
+                                        currentUserRole === 'admin' ? <button onClick={() => onProcessExpense(exp)} className="modern-btn" style={{background:'#16a34a'}}>✅ Gestisci</button> 
+                                        : <button onClick={() => onEditExpense(exp)} className="modern-btn" style={{background:'#f59e0b'}}>✏️ Modifica</button>
+                                    ) : (
+                                        <span className="modern-badge outline" style={{border:'1px solid #cbd5e1', color:'#64748b'}}>Chiuso: {exp.adminPaymentMethod}</span>
+                                    )}
+                                </td>
+                            </tr>
+                        ))}
+                        {displayedExpenses.length === 0 && <tr><td colSpan={6} style={{textAlign:'center', padding:'30px', color:'#94a3b8'}}>Nessuna spesa trovata.</td></tr>}
+                    </tbody>
+                </table>
+            </div>
+        </div>
     );
 };
 
@@ -734,7 +770,7 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
                 footer={[<Button key="close" onClick={() => setIsHoursModalVisible(false)}>Chiudi</Button>]}
             >
                 <div style={{marginBottom: 15, fontSize: 13, color: '#64748b'}}>
-                    Questo pannello ti mostra esattamente chi ha lavorato oggi nel cantiere selezionato e quante ore ha prodotto fino a questo momento (incluse le persone che hanno già staccato). Se vedi righe doppie, controlla in "Report Ore".
+                    Questo pannello ti mostra esattamente chi ha lavorato oggi nel cantiere selezionato e quante ore ha prodotto fino a questo momento.
                 </div>
                 <Table 
                     dataSource={todayHoursDetail} 
@@ -799,8 +835,12 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const [showAddEmployeeModal, setShowAddEmployeeModal] = useState(false);
     const [showAddFormModal, setShowAddFormModal] = useState(false);
     const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
+    
+    // --- STATI PER IL SALDO DELLE SPESE ---
     const [expenseToProcess, setExpenseToProcess] = useState(null); 
     const [expenseToEdit, setExpenseToEdit] = useState(null); 
+    const [isSettlingAll, setIsSettlingAll] = useState(false);
+    const [bulkExpensesToProcess, setBulkExpensesToProcess] = useState([]);
 
     const currentUserRole = userData?.role;
     const superAdminEmail = SUPER_ADMIN_EMAIL; 
@@ -899,9 +939,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         return baseList.length;
     }, [managedEmployees, dashboardAreaFilter]);
 
-    // ==========================================
-    // LISTA PRESENZE LIVE (CHI È IN CANTIERE ORA)
-    // ==========================================
     useEffect(() => {
         if (!allEmployees.length || !allWorkAreas.length) return;
         let isMounted = true; 
@@ -911,7 +948,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             if (!isMounted) return; 
             const rawEntriesList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-            // --- FILTRO ANTI-DOPPIONI (DEVICE RESET) ---
             const oldestEntriesMap = new Map();
             rawEntriesList.forEach(entry => {
                 if (!entry.clockInTime) return;
@@ -945,7 +981,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                         const timeStr = dayjs(clockInDateObj).format('HH:mm'); 
                         const actualDateStr = dayjs(clockInDateObj).format('DD/MM/YYYY');
                         
-                        // FIX: Se l'ingresso non è di oggi (FANTASMA), mostro la data reale
                         if (actualDateStr !== todayStr) {
                             clockInFormatted = `${actualDateStr} ${timeStr}`; 
                         } else {
@@ -992,15 +1027,11 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         return () => { isMounted = false; unsubscribeActive(); unsubscribeAbsence(); unsubscribePending(); };
     }, [allEmployees, allWorkAreas, adminEmployeeProfile, currentUserRole, userData, showNotification]);
 
-    // ==========================================
-    // MOTORE CALCOLO ORE LIVE (CORAZZATO CONTRO FUSI ORARI)
-    // ==========================================
     useEffect(() => {
         if (!allWorkAreas || allWorkAreas.length === 0 || !allEmployees || allEmployees.length === 0) return;
 
         let isMounted = true; 
         
-        // Uso un margine ampio per prendere tutto il giorno, ma poi filtro chirurgicamente su JavaScript
         const safeStartOfDay = dayjs().subtract(1, 'day').endOf('day').subtract(2, 'hours').toDate();
         
         const q = query(collection(db, "time_entries"), where("clockInTime", ">=", Timestamp.fromDate(safeStartOfDay)));
@@ -1019,7 +1050,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 
                 if (!entry.clockInTime || entry.isAbsence) return; 
                 
-                // --- LA MAGIA: Controllo matematico della data, scarta tutto ciò che non è "oggi" ---
                 const clockInDateObj = entry.clockInTime.toDate ? entry.clockInTime.toDate() : new Date(entry.clockInTime);
                 if (!dayjs(clockInDateObj).isSame(dayjs(), 'day')) return; 
                 
@@ -1035,7 +1065,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 rawEntries.push({ id: doc.id, clockInDateObj, ...entry });
             });
             
-            // FILTRO ANTI-DOPPIONI SULLE ORE
             const entriesByUser = {};
             rawEntries.forEach(d => {
                 if (!entriesByUser[d.employeeId]) entriesByUser[d.employeeId] = [];
@@ -1050,7 +1079,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 closedEntries.forEach(e => validEntries.push(e));
 
                 if (openEntries.length > 0) {
-                    // Ordina e tieni solo la timbratura più VECCHIA aperta
                     openEntries.sort((a, b) => a.clockInDateObj.getTime() - b.clockInDateObj.getTime());
                     validEntries.push(openEntries[0]); 
                 }
@@ -1144,7 +1172,37 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         } catch (error) { console.error("Errore ripristino:", error); showNotification("Errore durante il ripristino.", 'error'); } finally { setIsActionLoading(false); }
     }, [fetchData, showNotification]);
     
-    const handleConfirmProcessExpense = async (expenseId, paymentMethod, note) => { setIsActionLoading(true); try { await updateDoc(doc(db, "expenses", expenseId), { status: 'closed', adminPaymentMethod: paymentMethod, adminNote: note, closedAt: Timestamp.now(), closedBy: user.email }); showNotification("Spesa archiviata!", 'success'); setExpenseToProcess(null); } catch (error) { console.error("Errore archiviazione spesa:", error); showNotification("Errore durante l'archiviazione.", 'error'); } finally { setIsActionLoading(false); } };
+    // --- FUNZIONE MODIFICATA: ORA SALDA ANCHE SPESE MULTIPLE IN SEQUENZA E COMUNICA CON IL GESTIONALE ---
+    const handleConfirmProcessExpense = async (paymentMethod, note) => { 
+        setIsActionLoading(true); 
+        try { 
+            const itemsToProcess = isSettlingAll ? bulkExpensesToProcess : [expenseToProcess];
+
+            for (const item of itemsToProcess) {
+                await updateDoc(doc(db, "expenses", item.id), { 
+                    status: 'paid', // <-- Cambiato a "paid" per perfetto allineamento col Gestionale
+                    adminPaymentMethod: paymentMethod, 
+                    adminNote: note, 
+                    closedAt: Timestamp.now(), 
+                    closedBy: user.email 
+                }); 
+            }
+
+            showNotification(isSettlingAll ? "Tutte le spese visibili sono state archiviate!" : "Spesa archiviata!", 'success'); 
+            
+            // Pulisco gli stati
+            setExpenseToProcess(null); 
+            setBulkExpensesToProcess([]);
+            setIsSettlingAll(false);
+            setShowModal(false);
+
+        } catch (error) { 
+            console.error("Errore archiviazione spesa:", error); 
+            showNotification("Errore durante l'archiviazione.", 'error'); 
+        } finally { 
+            setIsActionLoading(false); 
+        } 
+    };
     
     const handleResetEmployeeDevice = useCallback(async (employee) => { if (!employee || !employee.id) return; if (!window.confirm(`Reset dispositivo per ${employee.name}?`)) return; setIsActionLoading(true); try { await updateDoc(doc(db, "employees", employee.id), { deviceIds: [] }); showNotification(`Reset completato.`, 'success'); fetchData(); } catch (error) { showNotification(`Errore reset: ${error.message}`, 'error'); } finally { setIsActionLoading(false); } }, [fetchData, showNotification]);
 
@@ -1370,7 +1428,16 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                                 </div>
                             </div>
                             <input type="text" placeholder="🔍 Cerca Dipendente..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="modern-input" style={{marginBottom: '20px'}}/>
-                            <ExpensesView expenses={expenses} onProcessExpense={(exp) => { setExpenseToProcess(exp); openModal('processExpense'); }} onEditExpense={(exp) => { setExpenseToEdit(exp); openModal('editExpense'); }} currentUserRole={currentUserRole} user={user} searchTerm={searchTerm} showArchived={showArchived}/>
+                            <ExpensesView 
+                                expenses={expenses} 
+                                onProcessExpense={(exp) => { setExpenseToProcess(exp); openModal('processExpense'); }} 
+                                onBulkProcessExpense={(list) => { setBulkExpensesToProcess(list); setIsSettlingAll(true); openModal('processExpense'); }} // <-- FUNZIONE BULK
+                                onEditExpense={(exp) => { setExpenseToEdit(exp); openModal('editExpense'); }} 
+                                currentUserRole={currentUserRole} 
+                                user={user} 
+                                searchTerm={searchTerm} 
+                                showArchived={showArchived}
+                            />
                         </div>
                     )}
                     {view === 'employees' && (
@@ -1436,7 +1503,20 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             {showModal && modalType === 'editTimeEntry' && entryToEdit && ( <EditTimeEntryModal entry={entryToEdit} workAreas={activeVisibleWorkAreas} onClose={() => { setShowModal(false); setEntryToEdit(null); }} onSave={handleSaveEntryEdit} isLoading={isActionLoading} /> )}
             {showModal && modalType === 'addExpense' && ( <AddExpenseModal show={true} onClose={() => setShowModal(false)} user={user} userData={userData} showNotification={showNotification} /> )}
             {showModal && modalType === 'editExpense' && expenseToEdit && ( <AddExpenseModal show={true} onClose={() => { setShowModal(false); setExpenseToEdit(null); }} user={user} userData={userData} showNotification={showNotification} expenseToEdit={expenseToEdit} /> )}
-            {showModal && modalType === 'processExpense' && expenseToProcess && ( <ProcessExpenseModal show={true} onClose={() => { setShowModal(false); setExpenseToProcess(null); }} expense={expenseToProcess} onConfirm={handleConfirmProcessExpense} isProcessing={isActionLoading} /> )}
+            
+            {/* MODALE CONFERMA SALDO (AGGIORNATO PER SINGOLO/MULTIPLO) */}
+            {showModal && modalType === 'processExpense' && (expenseToProcess || isSettlingAll) && ( 
+                <ProcessExpenseModal 
+                    show={true} 
+                    onClose={() => { setShowModal(false); setExpenseToProcess(null); setIsSettlingAll(false); setBulkExpensesToProcess([]); }} 
+                    expense={expenseToProcess} 
+                    isBulk={isSettlingAll}
+                    bulkExpenses={bulkExpensesToProcess}
+                    onConfirm={handleConfirmProcessExpense} 
+                    isProcessing={isActionLoading} 
+                /> 
+            )}
+            
             {showModal && !['editTimeEntry', 'addExpense', 'editExpense', 'processExpense'].includes(modalType) && ( <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} setModalType={setModalType} workAreas={activeVisibleWorkAreas} onDataUpdate={fetchData} user={user} superAdminEmail={superAdminEmail} allEmployees={allEmployees} currentUserRole={currentUserRole} userData={userData} activeEmployeesDetails={activeEmployeesDetails} onAdminApplyPause={handleEmployeePauseClick} showNotification={showNotification} /> )}
         </div>
     );
