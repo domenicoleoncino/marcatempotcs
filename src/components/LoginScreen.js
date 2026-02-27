@@ -3,69 +3,75 @@
 import React, { useState } from 'react';
 import { auth } from '../firebase';
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
-import CompanyLogo from './CompanyLogo';
+import logo from '../logo.png'; 
 
 // ========================================================
-// --- STILE MAGICO AGGIORNATO (ANTI-SBORDO MOBILE) ---
+// --- STILE MAGICO (FULL-SCREEN FORZATO + GLASSMORPHISM)
 // ========================================================
 const LoginStyles = () => (
     <style>
     {`
-      /* Forza il calcolo corretto delle larghezze per tutti gli elementi */
-      .login-bg *, .login-bg *::before, .login-bg *::after {
-          box-sizing: border-box !important;
-      }
+      .login-bg *, .login-bg *::before, .login-bg *::after { box-sizing: border-box !important; }
 
-      /* Sfondo con immagine e filtro blu scuro */
       .login-bg { 
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100vw;
+          height: 100vh;
+          z-index: 9999;
           background: linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(30, 58, 138, 0.95)), 
                       url('https://images.unsplash.com/photo-1504307651254-35680f356dfd?q=80&w=2070&auto=format&fit=crop') no-repeat center center;
           background-size: cover;
-          min-height: 100vh; 
           display: flex; 
           flex-direction: column; 
           justify-content: center; 
           align-items: center; 
           font-family: 'Inter', -apple-system, sans-serif; 
-          padding: 20px; /* Margine di sicurezza esterno */
-          overflow-x: hidden; /* Evita scorrimenti orizzontali pazzi */
+          padding: 20px; 
+          overflow-y: auto; 
       }
 
-      /* Il pannello "Effetto Vetro" (Glassmorphism) con larghezza massima garantita */
       .login-card { 
           background: rgba(255, 255, 255, 0.08); 
           backdrop-filter: blur(16px); 
           -webkit-backdrop-filter: blur(16px); 
           border: 1px solid rgba(255, 255, 255, 0.15); 
           width: 100%; 
-          max-width: 400px; /* Leggermente più stretto per sicurezza */
+          max-width: 400px; 
           border-radius: 24px; 
           box-shadow: 0 10px 40px 0 rgba(0, 0, 0, 0.4); 
           padding: 40px 30px; 
           animation: fadeIn 0.8s ease-out; 
-          box-sizing: border-box; /* Cruciale: include padding nel calcolo della larghezza */
+          margin: auto;
       }
 
-      /* Contenitore Logo */
       .logo-container { 
           display: flex; 
+          flex-direction: column;
+          align-items: center;
           justify-content: center; 
           margin-bottom: 30px; 
+          margin-top: auto;
           animation: slideDown 0.6s ease-out;
           width: 100%;
       }
+      
       .logo-pill {
           background: rgba(255, 255, 255, 0.95);
           padding: 12px 25px;
           border-radius: 16px;
           box-shadow: 0 8px 20px rgba(0,0,0,0.2);
           display: inline-block;
-          max-width: 90%; /* Evita che il logo esca sui telefoni stretti */
+          max-width: 90%; 
           text-align: center;
       }
+      
       .logo-pill img {
-          max-width: 100%; /* Forza l'immagine a restringersi */
-          height: auto;
+          max-width: 150px !important; 
+          height: auto !important;
+          display: block;
+          margin: 0 auto;
       }
 
       .login-title { 
@@ -81,26 +87,24 @@ const LoginStyles = () => (
           display: block; 
           font-size: 11px; 
           font-weight: 700; 
-          color: #a78bfa; /* Colore più acceso per leggibilità su vetro */
+          color: #a78bfa; 
           margin-bottom: 6px; 
           text-transform: uppercase;
           letter-spacing: 1px;
           text-align: left;
       }
       
-      /* Input trasparenti moderni */
       .login-input { 
           width: 100%; 
-          padding: 12px 16px; 
+          padding: 14px 16px; 
           border-radius: 10px; 
           border: 1px solid rgba(255, 255, 255, 0.15); 
-          background: rgba(0, 0, 0, 0.2); /* Sfondo scuro per contrasto input */
+          background: rgba(0, 0, 0, 0.2); 
           color: #ffffff;
           font-size: 16px; 
           outline: none; 
           transition: all 0.3s ease; 
           margin-bottom: 18px; 
-          box-sizing: border-box; 
       }
       .login-input::placeholder { color: rgba(255, 255, 255, 0.3); }
       .login-input:focus { 
@@ -109,7 +113,6 @@ const LoginStyles = () => (
           box-shadow: 0 0 0 3px rgba(96,165,250,0.2); 
       }
       
-      /* Bottone Principale Glow */
       .login-btn { 
           width: 100%; 
           background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); 
@@ -125,7 +128,6 @@ const LoginStyles = () => (
           margin-top: 5px; 
           text-transform: uppercase;
           letter-spacing: 1px;
-          box-sizing: border-box;
       }
       .login-btn:hover:not(:disabled) { 
           transform: translateY(-1px); 
@@ -157,7 +159,9 @@ const LoginStyles = () => (
       .forgot-btn:hover { color: #ffffff; text-decoration: underline; }
       
       .login-footer { 
-          margin-top: 30px; 
+          margin-top: auto; 
+          padding-top: 30px;
+          padding-bottom: 30px; /* <--- IL CUSCINETTO CHE LO ALZA! */
           text-align: center; 
           color: rgba(255,255,255,0.4); 
           font-size: 11px; 
@@ -166,7 +170,6 @@ const LoginStyles = () => (
           width: 100%;
       }
       
-      /* Allarmi Trasparenti */
       .alert-error { 
           background: rgba(239, 68, 68, 0.2); 
           color: #fca5a5; 
@@ -177,7 +180,6 @@ const LoginStyles = () => (
           text-align: center; 
           border: 1px solid rgba(239, 68, 68, 0.4); 
           margin-bottom: 18px; 
-          box-sizing: border-box;
       }
       .alert-success { 
           background: rgba(16, 185, 129, 0.2); 
@@ -187,7 +189,6 @@ const LoginStyles = () => (
           margin-bottom: 18px; 
           text-align: center; 
           color: white;
-          box-sizing: border-box;
       }
       .alert-spam-box {
           background: rgba(0,0,0,0.3);
@@ -200,19 +201,10 @@ const LoginStyles = () => (
       @keyframes fadeIn { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }
       @keyframes slideDown { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
 
-      /* --- OTTIMIZZAZIONI AGGIUNTIVE PER SCHERMI PICCOLISSIMI --- */
       @media (max-width: 360px) {
-          .login-card {
-              padding: 25px 20px;
-              border-radius: 16px;
-          }
-          .login-title {
-              font-size: 20px;
-          }
-          .login-input, .login-btn {
-              font-size: 14px;
-              padding: 10px;
-          }
+          .login-card { padding: 25px 20px; border-radius: 16px; }
+          .login-title { font-size: 20px; }
+          .login-input, .login-btn { font-size: 14px; padding: 10px; }
       }
     `}
     </style>
@@ -284,16 +276,23 @@ const LoginScreen = () => {
             
             <div className="logo-container">
                 <div className="logo-pill">
-                    <CompanyLogo /> 
+                    <img 
+                      src={logo} 
+                      alt="Logo TCS" 
+                      onError={(e) => { e.target.style.display='none'; }}
+                    />
                 </div>
+                <h1 style={{ margin: '15px 0 0 0', fontSize: '22px', fontWeight: '800', color: '#ffffff', letterSpacing: '2px', textTransform: 'uppercase' }}>
+                    MARCATEMPO
+                </h1>
             </div>
 
             <div className="login-card">
-                <h2 className="login-title">Accesso Marcatempo</h2>
+                <h2 className="login-title">Accesso Sicuro</h2>
                 
-                <form onSubmit={handleLogin} autoomplete="on">
+                <form onSubmit={handleLogin} autoComplete="on">
                     <div>
-                        <label htmlFor="email" className="login-label">Email</label>
+                        <label htmlFor="email" className="login-label">Email Aziendale</label>
                         <input 
                             id="email" 
                             type="email" 
@@ -357,7 +356,7 @@ const LoginScreen = () => {
             </div>
              
             <div className="login-footer">
-                <div style={{ marginBottom: '3px' }}>Creata by D. Leoncino</div>
+                <div style={{ marginBottom: '3px' }}>Creato da D. Leoncino</div>
                 &copy; {new Date().getFullYear()} TCS Italia S.r.l. - Tutti i diritti riservati.
             </div>
         </div>
