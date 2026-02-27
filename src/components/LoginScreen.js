@@ -5,28 +5,215 @@ import { auth } from '../firebase';
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import CompanyLogo from './CompanyLogo';
 
-// ===========================================
-// --- STILE MAGICO (CSS INIETTATO) ---
-// ===========================================
+// ========================================================
+// --- STILE MAGICO AGGIORNATO (ANTI-SBORDO MOBILE) ---
+// ========================================================
 const LoginStyles = () => (
     <style>
     {`
-      .login-bg { background-color: #f4f7fe; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; font-family: 'Inter', -apple-system, sans-serif; padding: 20px; }
-      .login-card { background: #ffffff; width: 100%; max-width: 420px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); padding: 40px 30px; border: 1px solid #e2e8f0; animation: fadeIn 0.5s ease-out; }
-      .login-title { font-size: 24px; font-weight: 800; color: #0f172a; text-align: center; margin-bottom: 24px; }
-      .login-label { display: block; font-size: 13px; font-weight: 700; color: #475569; margin-bottom: 8px; }
-      .login-input { width: 100%; padding: 12px 16px; border-radius: 8px; border: 1px solid #cbd5e1; background: #f8fafc; font-size: 15px; outline: none; transition: 0.2s; margin-bottom: 20px; box-sizing: border-box; }
-      .login-input:focus { border-color: #3b82f6; background: #ffffff; box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
-      .login-btn { width: 100%; background: #2563eb; color: white; border: none; padding: 14px; border-radius: 8px; font-size: 16px; font-weight: 700; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 12px rgba(37,99,235,0.2); margin-top: 10px; }
-      .login-btn:hover:not(:disabled) { background: #1d4ed8; transform: translateY(-1px); box-shadow: 0 6px 16px rgba(37,99,235,0.3); }
-      .login-btn:disabled { background: #94a3b8; cursor: not-allowed; box-shadow: none; }
-      .forgot-btn { background: none; border: none; color: #3b82f6; font-size: 13px; font-weight: 600; cursor: pointer; padding: 0; transition: 0.2s; display: block; margin-left: auto; margin-top: -10px; margin-bottom: 20px; }
-      .forgot-btn:hover { color: #1d4ed8; text-decoration: underline; }
-      .login-footer { margin-top: 40px; text-align: center; color: #64748b; font-size: 12px; font-weight: 600; }
-      .alert-error { background: #fef2f2; color: #b91c1c; padding: 12px; border-radius: 8px; font-size: 13px; font-weight: 600; text-align: center; border: 1px solid #fecaca; margin-bottom: 20px; }
-      .alert-success { background: #ecfdf5; border: 1px solid #a7f3d0; padding: 16px; border-radius: 8px; margin-bottom: 20px; text-align: center; }
-      .logo-container { display: flex; justify-content: center; margin-bottom: 30px; }
-      @keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+      /* Forza il calcolo corretto delle larghezze per tutti gli elementi */
+      .login-bg *, .login-bg *::before, .login-bg *::after {
+          box-sizing: border-box !important;
+      }
+
+      /* Sfondo con immagine e filtro blu scuro */
+      .login-bg { 
+          background: linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(30, 58, 138, 0.95)), 
+                      url('https://images.unsplash.com/photo-1504307651254-35680f356dfd?q=80&w=2070&auto=format&fit=crop') no-repeat center center;
+          background-size: cover;
+          min-height: 100vh; 
+          display: flex; 
+          flex-direction: column; 
+          justify-content: center; 
+          align-items: center; 
+          font-family: 'Inter', -apple-system, sans-serif; 
+          padding: 20px; /* Margine di sicurezza esterno */
+          overflow-x: hidden; /* Evita scorrimenti orizzontali pazzi */
+      }
+
+      /* Il pannello "Effetto Vetro" (Glassmorphism) con larghezza massima garantita */
+      .login-card { 
+          background: rgba(255, 255, 255, 0.08); 
+          backdrop-filter: blur(16px); 
+          -webkit-backdrop-filter: blur(16px); 
+          border: 1px solid rgba(255, 255, 255, 0.15); 
+          width: 100%; 
+          max-width: 400px; /* Leggermente più stretto per sicurezza */
+          border-radius: 24px; 
+          box-shadow: 0 10px 40px 0 rgba(0, 0, 0, 0.4); 
+          padding: 40px 30px; 
+          animation: fadeIn 0.8s ease-out; 
+          box-sizing: border-box; /* Cruciale: include padding nel calcolo della larghezza */
+      }
+
+      /* Contenitore Logo */
+      .logo-container { 
+          display: flex; 
+          justify-content: center; 
+          margin-bottom: 30px; 
+          animation: slideDown 0.6s ease-out;
+          width: 100%;
+      }
+      .logo-pill {
+          background: rgba(255, 255, 255, 0.95);
+          padding: 12px 25px;
+          border-radius: 16px;
+          box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+          display: inline-block;
+          max-width: 90%; /* Evita che il logo esca sui telefoni stretti */
+          text-align: center;
+      }
+      .logo-pill img {
+          max-width: 100%; /* Forza l'immagine a restringersi */
+          height: auto;
+      }
+
+      .login-title { 
+          font-size: 24px; 
+          font-weight: 800; 
+          color: #ffffff; 
+          text-align: center; 
+          margin-bottom: 24px; 
+          letter-spacing: 0.5px;
+      }
+      
+      .login-label { 
+          display: block; 
+          font-size: 11px; 
+          font-weight: 700; 
+          color: #a78bfa; /* Colore più acceso per leggibilità su vetro */
+          margin-bottom: 6px; 
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          text-align: left;
+      }
+      
+      /* Input trasparenti moderni */
+      .login-input { 
+          width: 100%; 
+          padding: 12px 16px; 
+          border-radius: 10px; 
+          border: 1px solid rgba(255, 255, 255, 0.15); 
+          background: rgba(0, 0, 0, 0.2); /* Sfondo scuro per contrasto input */
+          color: #ffffff;
+          font-size: 16px; 
+          outline: none; 
+          transition: all 0.3s ease; 
+          margin-bottom: 18px; 
+          box-sizing: border-box; 
+      }
+      .login-input::placeholder { color: rgba(255, 255, 255, 0.3); }
+      .login-input:focus { 
+          border-color: #60a5fa; 
+          background: rgba(0, 0, 0, 0.3); 
+          box-shadow: 0 0 0 3px rgba(96,165,250,0.2); 
+      }
+      
+      /* Bottone Principale Glow */
+      .login-btn { 
+          width: 100%; 
+          background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); 
+          color: white; 
+          border: none; 
+          padding: 14px; 
+          border-radius: 10px; 
+          font-size: 15px; 
+          font-weight: 700; 
+          cursor: pointer; 
+          transition: all 0.3s ease; 
+          box-shadow: 0 4px 12px rgba(37,99,235,0.3); 
+          margin-top: 5px; 
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          box-sizing: border-box;
+      }
+      .login-btn:hover:not(:disabled) { 
+          transform: translateY(-1px); 
+          box-shadow: 0 6px 20px rgba(37,99,235,0.5); 
+      }
+      .login-btn:disabled { 
+          background: rgba(255,255,255,0.1) !important; 
+          color: rgba(255,255,255,0.3) !important; 
+          cursor: not-allowed; 
+          box-shadow: none; 
+          transform: none;
+      }
+      
+      .forgot-btn { 
+          background: none; 
+          border: none; 
+          color: #93c5fd; 
+          font-size: 12px; 
+          font-weight: 600; 
+          cursor: pointer; 
+          padding: 0; 
+          transition: 0.2s; 
+          display: block; 
+          margin-left: auto; 
+          margin-top: -10px; 
+          margin-bottom: 20px; 
+          text-align: right;
+      }
+      .forgot-btn:hover { color: #ffffff; text-decoration: underline; }
+      
+      .login-footer { 
+          margin-top: 30px; 
+          text-align: center; 
+          color: rgba(255,255,255,0.4); 
+          font-size: 11px; 
+          font-weight: 500; 
+          letter-spacing: 0.5px;
+          width: 100%;
+      }
+      
+      /* Allarmi Trasparenti */
+      .alert-error { 
+          background: rgba(239, 68, 68, 0.2); 
+          color: #fca5a5; 
+          padding: 12px; 
+          border-radius: 10px; 
+          font-size: 13px; 
+          font-weight: 600; 
+          text-align: center; 
+          border: 1px solid rgba(239, 68, 68, 0.4); 
+          margin-bottom: 18px; 
+          box-sizing: border-box;
+      }
+      .alert-success { 
+          background: rgba(16, 185, 129, 0.2); 
+          border: 1px solid rgba(16, 185, 129, 0.4); 
+          padding: 14px; 
+          border-radius: 10px; 
+          margin-bottom: 18px; 
+          text-align: center; 
+          color: white;
+          box-sizing: border-box;
+      }
+      .alert-spam-box {
+          background: rgba(0,0,0,0.3);
+          padding: 8px;
+          border-radius: 6px;
+          margin-top: 8px;
+          border: 1px solid rgba(255,255,255,0.1);
+      }
+
+      @keyframes fadeIn { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }
+      @keyframes slideDown { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+
+      /* --- OTTIMIZZAZIONI AGGIUNTIVE PER SCHERMI PICCOLISSIMI --- */
+      @media (max-width: 360px) {
+          .login-card {
+              padding: 25px 20px;
+              border-radius: 16px;
+          }
+          .login-title {
+              font-size: 20px;
+          }
+          .login-input, .login-btn {
+              font-size: 14px;
+              padding: 10px;
+          }
+      }
     `}
     </style>
 );
@@ -47,7 +234,7 @@ const LoginScreen = () => {
         try {
             await signInWithEmailAndPassword(auth, email, password);
         } catch (err) {
-            console.error("ERRORE DETTAGLIATO DA FIREBASE:", err); 
+            console.error("ERRORE LOGIN:", err.code); 
 
             switch (err.code) {
                 case 'auth/user-not-found':
@@ -59,8 +246,11 @@ const LoginScreen = () => {
                 case 'auth/invalid-credential':
                     setError('Credenziali non valide (email o password errata).');
                     break;
+                case 'auth/too-many-requests':
+                    setError('Troppi tentativi falliti. Riprova tra qualche minuto.');
+                    break;
                 default:
-                    setError(`Errore imprevisto: ${err.code}`);
+                    setError(`Errore di accesso. Verifica i dati.`);
                     break;
             }
         } finally {
@@ -72,19 +262,19 @@ const LoginScreen = () => {
         setError('');
         setSuccessMessage('');
         
-        if (!email) {
-            setError('Inserisci la tua email nel campo sopra per il recupero password.');
+        if (!email || !email.includes('@')) {
+            setError('Inserisci la tua email aziendale corretta per il recupero.');
             return;
         }
         
         try {
-            await new Promise(resolve => setTimeout(resolve, 500)); 
+            setIsLoading(true);
             await sendPasswordResetEmail(auth, email);
-            
-            // Messaggio semplice qui, il dettaglio SPAM è nel render sotto
             setSuccessMessage('Email di recupero inviata!'); 
         } catch (err) {
-            setError('Impossibile inviare l\'email. Verifica che l\'indirizzo sia corretto.');
+            setError('Impossibile inviare l\'email. Verifica l\'indirizzo.');
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -93,23 +283,27 @@ const LoginScreen = () => {
             <LoginStyles />
             
             <div className="logo-container">
-                <CompanyLogo /> 
+                <div className="logo-pill">
+                    <CompanyLogo /> 
+                </div>
             </div>
 
             <div className="login-card">
                 <h2 className="login-title">Accesso Marcatempo</h2>
                 
-                <form onSubmit={handleLogin}>
+                <form onSubmit={handleLogin} autoomplete="on">
                     <div>
                         <label htmlFor="email" className="login-label">Email</label>
                         <input 
                             id="email" 
                             type="email" 
+                            name="email"
                             value={email} 
                             onChange={(e) => setEmail(e.target.value)} 
                             required 
                             className="login-input" 
-                            placeholder="nome.cognome@tcsitalia.com"
+                            placeholder="es. m.rossi@tcsitalia.com"
+                            autoComplete="email"
                         />
                     </div>
                     
@@ -118,11 +312,13 @@ const LoginScreen = () => {
                         <input 
                             id="password" 
                             type="password" 
+                            name="password"
                             value={password} 
                             onChange={(e) => setPassword(e.target.value)} 
                             required 
                             className="login-input" 
-                            placeholder="Min. 6 caratteri"
+                            placeholder="••••••••"
+                            autoComplete="current-password"
                         />
                     </div>
                     
@@ -138,13 +334,13 @@ const LoginScreen = () => {
                     {/* MESSAGGIO ERRORE */}
                     {error && <div className="alert-error">{error}</div>}
                     
-                    {/* MESSAGGIO SUCCESSO CON AVVISO SPAM */}
+                    {/* MESSAGGIO SUCCESSO */}
                     {successMessage && (
                         <div className="alert-success">
-                            <p style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#047857', fontWeight: 'bold' }}>✅ {successMessage}</p>
-                            <div style={{ backgroundColor: '#d1fae5', padding: '10px', borderRadius: '6px', border: '1px solid #6ee7b7' }}>
-                                <p style={{ margin: 0, fontSize: '12px', color: '#065f46' }}>
-                                    ⚠️ <b>ATTENZIONE:</b> Se non la trovi, controlla la cartella <b>SPAM</b> o <b>Posta Indesiderata</b>!
+                            <p style={{ margin: '0 0 5px 0', fontSize: '14px', fontWeight: 'bold' }}>✅ {successMessage}</p>
+                            <div className="alert-spam-box">
+                                <p style={{ margin: 0, fontSize: '11px', color: '#cbd5e1', lineHeight: '1.4' }}>
+                                    ⚠️ <b>Controlla anche la cartella SPAM</b> se non ricevi nulla entro pochi minuti!
                                 </p>
                             </div>
                         </div>
@@ -155,14 +351,14 @@ const LoginScreen = () => {
                         disabled={isLoading} 
                         className="login-btn"
                     >
-                        {isLoading ? 'Accesso in corso...' : '👉 Accedi'}
+                        {isLoading ? 'Attendere...' : '👉 Accedi al Sistema'}
                     </button>
                 </form>
             </div>
              
             <div className="login-footer">
-                <div style={{ marginBottom: '5px' }}>Created by D. Leoncino</div>
-                &copy; {new Date().getFullYear()} TCS Italia S.r.l. Tutti i diritti riservati.
+                <div style={{ marginBottom: '3px' }}>Creata by D. Leoncino</div>
+                &copy; {new Date().getFullYear()} TCS Italia S.r.l. - Tutti i diritti riservati.
             </div>
         </div>
     );
