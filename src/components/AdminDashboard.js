@@ -198,7 +198,6 @@ const AddExpenseModal = ({ show, onClose, user, userData, showNotification, expe
     );
 };
 
-// --- MODIFICATO: AGGIUNTO SUPPORTO SALDO MULTIPLO ---
 const ProcessExpenseModal = ({ show, onClose, expense, bulkExpenses, isBulk, onConfirm, isProcessing }) => {
     const [adminPaymentMethod, setAdminPaymentMethod] = useState('Rimborso in Busta Paga');
     const [adminNote, setAdminNote] = useState('');
@@ -412,10 +411,8 @@ const AdminManagementView = ({ admins, openModal, user, superAdminEmail, current
     );
 };
 
-// --- MODIFICATO: AGGIUNTO IL PULSANTE SALDA TUTTI ALLA VIEW DELLE SPESE ---
 const ExpensesView = ({ expenses, onProcessExpense, onBulkProcessExpense, onEditExpense, currentUserRole, user, searchTerm, showArchived }) => {
     const displayedExpenses = expenses.filter(exp => {
-        // PERMETTO SINCRONIZZAZIONE CON GESTIONALE: controllo sia 'closed' che 'paid'
         const isClosed = exp.status === 'closed' || exp.status === 'paid';
         const matchesArchive = showArchived ? isClosed : !isClosed;
         const isOwner = exp.userId === user.uid;
@@ -428,7 +425,6 @@ const ExpensesView = ({ expenses, onProcessExpense, onBulkProcessExpense, onEdit
 
     return (
         <div>
-            {/* PULSANTE SALDA TUTTI I VISIBILI */}
             {!showArchived && currentUserRole === 'admin' && displayedExpenses.length > 0 && (
                 <div style={{marginBottom: 15, display: 'flex', justifyContent: 'flex-end'}}>
                      <button 
@@ -770,7 +766,7 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
                 footer={[<Button key="close" onClick={() => setIsHoursModalVisible(false)}>Chiudi</Button>]}
             >
                 <div style={{marginBottom: 15, fontSize: 13, color: '#64748b'}}>
-                    Questo pannello ti mostra esattamente chi ha lavorato oggi nel cantiere selezionato e quante ore ha prodotto fino a questo momento.
+                    Questo pannello ti mostra esattamente chi ha lavorato oggi nel cantiere selezionato e quante ore ha prodotto fino a questo momento (incluse le persone che hanno già staccato). Se vedi righe doppie, controlla in "Report Ore".
                 </div>
                 <Table 
                     dataSource={todayHoursDetail} 
@@ -1172,7 +1168,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         } catch (error) { console.error("Errore ripristino:", error); showNotification("Errore durante il ripristino.", 'error'); } finally { setIsActionLoading(false); }
     }, [fetchData, showNotification]);
     
-    // --- FUNZIONE MODIFICATA: ORA SALDA ANCHE SPESE MULTIPLE IN SEQUENZA E COMUNICA CON IL GESTIONALE ---
     const handleConfirmProcessExpense = async (paymentMethod, note) => { 
         setIsActionLoading(true); 
         try { 
@@ -1180,7 +1175,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
             for (const item of itemsToProcess) {
                 await updateDoc(doc(db, "expenses", item.id), { 
-                    status: 'paid', // <-- Cambiato a "paid" per perfetto allineamento col Gestionale
+                    status: 'paid', 
                     adminPaymentMethod: paymentMethod, 
                     adminNote: note, 
                     closedAt: Timestamp.now(), 
@@ -1190,7 +1185,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
             showNotification(isSettlingAll ? "Tutte le spese visibili sono state archiviate!" : "Spesa archiviata!", 'success'); 
             
-            // Pulisco gli stati
             setExpenseToProcess(null); 
             setBulkExpensesToProcess([]);
             setIsSettlingAll(false);
@@ -1333,6 +1327,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
     const handleReviewSkipBreak = useCallback(async (entryId, decision) => { if (!entryId || !decision) return; if (!window.confirm("Confermare revisione pausa?")) return; setIsActionLoading(true); try { const functions = getFunctions(undefined, 'europe-west1'); const reviewFunction = httpsCallable(functions, 'reviewSkipBreakRequest'); await reviewFunction({ timeEntryId: entryId, decision, adminId: user.uid }); showNotification(`Richiesta aggiornata!`, 'success'); generateReport(); } catch (error) { showNotification("Errore revisione.", 'error'); } finally { setIsActionLoading(false); } }, [user, showNotification, generateReport]);
     
+    // --- FUNZIONE CORRETTA: ORA SALVA VERAMENTE LA RIMOZIONE PAUSA ---
     const handleSaveEntryEdit = async (entryId, updatedData) => { 
         setIsActionLoading(true); 
         try { 
@@ -1341,8 +1336,16 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             const updatePayload = { 
                 workAreaId: updatedData.workAreaId, 
                 note: updatedData.note, 
-                clockInTime: Timestamp.fromDate(new Date(`${updatedData.date}T${updatedData.clockInTime}:00`)) 
+                clockInTime: Timestamp.fromDate(new Date(`${updatedData.date}T${updatedData.clockInTime}:00`)),
+                skippedBreak: updatedData.skippedBreak // <-- SALVA LA SPUNTA!
             }; 
+            
+            // Approva automaticamente se è l'admin a spuntare
+            if (updatedData.skippedBreak) {
+                updatePayload.skipBreakStatus = 'approved';
+            } else {
+                updatePayload.skipBreakStatus = 'none';
+            }
             
             if (updatedData.clockOutTime && updatedData.clockOutTime.includes(':') && updatedData.clockOutTime.trim() !== '') { 
                 updatePayload.clockOutTime = Timestamp.fromDate(new Date(`${updatedData.date}T${updatedData.clockOutTime}:00`)); 
@@ -1431,7 +1434,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                             <ExpensesView 
                                 expenses={expenses} 
                                 onProcessExpense={(exp) => { setExpenseToProcess(exp); openModal('processExpense'); }} 
-                                onBulkProcessExpense={(list) => { setBulkExpensesToProcess(list); setIsSettlingAll(true); openModal('processExpense'); }} // <-- FUNZIONE BULK
+                                onBulkProcessExpense={(list) => { setBulkExpensesToProcess(list); setIsSettlingAll(true); openModal('processExpense'); }}
                                 onEditExpense={(exp) => { setExpenseToEdit(exp); openModal('editExpense'); }} 
                                 currentUserRole={currentUserRole} 
                                 user={user} 
@@ -1500,11 +1503,36 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             </footer>
 
             {/* --- I MODALI --- */}
+            {/* ORA SONO TUTTI REGOLARMENTE MONTATI */}
+            {showAddEmployeeModal && (
+                <AddEmployeeToAreaModal 
+                    show={showAddEmployeeModal} 
+                    onClose={() => setShowAddEmployeeModal(false)} 
+                    allEmployees={allEmployees} 
+                    workAreas={activeVisibleWorkAreas} 
+                    userData={userData} 
+                    showNotification={showNotification} 
+                    onDataUpdate={fetchData} 
+                />
+            )}
+            
+            {showAddFormModal && (
+                <AddFormModal 
+                    show={showAddFormModal} 
+                    onClose={() => setShowAddFormModal(false)} 
+                    workAreas={activeVisibleWorkAreas} 
+                    user={user} 
+                    onDataUpdate={fetchData} 
+                    currentUserRole={currentUserRole} 
+                    userData={userData} 
+                    showNotification={showNotification} 
+                />
+            )}
+
             {showModal && modalType === 'editTimeEntry' && entryToEdit && ( <EditTimeEntryModal entry={entryToEdit} workAreas={activeVisibleWorkAreas} onClose={() => { setShowModal(false); setEntryToEdit(null); }} onSave={handleSaveEntryEdit} isLoading={isActionLoading} /> )}
             {showModal && modalType === 'addExpense' && ( <AddExpenseModal show={true} onClose={() => setShowModal(false)} user={user} userData={userData} showNotification={showNotification} /> )}
             {showModal && modalType === 'editExpense' && expenseToEdit && ( <AddExpenseModal show={true} onClose={() => { setShowModal(false); setExpenseToEdit(null); }} user={user} userData={userData} showNotification={showNotification} expenseToEdit={expenseToEdit} /> )}
             
-            {/* MODALE CONFERMA SALDO (AGGIORNATO PER SINGOLO/MULTIPLO) */}
             {showModal && modalType === 'processExpense' && (expenseToProcess || isSettlingAll) && ( 
                 <ProcessExpenseModal 
                     show={true} 
