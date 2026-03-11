@@ -20,6 +20,18 @@ import { Modal, Table, Tag, Button, Tooltip } from 'antd';
 import { InfoCircleOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 
+// --- FUNZIONE CALCOLO DISTANZA GPS ---
+function getDistanceInMeters(lat1, lon1, lat2, lon2) {
+    const R = 6371e3; 
+    const p1 = lat1 * Math.PI / 180;
+    const p2 = lat2 * Math.PI / 180;
+    const deltaP = (lat2 - lat1) * Math.PI / 180;
+    const deltaL = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(deltaP / 2) * Math.sin(deltaP / 2) + Math.cos(p1) * Math.cos(p2) * Math.sin(deltaL / 2) * Math.sin(deltaL / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
+
 // ===========================================
 // --- STILE MAGICO "MUTAFORMA" (PC + MOBILE) ---
 // ===========================================
@@ -299,7 +311,7 @@ const AddFormModal = ({ show, onClose, workAreas, user, onDataUpdate, currentUse
 };
 
 // ===========================================
-// --- VISTE SECONDARIE (CON DATA-LABEL PER MOBILE) ---
+// --- VISTE SECONDARIE ---
 // ===========================================
 
 const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortConfig, requestSort, searchTerm, setSearchTerm, showArchived, setShowArchived }) => { 
@@ -701,12 +713,100 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
 // ===========================================
 // --- DASHBOARD COMPONENT ---
 // ===========================================
-const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, workAreas, adminEmployeeProfile, adminActiveEntry, handleAdminPause, openModal, isActionLoading, dashboardAreaFilter, setDashboardAreaFilter, todayHoursDetail }) => {
+const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, workAreas, adminEmployeeProfile, adminActiveEntry, handleAdminPause, openModal, isActionLoading, dashboardAreaFilter, setDashboardAreaFilter, todayHoursDetail, currentUserRole }) => {
     const [isMapMode, setIsMapMode] = useState(false);
     const [myEquipment, setMyEquipment] = useState([]);
     const [myVehicles, setMyVehicles] = useState([]);
     const [showAssets, setShowAssets] = useState(false);
     const [isHoursModalVisible, setIsHoursModalVisible] = useState(false); 
+
+    const isGpsRequired = adminEmployeeProfile?.controlloGpsRichiesto === true;
+    const [inRangeArea, setInRangeArea] = useState(null);
+    const [gpsLoading, setGpsLoading] = useState(true);
+    const [locationError, setLocationError] = useState(null);
+    const [localProcessing, setLocalProcessing] = useState(false);
+
+    const myAssignedAreas = useMemo(() => {
+        if (!adminEmployeeProfile?.workAreaIds) return [];
+        return workAreas.filter(a => adminEmployeeProfile.workAreaIds.includes(a.id));
+    }, [adminEmployeeProfile, workAreas]);
+
+    useEffect(() => {
+        if (!adminEmployeeProfile || !isGpsRequired) {
+            setGpsLoading(false);
+            return;
+        }
+        setGpsLoading(true);
+        const success = (pos) => {
+            const { latitude, longitude } = pos.coords;
+            let found = null;
+            for (const area of myAssignedAreas) {
+                if (area.latitude && area.longitude && area.radius) {
+                    const dist = getDistanceInMeters(latitude, longitude, area.latitude, area.longitude);
+                    if (dist <= area.radius) { found = area; break; }
+                }
+            }
+            setInRangeArea(found); setLocationError(null); setGpsLoading(false);
+        };
+        const error = () => { setLocationError("Attiva il GPS o autorizza la posizione."); setInRangeArea(null); setGpsLoading(false); };
+        
+        if (navigator.geolocation) {
+            const watchId = navigator.geolocation.watchPosition(success, error, { enableHighAccuracy: true });
+            return () => navigator.geolocation.clearWatch(watchId);
+        } else {
+            setLocationError("GPS non supportato"); setGpsLoading(false);
+        }
+    }, [adminEmployeeProfile, myAssignedAreas, isGpsRequired]);
+
+    const handleDirectClockIn = async () => {
+        if (!isGpsRequired) {
+            openModal('manualClockIn', adminEmployeeProfile);
+            return;
+        }
+        if (!inRangeArea) {
+            alert("Devi essere fisicamente in una delle Sedi/Cantieri assegnati per poter timbrare!");
+            return;
+        }
+        setLocalProcessing(true);
+        try {
+            const clockInFunc = httpsCallable(getFunctions(undefined, 'europe-west1'), 'clockEmployeeIn');
+            const deviceId = localStorage.getItem('marcatempoDeviceId') || "ADMIN_DASHBOARD";
+            const res = await clockInFunc({ 
+                areaId: inRangeArea.id, 
+                deviceId: deviceId, 
+                isGpsRequired: true, 
+                note: 'Ingresso (GPS)' 
+            });
+            if (!res.data.success) { alert(res.data.message); } 
+        } catch (e) {
+            alert("Errore: " + e.message);
+        } finally {
+            setLocalProcessing(false);
+        }
+    };
+
+    const handleDirectClockOut = async () => {
+        if (!isGpsRequired) {
+            openModal('manualClockOut', adminEmployeeProfile);
+            return;
+        }
+        setLocalProcessing(true);
+        try {
+            const clockOutFunc = httpsCallable(getFunctions(undefined, 'europe-west1'), 'clockEmployeeOut');
+            const deviceId = localStorage.getItem('marcatempoDeviceId') || "ADMIN_DASHBOARD";
+            const res = await clockOutFunc({ 
+                deviceId: deviceId, 
+                isGpsRequired: true, 
+                note: 'Uscita (GPS)',
+                pauseSkipReason: null
+            });
+            if (!res.data.success) { alert(res.data.message); } 
+        } catch (e) {
+            alert("Errore: " + e.message);
+        } finally {
+            setLocalProcessing(false);
+        }
+    };
 
     useEffect(() => {
         if (!adminEmployeeProfile?.id) return;
@@ -752,46 +852,62 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
             
             {!isMapMode && (
                 <>
-                    {/* BOTTONI CENTRALI AGGIORNATI E POTENZIATI */}
-                    {adminEmployeeProfile && (
-                        <div className="quick-actions" style={{background:'#f8fafc', padding:'20px', borderRadius:'12px', display:'flex', flexWrap: 'wrap', justifyContent:'center', alignItems: 'center', gap:'15px', marginBottom:'30px', border:'1px solid #e2e8f0'}}>
-                            {!adminActiveEntry ? (
-                                <>
-                                    <div style={{fontSize: '16px', fontWeight: 'bold', color: '#64748b'}}><span>⚪ Fuori Turno</span></div>
-                                    <button onClick={() => openModal('manualClockIn', adminEmployeeProfile)} disabled={isActionLoading} className="modern-btn" style={{background: '#16a34a', fontSize:'16px', padding: '12px 24px'}}><span>▶️ Entra in Turno</span></button>
-                                </>
-                            ) : (
-                                <>
-                                    <div style={{fontSize: '16px', fontWeight: 'bold', color: '#16a34a', display: 'flex', alignItems: 'center', gap: '8px'}}>
-                                        <span>🟢 In Turno</span> {isOnBreak && <span style={{color: '#d97706', fontSize: '14px'}}>(In Pausa)</span>}
-                                    </div>
-
-                                    <button 
-                                        onClick={handleAdminPause} 
-                                        disabled={isActionLoading || (!isOnBreak && hasCompletedPause)} 
-                                        className="modern-btn-outline" 
-                                        style={{
-                                            fontSize:'15px', 
-                                            padding: '10px 20px',
-                                            background: (!isOnBreak && hasCompletedPause) ? '#f1f5f9' : (isOnBreak ? '#fef08a' : '#fff'),
-                                            color: (!isOnBreak && hasCompletedPause) ? '#94a3b8' : (isOnBreak ? '#d97706' : '#475569'),
-                                            borderColor: (!isOnBreak && hasCompletedPause) ? '#cbd5e1' : (isOnBreak ? '#fde047' : '#cbd5e1'),
-                                            cursor: (!isOnBreak && hasCompletedPause) ? 'not-allowed' : 'pointer'
-                                        }}
-                                    >
-                                        <span>{isOnBreak ? '▶️ Termina Pausa' : (hasCompletedPause ? '✔️ Pausa Eseguita' : '☕ Pausa')}</span>
-                                    </button>
-
-                                    <button 
-                                        onClick={() => openModal('manualClockOut', adminEmployeeProfile)} 
-                                        disabled={isOnBreak || isActionLoading} 
-                                        className="modern-btn-danger" 
-                                        style={{fontSize:'15px', padding: '10px 20px', opacity: isOnBreak ? 0.5 : 1, cursor: isOnBreak ? 'not-allowed' : 'pointer'}}
-                                    >
-                                        <span>⏹️ Esci Turno</span>
-                                    </button>
-                                </>
+                    {/* SE SEI ADMIN NON VEDI I BOTTONI DELLA TIMBRATURA */}
+                    {adminEmployeeProfile && currentUserRole !== 'admin' && (
+                        <div className="quick-actions" style={{background:'#f8fafc', padding:'20px', borderRadius:'12px', display:'flex', flexDirection: 'column', alignItems: 'center', gap:'15px', marginBottom:'30px', border:'1px solid #e2e8f0'}}>
+                            
+                            {isGpsRequired && (
+                                <div style={{width: '100%', padding: '10px', borderRadius: '8px', backgroundColor: gpsLoading ? '#fffbe6' : inRangeArea ? '#f0fdf4' : '#fef2f2', color: gpsLoading ? '#d48806' : inRangeArea ? '#16a34a' : '#ef4444', border: `1px solid ${gpsLoading ? '#ffe58f' : inRangeArea ? '#bbf7d0' : '#fecaca'}`, textAlign: 'center', fontSize: '13px', fontWeight: 'bold'}}>
+                                    {gpsLoading ? "📡 Ricerca GPS in corso..." : locationError ? `⚠️ ${locationError}` : inRangeArea ? `✅ Sede rilevata: ${inRangeArea.name}` : "❌ Nessuna sede/cantiere nelle vicinanze"}
+                                </div>
                             )}
+
+                            <div style={{display: 'flex', flexWrap: 'wrap', justifyContent:'center', alignItems: 'center', gap:'15px'}}>
+                                {!adminActiveEntry ? (
+                                    <>
+                                        <div style={{fontSize: '16px', fontWeight: 'bold', color: '#64748b'}}><span>⚪ Fuori Turno</span></div>
+                                        <button 
+                                            onClick={handleDirectClockIn} 
+                                            disabled={isActionLoading || localProcessing || (isGpsRequired && !inRangeArea)} 
+                                            className="modern-btn" 
+                                            style={{background: (isGpsRequired && !inRangeArea) ? '#94a3b8' : '#16a34a', fontSize:'16px', padding: '12px 24px', cursor: (isGpsRequired && !inRangeArea) ? 'not-allowed' : 'pointer'}}
+                                        >
+                                            <span>{localProcessing ? 'Attendere...' : '▶️ Entra in Turno'}</span>
+                                        </button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div style={{fontSize: '16px', fontWeight: 'bold', color: '#16a34a', display: 'flex', alignItems: 'center', gap: '8px'}}>
+                                            <span>🟢 In Turno</span> {isOnBreak && <span style={{color: '#d97706', fontSize: '14px'}}>(In Pausa)</span>}
+                                        </div>
+
+                                        <button 
+                                            onClick={handleAdminPause} 
+                                            disabled={isActionLoading || localProcessing || (!isOnBreak && hasCompletedPause)} 
+                                            className="modern-btn-outline" 
+                                            style={{
+                                                fontSize:'15px', 
+                                                padding: '10px 20px',
+                                                background: (!isOnBreak && hasCompletedPause) ? '#f1f5f9' : (isOnBreak ? '#fef08a' : '#fff'),
+                                                color: (!isOnBreak && hasCompletedPause) ? '#94a3b8' : (isOnBreak ? '#d97706' : '#475569'),
+                                                borderColor: (!isOnBreak && hasCompletedPause) ? '#cbd5e1' : (isOnBreak ? '#fde047' : '#cbd5e1'),
+                                                cursor: (!isOnBreak && hasCompletedPause) ? 'not-allowed' : 'pointer'
+                                            }}
+                                        >
+                                            <span>{isOnBreak ? '▶️ Termina Pausa' : (hasCompletedPause ? '✔️ Pausa Eseguita' : '☕ Pausa')}</span>
+                                        </button>
+
+                                        <button 
+                                            onClick={handleDirectClockOut} 
+                                            disabled={isOnBreak || isActionLoading || localProcessing} 
+                                            className="modern-btn-danger" 
+                                            style={{fontSize:'15px', padding: '10px 20px', opacity: (isOnBreak || localProcessing) ? 0.5 : 1, cursor: (isOnBreak || localProcessing) ? 'not-allowed' : 'pointer'}}
+                                        >
+                                            <span>{localProcessing ? '...' : '⏹️ Esci Turno'}</span>
+                                        </button>
+                                    </>
+                                )}
+                            </div>
                         </div>
                     )}
 
@@ -816,7 +932,7 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
                         </div>
                     </div>
 
-                    {adminEmployeeProfile && (myEquipment.length > 0 || myVehicles.length > 0) && (
+                    {adminEmployeeProfile && currentUserRole !== 'admin' && (myEquipment.length > 0 || myVehicles.length > 0) && (
                         <div style={{background:'#fff', borderRadius:'12px', border:'1px solid #e2e8f0', overflow:'hidden', marginBottom:'30px'}}>
                             <button onClick={() => setShowAssets(!showAssets)} style={{width:'100%', padding:'20px', display:'flex', justifyContent:'space-between', alignItems:'center', background:'#f8fafc', border:'none', cursor:'pointer'}}>
                                 <span style={{fontWeight:'800', fontSize:'16px', color:'#1e293b'}}>📦 Le Mie Dotazioni Aziendali</span>
@@ -999,7 +1115,8 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             setAllEmployees(allEmployeesList); 
             setForms(allFormsList);
             
-            if (role === 'preposto' || ((role === 'admin' || role === 'segreteria') && user.email !== superAdminEmail)) { 
+            // LA MODIFICA È QUI: GLI ADMIN NON RICEVONO IL PROFILO DIPENDENTE
+            if (role === 'preposto' || role === 'segreteria') { 
                 const q = query(collection(db, "employees"), where("userId", "==", user.uid)); 
                 const adminEmployeeSnapshot = await getDocs(q); 
                 if (!isMounted) return; 
@@ -1016,7 +1133,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             
         } catch (error) { console.error("Errore caricamento dati statici:", error); if (isMounted) showNotification("Errore caricamento dati iniziali.", 'error'); } finally { if (isMounted) setIsLoading(false); }
         return () => { isMounted = false; };
-    }, [user, userData, superAdminEmail, showNotification]);
+    }, [user, userData, showNotification]);
 
     useEffect(() => { if (user && userData) fetchData(); }, [user, userData, fetchData]); 
 
@@ -1592,6 +1709,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                                     dashboardAreaFilter={dashboardAreaFilter}
                                     setDashboardAreaFilter={setDashboardAreaFilter}
                                     todayHoursDetail={todayHoursDetail}
+                                    currentUserRole={currentUserRole}
                                 />
                             )}
                             {view === 'expenses' && (
@@ -1738,7 +1856,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                         /> 
                     )}
                     
-                    {showModal && !['editTimeEntry', 'addExpense', 'editExpense', 'processExpense'].includes(modalType) && ( <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} setModalType={setModalType} workAreas={activeVisibleWorkAreas} onDataUpdate={fetchData} user={user} superAdminEmail={superAdminEmail} allEmployees={allEmployees} currentUserRole={currentUserRole} userData={userData} activeEmployeesDetails={activeEmployeesDetails} onAdminApplyPause={handleEmployeePauseClick} showNotification={showNotification} /> )}
+                    {showModal && !['editTimeEntry', 'editExpense', 'processExpense'].includes(modalType) && ( <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} setModalType={setModalType} workAreas={activeVisibleWorkAreas} onDataUpdate={fetchData} user={user} superAdminEmail={superAdminEmail} allEmployees={allEmployees} currentUserRole={currentUserRole} userData={userData} activeEmployeesDetails={activeEmployeesDetails} onAdminApplyPause={handleEmployeePauseClick} showNotification={showNotification} /> )}
                 </div>
             )}
         </div>
