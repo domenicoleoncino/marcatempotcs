@@ -7,7 +7,6 @@ import LoginScreen from './components/LoginScreen';
 import AdminDashboard from './components/AdminDashboard';
 import EmployeeDashboard from './components/EmployeeDashboard';
 import ChangePasswordScreen from './components/ChangePasswordScreen';
-import SimpleEmployeeApp from './components/SimpleEmployeeApp';
 
 console.log("PROGETTO ATTUALMENTE IN USO:", process.env.REACT_APP_PROJECT_ID);
 
@@ -19,14 +18,11 @@ const App = () => {
     const [isAppActive, setIsAppActive] = useState(true);
     const [appStatusChecked, setAppStatusChecked] = useState(false);
 
-    // --- NUOVO STATO: Rilevamento Mobile ---
-    const [isMobile, setIsMobile] = useState(window.innerWidth < 900);
-
-    useEffect(() => {
-        const handleResize = () => setIsMobile(window.innerWidth < 900);
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
-    }, []);
+    // --- RICONOSCIMENTO AUTOMATICO SITO NETLIFY ---
+    const hostname = window.location.hostname;
+    const isSitoGestionale = hostname.includes('gestionale');
+    const isSitoMarcatempo = hostname.includes('marcatempo');
+    const isLocalhost = hostname.includes('localhost');
 
     useEffect(() => {
         const configRef = doc(db, 'app_config', 'status');
@@ -83,15 +79,12 @@ const App = () => {
                             };
                             setUserData(fullProfile);
                         } else {
-                            // Se è dipendente/preposto ma NON ha la scheda anagrafica:
                             setUserData({ ...baseProfile, id: authenticatedUser.uid, role: 'dati_corrotti_nessun_dipendente' });
                         }
                     } else {
-                        // Se il ruolo è una parola strana che non conosciamo
                         setUserData({ ...baseProfile, id: authenticatedUser.uid, role: safeRole || 'ruolo_vuoto' });
                     }
                 } else {
-                    // L'account esiste in Auth ma manca totalmente la riga nella tabella "users"
                     setUserData({ role: 'utente_non_trovato_nel_db', id: authenticatedUser.uid });
                 }
             } catch (dbError) {
@@ -138,6 +131,23 @@ const App = () => {
         }
     };
 
+    // --- COMPONENTE SCHERMATA D'ERRORE / BLOCCO ---
+    const ErrorScreen = ({ titolo, messaggio, motivoTecnico }) => (
+        <div style={{ padding: '40px', textAlign: 'center', color: '#b91c1c', fontFamily: 'sans-serif' }}>
+            <h1 style={{fontSize: '2rem', marginBottom: '10px'}}>{titolo}</h1>
+            <p style={{fontSize: '1.2rem', marginBottom: '20px'}}>{messaggio}</p>
+            {motivoTecnico && (
+                <div style={{background: '#fee2e2', padding: '15px', borderRadius: '12px', display: 'inline-block', marginBottom: '20px', color: '#991b1b', fontSize: '14px', maxWidth: '500px'}}>
+                    Codice di sistema: <b>{motivoTecnico}</b>
+                </div>
+            )}
+            <br/>
+            <button onClick={handleLogout} style={{ padding: '12px 24px', background: '#b91c1c', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px' }}>
+                Torna alla pagina di Login
+            </button>
+        </div>
+    );
+
     if (!appStatusChecked || !authChecked) {
         return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>Caricamento...</div>;
     }
@@ -161,43 +171,58 @@ const App = () => {
 
     const currentRole = userData.role;
 
-    // Controllo smistamento Dashboard
-    if (currentRole === 'admin' || currentRole === 'preposto' || currentRole === 'segreteria') {
-        return <AdminDashboard user={user} userData={userData} handleLogout={handleLogout} allWorkAreas={allWorkAreas} />;
+    // Controlli per gli errori critici di database (no account, no dipendente ecc.)
+    if (['utente_non_trovato_nel_db', 'dati_corrotti_nessun_dipendente', 'ruolo_vuoto'].includes(currentRole)) {
+        return <ErrorScreen titolo="Errore di Configurazione" messaggio="Il tuo account non è stato configurato correttamente dall'amministratore. Manca l'anagrafica in tabella." motivoTecnico={currentRole} />;
     }
-    
-    if (currentRole === 'dipendente') {
-       if (isMobile) {
-           return <SimpleEmployeeApp user={user} employeeData={userData} handleLogout={handleLogout} allWorkAreas={allWorkAreas} />;
-       } else {
-           return <EmployeeDashboard user={user} employeeData={userData} handleLogout={handleLogout} allWorkAreas={allWorkAreas} />;
-       }
+    if (!['admin', 'segreteria', 'preposto', 'dipendente'].includes(currentRole)) {
+        return <ErrorScreen titolo="Ruolo non Valido" messaggio={`Il ruolo assegnato (${currentRole}) non esiste nel sistema.`} motivoTecnico="ruolo_sconosciuto" />;
     }
 
-    // --- SCHERMATA DI ERRORE DETTAGLIATA ---
-    return (
-        <div style={{ padding: '40px', textAlign: 'center', color: '#b91c1c', fontFamily: 'sans-serif' }}>
-            <h1 style={{fontSize: '2rem', marginBottom: '10px'}}>Errore di Accesso</h1>
-            <p style={{fontSize: '1.2rem', marginBottom: '20px'}}>
-                Il sistema non riconosce il tuo account.<br/>
-                Motivo tecnico: <b style={{background: '#fef2f2', padding: '4px 8px', borderRadius: '4px'}}>{currentRole}</b>
-            </p>
-            
-            <div style={{background: '#fee2e2', padding: '20px', borderRadius: '12px', display: 'inline-block', marginBottom: '20px', textAlign: 'left', color: '#991b1b', fontSize: '15px', maxWidth: '500px'}}>
-                <b>Cosa significa questo errore?</b>
-                <ul style={{margin: '10px 0 0 0', paddingLeft: '20px'}}>
-                    {currentRole === 'utente_non_trovato_nel_db' && <li>La tua email è su Firebase Auth, ma manca il tuo profilo nella tabella "Utenti". (Accedi come admin e crea il profilo utente per questa email).</li>}
-                    {currentRole === 'dati_corrotti_nessun_dipendente' && <li>Hai un ruolo da Dipendente/Preposto, ma manca la tua anagrafica nella scheda Personale. (Accedi come admin, vai su Personale e ricrea la scheda).</li>}
-                    {currentRole === 'ruolo_vuoto' && <li>Sei registrato, ma non ti è stato assegnato nessun ruolo (Admin, Dipendente, Segreteria).</li>}
-                    {!['utente_non_trovato_nel_db', 'dati_corrotti_nessun_dipendente', 'ruolo_vuoto'].includes(currentRole) && <li>Il ruolo <b>"{currentRole}"</b> inserito nel database non è valido o scritto male.</li>}
-                </ul>
-            </div>
-            <br/>
-            <button onClick={handleLogout} style={{ padding: '12px 24px', background: '#b91c1c', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px' }}>
-                Torna al Login
-            </button>
-        </div>
-    );
+    // ==========================================
+    // 1. LOGICA SITO GESTIONALE (Amm.ne)
+    // ==========================================
+    if (isSitoGestionale) {
+        if (userData.bloccaGestionale) {
+            return <ErrorScreen titolo="Accesso Sospeso 🚫" messaggio="I tuoi permessi per il Gestionale sono stati revocati." />;
+        }
+        if (currentRole === 'dipendente') {
+            return <ErrorScreen titolo="Area Riservata 🛑" messaggio="Questa è l'area uffici. Per timbrare il cartellino devi usare il sito: marcatempotcsitalia.netlify.app" />;
+        }
+        return <AdminDashboard user={user} userData={userData} handleLogout={handleLogout} allWorkAreas={allWorkAreas} />;
+    }
+
+    // ==========================================
+    // 2. LOGICA SITO MARCATEMPO (Dipendenti)
+    // ==========================================
+    if (isSitoMarcatempo) {
+        if (userData.bloccaMarcatempo) {
+            return <ErrorScreen titolo="Marcatempo Bloccato 🚫" messaggio="I tuoi permessi per l'app Marcatempo sono stati revocati." />;
+        }
+        
+        // Risoluzione errore cellulari: tutti i dipendenti vedono EmployeeDashboard
+        if (currentRole === 'dipendente') {
+            return <EmployeeDashboard user={user} employeeData={userData} handleLogout={handleLogout} allWorkAreas={allWorkAreas} />;
+        }
+
+        // Se Segreteria/Admin/Preposto aprono il marcatempo per timbrare col GPS
+        return <AdminDashboard user={user} userData={userData} handleLogout={handleLogout} allWorkAreas={allWorkAreas} />;
+    }
+
+    // ==========================================
+    // 3. LOGICA LOCALHOST (Ambiente di Sviluppo su PC)
+    // ==========================================
+    if (isLocalhost) {
+        if (currentRole === 'dipendente') {
+            if (userData.bloccaMarcatempo) return <ErrorScreen titolo="Accesso Sospeso 🚫" messaggio="Test in locale: Marcatempo bloccato per te." />;
+            return <EmployeeDashboard user={user} employeeData={userData} handleLogout={handleLogout} allWorkAreas={allWorkAreas} />;
+        } else {
+            if (userData.bloccaGestionale) return <ErrorScreen titolo="Accesso Sospeso 🚫" messaggio="Test in locale: Gestionale bloccato per te." />;
+            return <AdminDashboard user={user} userData={userData} handleLogout={handleLogout} allWorkAreas={allWorkAreas} />;
+        }
+    }
+
+    return <ErrorScreen titolo="Errore Indirizzo" messaggio="Stai accedendo da un link non riconosciuto dal sistema." />;
 };
 
 export default App;
