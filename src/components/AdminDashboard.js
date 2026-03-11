@@ -163,7 +163,7 @@ const NotificationPopup = ({ message, type, onClose }) => {
 const AddExpenseModal = ({ show, onClose, user, userData, showNotification, expenseToEdit }) => {
     const [amount, setAmount] = useState('');
     const [description, setDescription] = useState('');
-    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+    const [date, setDate] = useState(dayjs().format('YYYY-MM-DD'));
     const [note, setNote] = useState('');
     const [file, setFile] = useState(null); 
     const [isSaving, setIsSaving] = useState(false);
@@ -171,10 +171,10 @@ const AddExpenseModal = ({ show, onClose, user, userData, showNotification, expe
     useEffect(() => {
         if (expenseToEdit) {
             setAmount(expenseToEdit.amount); setDescription(expenseToEdit.description);
-            if (expenseToEdit.date && expenseToEdit.date.toDate) { setDate(expenseToEdit.date.toDate().toISOString().split('T')[0]); } else if (expenseToEdit.date) { setDate(new Date(expenseToEdit.date).toISOString().split('T')[0]); }
+            if (expenseToEdit.date && expenseToEdit.date.toDate) { setDate(dayjs(expenseToEdit.date.toDate()).format('YYYY-MM-DD')); } else if (expenseToEdit.date) { setDate(dayjs(expenseToEdit.date).format('YYYY-MM-DD')); }
             setNote(expenseToEdit.note || ''); setFile(null); 
         } else {
-            setAmount(''); setDescription(''); setNote(''); setFile(null); setDate(new Date().toISOString().split('T')[0]);
+            setAmount(''); setDescription(''); setNote(''); setFile(null); setDate(dayjs().format('YYYY-MM-DD'));
         }
     }, [expenseToEdit, show]);
 
@@ -187,7 +187,8 @@ const AddExpenseModal = ({ show, onClose, user, userData, showNotification, expe
                 const fileRef = ref(storage, `expenses/${user.uid}/${Date.now()}_${file.name}`);
                 const snapshot = await uploadBytes(fileRef, file); receiptUrl = await getDownloadURL(snapshot.ref);
             }
-            const expenseData = { amount: parseFloat(amount), description, note, date: Timestamp.fromDate(new Date(date)), userId: expenseToEdit ? expenseToEdit.userId : user.uid, userName: expenseToEdit ? expenseToEdit.userName : (userData?.name ? `${userData.name} ${userData.surname}` : user.email), userRole: expenseToEdit ? expenseToEdit.userRole : (userData?.role || 'unknown'), receiptUrl, status: expenseToEdit ? expenseToEdit.status : 'pending', updatedAt: Timestamp.now() };
+            const dateObj = dayjs(date).toDate();
+            const expenseData = { amount: parseFloat(amount), description, note, date: Timestamp.fromDate(dateObj), userId: expenseToEdit ? expenseToEdit.userId : user.uid, userName: expenseToEdit ? expenseToEdit.userName : (userData?.name ? `${userData.name} ${userData.surname}` : user.email), userRole: expenseToEdit ? expenseToEdit.userRole : (userData?.role || 'unknown'), receiptUrl, status: expenseToEdit ? expenseToEdit.status : 'pending', updatedAt: Timestamp.now() };
             if (expenseToEdit) { await updateDoc(doc(db, "expenses", expenseToEdit.id), expenseData); showNotification("Spesa aggiornata con successo!", "success"); } else { expenseData.createdAt = Timestamp.now(); await addDoc(collection(db, "expenses"), expenseData); showNotification("Spesa registrata con successo!", "success"); }
             onClose();
         } catch (error) { showNotification("Errore: " + error.message, "error"); } finally { setIsSaving(false); }
@@ -222,9 +223,15 @@ const ProcessExpenseModal = ({ show, onClose, expense, bulkExpenses, isBulk, onC
 };
 
 const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) => {
-    const formatDateForInput = (dateStr) => { if (!dateStr) return ''; const parts = dateStr.split('/'); if (parts.length === 3) return `${parts[2]}-${parts[1]}-${parts[0]}`; return dateStr; };
-    const [skipPause, setSkipPause] = useState(!!entry.skippedBreak);
+    const formatDateForInput = (dateStr) => { 
+        if (!dateStr) return ''; 
+        if (dateStr.includes('-')) return dateStr;
+        const parts = dateStr.split('/'); 
+        if (parts.length === 3) return `${parts[2]}-${parts[1]}-${parts[0]}`; 
+        return dateStr; 
+    };
     
+    const [skipPause, setSkipPause] = useState(!!entry.skippedBreak);
     const isOngoing = !entry.clockOutTimeFormatted || entry.clockOutTimeFormatted === 'In corso' || entry.clockOutTimeFormatted.includes('-');
     
     const [formData, setFormData] = useState({ 
@@ -247,7 +254,29 @@ const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) =>
     };
 
     const inputStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', marginBottom: '15px', boxSizing: 'border-box' };
-    return ReactDOM.createPortal( <><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',backgroundColor:'rgba(0,0,0,0.6)',zIndex:99998}} onClick={onClose}/><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',zIndex:99999,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}><div style={{backgroundColor:'#fff',width:'100%',maxWidth:'500px',borderRadius:'12px',overflow:'hidden',pointerEvents:'auto', margin: '0 15px'}} onClick={e=>e.stopPropagation()}><div style={{padding:'20px'}}><h3 style={{margin:0, marginBottom:'20px', fontSize:'18px', fontWeight:'bold', color:'#0f172a'}}>✏️ Modifica Timbratura</h3><form onSubmit={handleSubmit}><div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Data</label><input type="date" name="date" value={formData.date} onChange={handleChange} style={inputStyle}/></div>{!entry.isAbsence && <div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Area/Cantiere</label><select name="workAreaId" value={formData.workAreaId} onChange={handleChange} style={inputStyle}>{workAreas.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></div>}<div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Ora Ingresso</label><input type="time" name="clockInTime" value={formData.clockInTime} onChange={handleChange} style={inputStyle}/></div>{!entry.isAbsence && <div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Ora Uscita (Lascia vuoto se ancora a lavoro)</label><input type="time" name="clockOutTime" value={formData.clockOutTime} onChange={handleChange} style={inputStyle}/></div>}<div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'15px'}}><input type="checkbox" checked={skipPause} onChange={e=>setSkipPause(e.target.checked)} style={{width:'18px', height:'18px'}}/><label style={{fontWeight:'bold', color:'#0f172a'}}>Rimuovi Pausa (Nessuna pausa effettuata)</label></div><div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Note</label><textarea name="note" value={formData.note} onChange={handleChange} style={inputStyle}/></div><div style={{display:'flex', justifyContent:'flex-end', gap:'10px'}}><button type="button" onClick={onClose} className="modern-btn-outline">Annulla</button><button type="submit" disabled={isLoading} className="modern-btn">Salva Modifiche</button></div></form></div></div></div></>, document.body );
+    return ReactDOM.createPortal( <><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',backgroundColor:'rgba(0,0,0,0.6)',zIndex:99998}} onClick={onClose}/><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',zIndex:99999,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}><div style={{backgroundColor:'#fff',width:'100%',maxWidth:'500px',borderRadius:'12px',overflow:'hidden',pointerEvents:'auto', margin: '0 15px'}} onClick={e=>e.stopPropagation()}><div style={{padding:'20px'}}><h3 style={{margin:0, marginBottom:'20px', fontSize:'18px', fontWeight:'bold', color:'#0f172a'}}>{entry.isAbsence ? '📝 Giustifica Assenza' : '✏️ Modifica Timbratura'}</h3><form onSubmit={handleSubmit}><div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Data</label><input type="date" name="date" value={formData.date} onChange={handleChange} style={inputStyle}/></div>{!entry.isAbsence && <div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Area/Cantiere</label><select name="workAreaId" value={formData.workAreaId} onChange={handleChange} style={inputStyle}>{workAreas.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></div>}{!entry.isAbsence && <div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Ora Ingresso</label><input type="time" name="clockInTime" value={formData.clockInTime} onChange={handleChange} style={inputStyle}/></div>}{!entry.isAbsence && <div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Ora Uscita (Lascia vuoto se ancora a lavoro)</label><input type="time" name="clockOutTime" value={formData.clockOutTime} onChange={handleChange} style={inputStyle}/></div>}{!entry.isAbsence && <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'15px'}}><input type="checkbox" checked={skipPause} onChange={e=>setSkipPause(e.target.checked)} style={{width:'18px', height:'18px'}}/><label style={{fontWeight:'bold', color:'#0f172a'}}>Rimuovi Pausa (Nessuna pausa effettuata)</label></div>}<div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Note</label><textarea name="note" value={formData.note} onChange={handleChange} style={inputStyle}/></div><div style={{display:'flex', justifyContent:'flex-end', gap:'10px'}}><button type="button" onClick={onClose} className="modern-btn-outline">Annulla</button><button type="submit" disabled={isLoading} className="modern-btn">Salva Modifiche</button></div></form></div></div></div></>, document.body );
+};
+
+// --- MODALE CAMBIO RUOLO UTENTE ---
+const ChangeRoleModal = ({ show, onClose, userToChange, onSave, isSaving }) => {
+    const [newRole, setNewRole] = useState('preposto');
+
+    useEffect(() => {
+        if (userToChange) setNewRole(userToChange.role || 'preposto');
+    }, [userToChange]);
+
+    if (!show || !userToChange) return null;
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        onSave(userToChange.id, newRole);
+    };
+
+    const inputStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', marginBottom: '15px', boxSizing: 'border-box' };
+
+    return ReactDOM.createPortal(
+        <><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',backgroundColor:'rgba(0,0,0,0.6)',zIndex:99998}} onClick={onClose}/><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',zIndex:99999,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}><div style={{backgroundColor:'#fff',width:'100%',maxWidth:'400px',borderRadius:'12px',overflow:'hidden',pointerEvents:'auto', margin: '0 15px'}} onClick={e=>e.stopPropagation()}><div style={{padding:'20px'}}><h3 style={{margin:0, marginBottom:'20px', fontSize:'18px', fontWeight:'bold', color:'#0f172a'}}>🔄 Cambia Ruolo Utente</h3><div style={{marginBottom: '15px'}}>Stai modificando il ruolo di: <b>{userToChange.name} {userToChange.surname}</b></div><form onSubmit={handleSubmit}><div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Nuovo Ruolo</label><select value={newRole} onChange={e => setNewRole(e.target.value)} style={inputStyle}><option value="admin">Amministratore (Pieno Controllo)</option><option value="segreteria">Segreteria (Gestione e Dati)</option><option value="preposto">Preposto (Solo propri Cantieri)</option></select></div><div style={{display:'flex', justifyContent:'flex-end', gap:'10px'}}><button type="button" onClick={onClose} className="modern-btn-outline">Annulla</button><button type="submit" disabled={isSaving} className="modern-btn" style={{background:'#8b5cf6'}}>Salva Ruolo</button></div></form></div></div></div></>, document.body
+    );
 };
 
 const AddEmployeeToAreaModal = ({ show, onClose, allEmployees, workAreas, userData, showNotification, onDataUpdate }) => {
@@ -262,7 +291,7 @@ const AddEmployeeToAreaModal = ({ show, onClose, allEmployees, workAreas, userDa
 
 const AddFormModal = ({ show, onClose, workAreas, user, onDataUpdate, currentUserRole, userData, showNotification }) => {
     const [formTitle, setFormTitle] = useState(''); const [formUrl, setFormUrl] = useState(''); const [formAreaId, setFormAreaId] = useState(''); const [isSaving, setIsSaving] = useState(false);
-    const availableAreas = useMemo(() => { if (currentUserRole === 'admin') return workAreas; if (currentUserRole === 'preposto' && userData?.managedAreaIds) return workAreas.filter(a => userData.managedAreaIds.includes(a.id)); return []; }, [currentUserRole, userData, workAreas]);
+    const availableAreas = useMemo(() => { if (currentUserRole === 'admin' || currentUserRole === 'segreteria') return workAreas; if (currentUserRole === 'preposto' && userData?.managedAreaIds) return workAreas.filter(a => userData.managedAreaIds.includes(a.id)); return []; }, [currentUserRole, userData, workAreas]);
     if (!show) return null;
     const handleSave = async (e) => { e.preventDefault(); if (!formTitle || !formUrl || !formAreaId) return; setIsSaving(true); try { await addDoc(collection(db, "area_forms"), { title: formTitle, url: formUrl, workAreaId: formAreaId, createdBy: user.email, createdAt: Timestamp.now() }); showNotification("Modulo creato!", "success"); onDataUpdate(); onClose(); setFormTitle(''); setFormUrl(''); setFormAreaId(''); } catch (error) { showNotification("Errore", "error"); } finally { setIsSaving(false); } };
     const inputStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', marginBottom: '15px', boxSizing: 'border-box' };
@@ -280,26 +309,25 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
             <table className="modern-table">
                 <thead>
                     <tr>
-                        <th style={{cursor: 'pointer'}} onClick={() => requestSort('name')}>Dipendente {getSortIndicator('name')}</th>
-                        <th>Stato Attuale</th>
-                        <th>Aree Assegnate</th>
-                        <th style={{textAlign: 'right'}}>Azioni</th>
+                        <th style={{cursor: 'pointer'}} onClick={() => requestSort('name')}><span>Dipendente</span> {getSortIndicator('name')}</th>
+                        <th><span>Stato Attuale</span></th>
+                        <th><span>Aree Assegnate</span></th>
+                        <th style={{textAlign: 'right'}}><span>Azioni</span></th>
                     </tr>
                 </thead>
                 <tbody>
                     {employees.map(emp => {
                         const isClockedIn = !!emp.activeEntry;
-                        const hasCompletedPause = emp.activeEntry?.pauses && emp.activeEntry.pauses.length > 0;
                         const initial = emp.name ? emp.name.charAt(0).toUpperCase() : '?';
 
                         return (
                             <tr key={emp.id} style={{ opacity: emp.isDeleted ? 0.6 : 1, background: emp.isDeleted ? '#fdf2f8' : 'transparent' }}>
                                 <td data-label="Dipendente">
                                     <div style={{display: 'flex', alignItems: 'center', gap: '12px', justifyContent: window.innerWidth <= 768 ? 'flex-end' : 'flex-start'}}>
-                                        <div className="modern-avatar">{initial}</div>
+                                        <div className="modern-avatar"><span>{initial}</span></div>
                                         <div style={{textAlign: window.innerWidth <= 768 ? 'right' : 'left'}}>
                                             <div style={{fontWeight: '700', color: emp.isDeleted ? '#be123c' : '#1e293b', textDecoration: emp.isDeleted ? 'line-through' : 'none'}}>
-                                                {emp.name} {emp.surname}
+                                                <span>{emp.name} {emp.surname}</span>
                                             </div>
                                             {emp.isDeleted && <span style={{fontSize: '11px', color: '#be123c', fontWeight: 'bold'}}>ARCHIVIATO</span>}
                                         </div>
@@ -311,20 +339,20 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                                             <span className="modern-badge purple">{emp.activeEntry.note || 'GIUSTIFICATO'}</span> 
                                         : 
                                             <span className={`modern-badge ${isClockedIn ? 'green' : 'red'}`}>
-                                                {isClockedIn ? '🟢 Al Lavoro' : '🔴 Non al lavoro'}
+                                                <span>{isClockedIn ? '🟢 Al Lavoro' : '🔴 Non al lavoro'}</span>
                                             </span>
                                     }
                                 </td>
                                 <td data-label="Aree Assegnate">
                                     <div style={{maxWidth: '250px', whiteSpace: 'normal', overflow: 'hidden', color: '#64748b', fontSize: '13px', textAlign: window.innerWidth <= 768 ? 'right' : 'left'}}>
-                                        {emp.workAreaNames?.join(', ') || 'Nessuna area'}
+                                        <span>{emp.workAreaNames?.join(', ') || 'Nessuna area'}</span>
                                     </div>
                                 </td>
                                 <td data-label="Azioni" className="actions-cell">
                                     {!emp.isDeleted ? (
-                                        <button onClick={() => openModal('employeeActions', emp)} className="modern-btn">⚙️ Gestisci</button>
+                                        <button onClick={() => openModal('employeeActions', emp)} className="modern-btn"><span>⚙️ Gestisci</span></button>
                                     ) : (
-                                        currentUserRole === 'admin' && <button onClick={()=>openModal('restoreEmployee', emp)} className="modern-btn-outline" style={{color: '#16a34a', borderColor: '#bbf7d0'}}>♻️ Ripristina</button>
+                                        (currentUserRole === 'admin' || currentUserRole === 'segreteria') && <button onClick={()=>openModal('restoreEmployee', emp)} className="modern-btn-outline" style={{color: '#16a34a', borderColor: '#bbf7d0'}}><span>♻️ Ripristina</span></button>
                                     )}
                                 </td>
                             </tr>
@@ -332,7 +360,7 @@ const EmployeeManagementView = ({ employees, openModal, currentUserRole, sortCon
                     })}
                 </tbody>
             </table>
-            {employees.length === 0 && <div style={{padding: '30px', textAlign: 'center', color: '#94a3b8', fontWeight: 'bold'}}>Nessun dipendente trovato.</div>}
+            {employees.length === 0 && <div style={{padding: '30px', textAlign: 'center', color: '#94a3b8', fontWeight: 'bold'}}><span>Nessun dipendente trovato.</span></div>}
         </div>
     );
 };
@@ -350,28 +378,28 @@ const AreaManagementView = ({ workAreas, openModal, currentUserRole, handleArchi
             <div className="modern-title" style={{border: 'none', marginBottom: '10px'}}>
                 <div style={{display:'flex', gap:'10px', width:'100%', flexWrap: 'wrap'}}>
                     <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="🔍 Cerca cantiere..." className="modern-input" style={{flex: 1, minWidth: '200px', maxWidth: '100%'}} />
-                    <button onClick={() => setShowArchived(!showArchived)} className="modern-btn-outline" style={{width: window.innerWidth <= 768 ? '100%' : 'auto'}}>{showArchived ? '📂 Nascondi Archiviate' : '📂 Mostra Archiviate'}</button>
+                    <button onClick={() => setShowArchived(!showArchived)} className="modern-btn-outline" style={{width: window.innerWidth <= 768 ? '100%' : 'auto'}}><span>{showArchived ? '📂 Nascondi Archiviate' : '📂 Mostra Archiviate'}</span></button>
                 </div>
             </div>
             <div className="modern-table-wrapper">
                 <table className="modern-table">
-                    <thead><tr><th>Nome Cantiere</th><th>Ore Erogate</th><th>Pausa Default</th>{currentUserRole === 'admin' && (<><th>Coordinate GPS</th><th>Raggio</th></>)}<th style={{textAlign:'right'}}>Azioni</th></tr></thead>
+                    <thead><tr><th><span>Nome Cantiere</span></th><th><span>Ore Erogate</span></th><th><span>Pausa Default</span></th>{(currentUserRole === 'admin' || currentUserRole === 'segreteria') && (<><th><span>Coordinate GPS</span></th><th><span>Raggio</span></th></>)}<th style={{textAlign:'right'}}><span>Azioni</span></th></tr></thead>
                     <tbody>
                         {filteredAreas.map(area => (
                             <tr key={area.id} style={{ opacity: area.isArchived ? 0.6 : 1, background: area.isArchived ? '#f8fafc' : 'transparent' }}>
-                                <td data-label="Cantiere" style={{fontWeight: '700', color: '#1e293b'}}>{area.isArchived && "🔒 "}{area.name}</td>
-                                <td data-label="Ore Erogate"><span className="modern-badge blue">{area.totalHours ? `${area.totalHours}h` : '0h'}</span></td>
-                                <td data-label="Pausa"><span className="modern-badge outline" style={{border: '1px solid #cbd5e1', color: '#64748b'}}>⏱️ {area.pauseDuration || 0} min</span></td>
-                                {currentUserRole === 'admin' && (<><td data-label="GPS" style={{fontFamily: 'monospace', color: '#94a3b8'}}>{area.latitude?.toFixed(4)}, {area.longitude?.toFixed(4)}</td><td data-label="Raggio">{area.radius || 0}m</td></>)}
+                                <td data-label="Cantiere" style={{fontWeight: '700', color: '#1e293b'}}><span>{area.isArchived && "🔒 "}{area.name}</span></td>
+                                <td data-label="Ore Erogate"><span className="modern-badge blue"><span>{area.totalHours ? `${area.totalHours}h` : '0h'}</span></span></td>
+                                <td data-label="Pausa"><span className="modern-badge outline" style={{border: '1px solid #cbd5e1', color: '#64748b'}}><span>⏱️ {area.pauseDuration || 0} min</span></span></td>
+                                {(currentUserRole === 'admin' || currentUserRole === 'segreteria') && (<><td data-label="GPS" style={{fontFamily: 'monospace', color: '#94a3b8'}}><span>{area.latitude?.toFixed(4)}, {area.longitude?.toFixed(4)}</span></td><td data-label="Raggio"><span>{area.radius || 0}m</span></td></>)}
                                 <td data-label="Azioni" className="actions-cell">
                                     {!area.isArchived ? (
                                         <>
-                                            {currentUserRole === 'admin' && <button onClick={() => openModal('editArea', area)} className="modern-btn-outline" style={{color:'#2563eb', borderColor:'#bfdbfe'}}>✏️ Modifica</button>}
-                                            {currentUserRole === 'preposto' && <button onClick={() => openModal('editAreaPauseOnly', area)} className="modern-btn-outline">⏱️ Pausa</button>}
-                                            {currentUserRole === 'admin' && <button onClick={() => handleArchiveArea(area)} className="modern-btn-danger">📂 Archivia</button>}
+                                            {(currentUserRole === 'admin' || currentUserRole === 'segreteria') && <button onClick={() => openModal('editArea', area)} className="modern-btn-outline" style={{color:'#2563eb', borderColor:'#bfdbfe'}}><span>✏️ Modifica</span></button>}
+                                            {currentUserRole === 'preposto' && <button onClick={() => openModal('editAreaPauseOnly', area)} className="modern-btn-outline"><span>⏱️ Pausa</span></button>}
+                                            {(currentUserRole === 'admin' || currentUserRole === 'segreteria') && <button onClick={() => handleArchiveArea(area)} className="modern-btn-danger"><span>📂 Archivia</span></button>}
                                         </>
                                     ) : (
-                                        currentUserRole === 'admin' && <button onClick={() => handleRestoreArea(area)} className="modern-btn" style={{background: '#16a34a'}}>♻️ Ripristina</button>
+                                        (currentUserRole === 'admin' || currentUserRole === 'segreteria') && <button onClick={() => handleRestoreArea(area)} className="modern-btn" style={{background: '#16a34a'}}><span>♻️ Ripristina</span></button>
                                     )}
                                 </td>
                             </tr>
@@ -383,28 +411,35 @@ const AreaManagementView = ({ workAreas, openModal, currentUserRole, handleArchi
     );
 };
 
-const AdminManagementView = ({ admins, openModal, user, superAdminEmail, currentUserRole, onDataUpdate, searchTerm }) => {
-    if (currentUserRole !== 'admin') { return <div className="modern-card"><div style={{color:'#ef4444'}}>Accesso negato.</div></div>; }
+const AdminManagementView = ({ admins, openModal, user, superAdminEmail, currentUserRole, onDataUpdate, searchTerm, onOpenRoleModal }) => {
+    if (currentUserRole !== 'admin') { return <div className="modern-card"><span><div style={{color:'#ef4444'}}>Accesso negato.</div></span></div>; }
     const filteredAdmins = admins.filter(admin => admin.email !== superAdminEmail);
     const displayedAdmins = filteredAdmins.filter(admin => { if (!searchTerm) return true; const term = searchTerm.toLowerCase(); return (`${admin.name} ${admin.surname}`.toLowerCase().includes(term) || admin.email.toLowerCase().includes(term)); });
     
+    const isSuperAdmin = user?.email === superAdminEmail;
+
     return (
         <div className="modern-table-wrapper">
             <table className="modern-table">
-                <thead><tr><th>Utente</th><th>Ruolo</th><th>Aree Assegnate</th><th style={{textAlign:'right'}}>Azioni</th></tr></thead>
+                <thead><tr><th><span>Utente</span></th><th><span>Ruolo</span></th><th><span>Aree Assegnate</span></th><th style={{textAlign:'right'}}><span>Azioni</span></th></tr></thead>
                 <tbody>
                     {displayedAdmins.map(admin => (
                         <tr key={admin.id}>
-                            <td data-label="Utente"><div style={{fontWeight:'700', color:'#0f172a'}}>{admin.name} {admin.surname}</div><div style={{fontSize:'12px', color:'#64748b'}}>{admin.email}</div></td>
-                            <td data-label="Ruolo"><span className={`modern-badge ${admin.role === 'admin' ? 'purple' : 'blue'}`}>{admin.role}</span></td>
-                            <td data-label="Aree" style={{color:'#64748b'}}>{admin.managedAreaNames?.join(', ') || '-'}</td>
+                            <td data-label="Utente"><div style={{fontWeight:'700', color:'#0f172a'}}><span>{admin.name} {admin.surname}</span></div><div style={{fontSize:'12px', color:'#64748b'}}><span>{admin.email}</span></div></td>
+                            <td data-label="Ruolo"><span className={`modern-badge ${admin.role === 'admin' ? 'purple' : admin.role === 'segreteria' ? 'orange' : 'blue'}`}><span>{admin.role}</span></span></td>
+                            <td data-label="Aree" style={{color:'#64748b'}}><span>{admin.managedAreaNames?.join(', ') || '-'}</span></td>
                             <td data-label="Azioni" className="actions-cell">
-                                {currentUserRole === 'admin' && (<button onClick={() => openModal('deleteAdmin', admin)} className="modern-btn-danger" disabled={admin.email === user?.email}>🗑️ Elimina</button>)}
-                                {admin.role === 'preposto' && (<button onClick={() => openModal('assignPrepostoAreas', admin)} className="modern-btn" style={{background:'#3b82f6'}}>🌍 Aree</button>)}
+                                {isSuperAdmin && (
+                                    <button onClick={() => onOpenRoleModal(admin)} className="modern-btn-outline" style={{borderColor: '#8b5cf6', color: '#8b5cf6'}}>
+                                        <span>🔄 Ruolo</span>
+                                    </button>
+                                )}
+                                {currentUserRole === 'admin' && (<button onClick={() => openModal('deleteAdmin', admin)} className="modern-btn-danger" disabled={admin.email === user?.email}><span>🗑️ Elimina</span></button>)}
+                                {admin.role === 'preposto' && (<button onClick={() => openModal('assignPrepostoAreas', admin)} className="modern-btn" style={{background:'#3b82f6'}}><span>🌍 Aree</span></button>)}
                             </td>
                         </tr>
                     ))}
-                    {displayedAdmins.length === 0 && <tr><td colSpan={4} style={{textAlign:'center', padding:'30px', color:'#94a3b8'}}>Nessun admin trovato.</td></tr>}
+                    {displayedAdmins.length === 0 && <tr><td colSpan={4} style={{textAlign:'center', padding:'30px', color:'#94a3b8'}}><span>Nessun utente trovato.</span></td></tr>}
                 </tbody>
             </table>
         </div>
@@ -416,7 +451,7 @@ const ExpensesView = ({ expenses, onProcessExpense, onBulkProcessExpense, onEdit
         const isClosed = exp.status === 'closed' || exp.status === 'paid';
         const matchesArchive = showArchived ? isClosed : !isClosed;
         const isOwner = exp.userId === user.uid;
-        if (currentUserRole !== 'admin' && !isOwner) return false;
+        if (currentUserRole !== 'admin' && currentUserRole !== 'segreteria' && !isOwner) return false;
         if (searchTerm) { if (!exp.userName || !exp.userName.toLowerCase().includes(searchTerm.toLowerCase())) return false; }
         return matchesArchive;
     });
@@ -425,40 +460,40 @@ const ExpensesView = ({ expenses, onProcessExpense, onBulkProcessExpense, onEdit
 
     return (
         <div>
-            {!showArchived && currentUserRole === 'admin' && displayedExpenses.length > 0 && (
+            {!showArchived && (currentUserRole === 'admin' || currentUserRole === 'segreteria') && displayedExpenses.length > 0 && (
                 <div style={{marginBottom: 15, display: 'flex', justifyContent: 'flex-end'}}>
                      <button 
                          onClick={() => onBulkProcessExpense(displayedExpenses)} 
                          className="modern-btn" 
                          style={{background: '#52c41a', fontSize: '15px'}}
                      >
-                         ✅ Salda Tutte le Spese Visibili (€ {totalAmount.toFixed(2)})
+                         <span>✅ Salda Tutte le Spese Visibili (€ {totalAmount.toFixed(2)})</span>
                      </button>
                 </div>
             )}
             
             <div className="modern-table-wrapper">
                 <table className="modern-table">
-                    <thead><tr><th>Data</th><th>Dipendente</th><th>Dettaglio</th><th>Allegato</th><th>Importo</th><th style={{textAlign:'right'}}>Azione</th></tr></thead>
+                    <thead><tr><th><span>Data</span></th><th><span>Dipendente</span></th><th><span>Dettaglio</span></th><th><span>Allegato</span></th><th><span>Importo</span></th><th style={{textAlign:'right'}}><span>Azione</span></th></tr></thead>
                     <tbody>
                         {displayedExpenses.map(exp => (
                             <tr key={exp.id}>
-                                <td data-label="Data" style={{color: '#64748b', fontWeight:'600'}}>{exp.date && exp.date.toDate ? exp.date.toDate().toLocaleDateString('it-IT') : new Date(exp.date).toLocaleDateString('it-IT')}</td>
-                                <td data-label="Dipendente"><div style={{fontWeight: '700', color: '#0f172a'}}>{exp.userName}</div></td>
-                                <td data-label="Dettaglio"><div style={{fontWeight: '600'}}>{exp.description}</div><div style={{fontSize:'12px', color:'#94a3b8'}}>{exp.note}</div></td>
-                                <td data-label="Allegato">{exp.receiptUrl ? <a href={exp.receiptUrl} target="_blank" rel="noreferrer" style={{color:'#2563eb', fontWeight:'bold', textDecoration:'none'}}>📎 Apri</a> : <span style={{color:'#cbd5e1'}}>-</span>}</td>
-                                <td data-label="Importo"><span className="modern-badge green" style={{fontSize:'14px'}}>€ {parseFloat(exp.amount).toFixed(2)}</span></td>
+                                <td data-label="Data" style={{color: '#64748b', fontWeight:'600'}}><span>{exp.date && exp.date.toDate ? exp.date.toDate().toLocaleDateString('it-IT') : new Date(exp.date).toLocaleDateString('it-IT')}</span></td>
+                                <td data-label="Dipendente"><div style={{fontWeight: '700', color: '#0f172a'}}><span>{exp.userName}</span></div></td>
+                                <td data-label="Dettaglio"><div style={{fontWeight: '600'}}><span>{exp.description}</span></div><div style={{fontSize:'12px', color:'#94a3b8'}}><span>{exp.note}</span></div></td>
+                                <td data-label="Allegato">{exp.receiptUrl ? <a href={exp.receiptUrl} target="_blank" rel="noreferrer" style={{color:'#2563eb', fontWeight:'bold', textDecoration:'none'}}><span>📎 Apri</span></a> : <span style={{color:'#cbd5e1'}}>-</span>}</td>
+                                <td data-label="Importo"><span className="modern-badge green" style={{fontSize:'14px'}}><span>€ {parseFloat(exp.amount).toFixed(2)}</span></span></td>
                                 <td data-label="Azioni" className="actions-cell">
                                     {!showArchived ? (
-                                        currentUserRole === 'admin' ? <button onClick={() => onProcessExpense(exp)} className="modern-btn" style={{background:'#16a34a'}}>✅ Gestisci</button> 
-                                        : <button onClick={() => onEditExpense(exp)} className="modern-btn" style={{background:'#f59e0b'}}>✏️ Modifica</button>
+                                        (currentUserRole === 'admin' || currentUserRole === 'segreteria') ? <button onClick={() => onProcessExpense(exp)} className="modern-btn" style={{background:'#16a34a'}}><span>✅ Gestisci</span></button> 
+                                        : <button onClick={() => onEditExpense(exp)} className="modern-btn" style={{background:'#f59e0b'}}><span>✏️ Modifica</span></button>
                                     ) : (
-                                        <span className="modern-badge outline" style={{border:'1px solid #cbd5e1', color:'#64748b'}}>Chiuso: {exp.adminPaymentMethod}</span>
+                                        <span className="modern-badge outline" style={{border:'1px solid #cbd5e1', color:'#64748b'}}><span>Chiuso: {exp.adminPaymentMethod}</span></span>
                                     )}
                                 </td>
                             </tr>
                         ))}
-                        {displayedExpenses.length === 0 && <tr><td colSpan={6} style={{textAlign:'center', padding:'30px', color:'#94a3b8'}}>Nessuna spesa trovata.</td></tr>}
+                        {displayedExpenses.length === 0 && <tr><td colSpan={6} style={{textAlign:'center', padding:'30px', color:'#94a3b8'}}><span>Nessuna spesa trovata.</span></td></tr>}
                     </tbody>
                 </table>
             </div>
@@ -468,23 +503,47 @@ const ExpensesView = ({ expenses, onProcessExpense, onBulkProcessExpense, onEdit
 
 const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, allEmployees, currentUserRole, userData, setDateRange, setReportAreaFilter, reportAreaFilter, reportEmployeeFilter, setReportEmployeeFilter, generateReport, isLoading, isActionLoading, managedEmployees, showNotification, handleReviewSkipBreak, onEditEntry, handleSaveEntryEdit }) => {
     
+    // --- FUNZIONE PER TRADURRE L'ASSENZA IN UNA SIGLA CORTA ---
+    const getAbsenceCode = (label) => {
+        if (!label) return 'A';
+        const l = label.toUpperCase();
+        if (l.includes('FERIE')) return 'F';
+        if (l.includes('MALATTIA')) return 'M';
+        if (l.includes('INFORTUNIO')) return 'I';
+        if (l.includes('PERMESSO')) return 'P';
+        if (l.includes('104')) return '104'; 
+        if (l.includes('INGIUSTIFICATA')) return 'ING'; 
+        return 'A'; 
+    };
+
     const handleExportPayrollExcel = () => { 
         if (typeof utils === 'undefined' || typeof writeFile === 'undefined') { showNotification("Libreria esportazione non caricata.", 'error'); return; } 
         if (!reports || reports.length === 0) { showNotification("Nessun dato da esportare per il report paghe.", 'info'); return; } 
         const centerStyle = { vertical: 'center', horizontal: 'center' }; 
         const areaColorMap = {}; 
         allWorkAreas.forEach((area, index) => { areaColorMap[area.id] = AREA_COLORS[index % AREA_COLORS.length]; }); 
-        const start = new Date(dateRange.start); 
-        const end = new Date(dateRange.end); 
-        const dateArray = []; let current = new Date(start); 
-        while (current <= end) { dateArray.push(new Date(current)); current.setDate(current.getDate() + 1); } 
+        
+        // Risoluzione issue parse Date Safari/Edge
+        const startObj = new Date(dateRange.start);
+        const endObj = new Date(dateRange.end);
+        const dateArray = []; let current = new Date(startObj); 
+        while (current <= endObj) { dateArray.push(new Date(current)); current.setDate(current.getDate() + 1); } 
+        
         const empData = {}; const areaStats = {}; 
         reports.forEach(r => { 
-            if (r.isAbsence) return; 
             if (!empData[r.employeeId]) { empData[r.employeeId] = { name: r.employeeName, dailyData: {}, total: 0 }; } 
-            const hours = parseFloat(r.duration || 0); 
             const parts = r.clockInDate.split('/'); 
             const isoDate = `${parts[2]}-${parts[1]}-${parts[0]}`; 
+            
+            // SALVA L'ASSENZA E LA SIGLA CORTA NELL'EXCEL
+            if (r.isAbsence) {
+                const rawLabel = r.statusLabel || "ASSENTE";
+                const shortCode = getAbsenceCode(rawLabel);
+                empData[r.employeeId].dailyData[isoDate] = { isAbsence: true, label: rawLabel, code: shortCode };
+                return; 
+            }
+            
+            const hours = parseFloat(r.duration || 0); 
             if (!empData[r.employeeId].dailyData[isoDate]) { empData[r.employeeId].dailyData[isoDate] = { hours: 0, areaId: null }; } 
             const currentDayData = empData[r.employeeId].dailyData[isoDate]; 
             currentDayData.hours += hours; currentDayData.areaId = r.workAreaId; 
@@ -493,7 +552,7 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
             if (!areaStats[areaName]) areaStats[areaName] = 0; 
             areaStats[areaName] += hours; 
         }); 
-        const startObj = new Date(dateRange.start); 
+        
         const monthName = startObj.toLocaleString('it-IT', { month: 'long' }); 
         const headerLabel = `${monthName.charAt(0).toUpperCase() + monthName.slice(1)} ${startObj.getFullYear().toString().slice(-2)}`; 
         const headerRow1 = [{ v: headerLabel, t: 's', s: { font: { bold: true }, alignment: centerStyle } }]; 
@@ -503,15 +562,27 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
         headerRow1.push({ v: "TOTALE", t: 's', s: { font: { bold: true }, alignment: centerStyle } }); 
         headerRow2.push({ v: "", t: 's', s: { alignment: centerStyle } }); 
         const sheetData = [headerRow1, headerRow2]; 
+        
         const sortedEmployees = Object.values(empData).sort((a,b) => a.name.localeCompare(b.name)); 
         sortedEmployees.forEach(emp => { 
             const row = [{ v: emp.name, t: 's', s: { alignment: centerStyle } }]; 
             dateArray.forEach(d => { 
-                const iso = d.toISOString().split('T')[0]; const dayData = emp.dailyData[iso]; 
-                if (dayData && dayData.hours > 0) { 
+                const year = d.getFullYear();
+                const month = String(d.getMonth() + 1).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
+                const iso = `${year}-${month}-${day}`;
+                
+                const dayData = emp.dailyData[iso]; 
+                
+                // STAMPA LA SIGLA (CODE) AL POSTO DELLA PAROLA INTERA
+                if (dayData && dayData.isAbsence) {
+                    row.push({ v: dayData.code, t: 's', s: { fill: { fgColor: { rgb: "F3E8FF" } }, font: { color: { rgb: "4338CA" }, bold: true }, alignment: centerStyle } });
+                } else if (dayData && dayData.hours > 0) { 
                     const cell = { v: Number(dayData.hours.toFixed(2)), t: 'n', s: { fill: { fgColor: { rgb: areaColorMap[dayData.areaId] || "FFFFFF" } }, alignment: centerStyle } }; 
                     row.push(cell); 
-                } else { row.push({ v: "", t: 's', s: { alignment: centerStyle } }); } 
+                } else { 
+                    row.push({ v: "", t: 's', s: { alignment: centerStyle } }); 
+                } 
             }); 
             row.push({ v: Number(emp.total.toFixed(2)), t: 'n', s: { alignment: centerStyle, font: { bold: true } } }); 
             sheetData.push(row); 
@@ -525,6 +596,18 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
             const cellVal = { v: Number(areaStats[areaName].toFixed(2)), t: 'n', s: { alignment: centerStyle } }; 
             sheetData.push([cellName, cellVal]); 
         }); 
+        
+        // --- AGGIUNTA DELLA LEGENDA ASSENZE A FONDO PAGINA ---
+        sheetData.push([]);
+        sheetData.push([ { v: "LEGENDA ASSENZE", t: 's', s: { font: { bold: true }, alignment: centerStyle } } ]);
+        sheetData.push([ { v: "F", t: 's', s: { alignment: centerStyle, font: {bold: true} } }, { v: "FERIE", t: 's' } ]);
+        sheetData.push([ { v: "M", t: 's', s: { alignment: centerStyle, font: {bold: true} } }, { v: "MALATTIA", t: 's' } ]);
+        sheetData.push([ { v: "I", t: 's', s: { alignment: centerStyle, font: {bold: true} } }, { v: "INFORTUNIO", t: 's' } ]);
+        sheetData.push([ { v: "P", t: 's', s: { alignment: centerStyle, font: {bold: true} } }, { v: "PERMESSO", t: 's' } ]);
+        sheetData.push([ { v: "104", t: 's', s: { alignment: centerStyle, font: {bold: true} } }, { v: "LEGGE 104", t: 's' } ]);
+        sheetData.push([ { v: "ING", t: 's', s: { alignment: centerStyle, font: {bold: true} } }, { v: "ASSENZA INGIUSTIFICATA", t: 's' } ]);
+        sheetData.push([ { v: "A", t: 's', s: { alignment: centerStyle, font: {bold: true} } }, { v: "ALTRO (Assente)", t: 's' } ]);
+
         const ws = utils.aoa_to_sheet(sheetData); 
         const wscols = [{wch: 30}]; dateArray.forEach(() => wscols.push({wch: 5})); wscols.push({wch: 12}); ws['!cols'] = wscols; 
         const wb = utils.book_new(); utils.book_append_sheet(wb, ws, "Foglio Presenze"); 
@@ -532,57 +615,82 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
         showNotification("Excel Paghe generato con successo!", 'success'); 
     };
 
-    const handleExportExcel = () => { if (typeof utils === 'undefined' || typeof writeFile === 'undefined') { showNotification("Libreria esportazione non caricata.", 'error'); return; } if (!reports || reports.length === 0) { showNotification("Nessun dato da esportare.", 'info'); return; } const dataToExport = reports.map(entry => ({ 'ID Dipendente': entry.employeeId, 'Dipendente': entry.employeeName, 'ID Area': entry.workAreaId || 'N/A', 'Area': entry.areaName, 'Data': entry.clockInDate, 'Entrata': entry.clockInTimeFormatted, 'Uscita': entry.clockOutTimeFormatted, 'Ore Lavorate (Netto)': entry.isAbsence ? 0 : ((entry.duration !== null) ? parseFloat(entry.duration.toFixed(2)) : "In corso"), 'Pausa Totale (Ore)': (entry.pauseHours !== null) ? parseFloat(entry.pauseHours.toFixed(2)) : 0, 'Stato Pausa': entry.skippedBreak ? (entry.skipBreakStatus === 'approved' ? 'No Pausa (Approvato)' : 'Pausa Scalata (Default)') : 'Standard', 'Motivo/Nota': entry.note })); const ws = utils.json_to_sheet(dataToExport); const wb = utils.book_new(); utils.book_append_sheet(wb, ws, "Report Ore"); ws['!cols'] = [{ wch: 25 }, { wch: 20 }, { wch: 25 }, { wch: 15 }, { wch: 10 }, { wch: 8 }, { wch: 8 }, { wch: 20 }, { wch: 20 }, { wch: 30 }]; writeFile(wb, `${(title || 'Report').replace(/ /g, '_')}.xlsx`); showNotification(`File Excel generato con successo.`, 'success'); };
+    const handleExportExcel = () => { 
+        if (typeof utils === 'undefined' || typeof writeFile === 'undefined') { showNotification("Libreria esportazione non caricata.", 'error'); return; } 
+        if (!reports || reports.length === 0) { showNotification("Nessun dato da esportare.", 'info'); return; } 
+        
+        const dataToExport = reports.map(entry => ({ 
+            'ID Dipendente': entry.employeeId, 
+            'Dipendente': entry.employeeName, 
+            'ID Area': entry.workAreaId || 'N/A', 
+            'Area': entry.areaName, 
+            'Data': entry.clockInDate, 
+            'Stato': entry.isAbsence ? entry.statusLabel : 'PRESENTE',
+            'Entrata': entry.clockInTimeFormatted, 
+            'Uscita': entry.clockOutTimeFormatted, 
+            'Ore Lavorate (Netto)': entry.isAbsence ? 0 : ((entry.duration !== null) ? parseFloat(entry.duration.toFixed(2)) : "In corso"), 
+            'Pausa Totale (Ore)': (entry.pauseHours !== null) ? parseFloat(entry.pauseHours.toFixed(2)) : 0, 
+            'Stato Pausa': entry.isAbsence ? '-' : (entry.skippedBreak ? (entry.skipBreakStatus === 'approved' ? 'No Pausa (Approvato)' : 'Pausa Scalata (Default)') : 'Standard'), 
+            'Motivo/Nota': entry.note 
+        })); 
+        
+        const ws = utils.json_to_sheet(dataToExport); 
+        const wb = utils.book_new(); 
+        utils.book_append_sheet(wb, ws, "Report Ore"); 
+        ws['!cols'] = [{ wch: 25 }, { wch: 20 }, { wch: 25 }, { wch: 20 }, { wch: 12 }, { wch: 15 }, { wch: 10 }, { wch: 10 }, { wch: 20 }, { wch: 20 }, { wch: 25 }, { wch: 30 }]; 
+        writeFile(wb, `${(title || 'Report').replace(/ /g, '_')}.xlsx`); 
+        showNotification(`File Excel generato con successo.`, 'success'); 
+    };
     
     return (
         <div className="modern-card mt-6">
             <div className="modern-title">
-                <div>📊 {title || 'Risultati'}</div>
+                <div><span>📊 {title || 'Risultati'}</span></div>
                 <div className="title-actions">
-                    <button onClick={handleExportExcel} disabled={!reports || reports.length === 0} className="modern-btn" style={{background:'#10b981'}}>📥 Excel</button>
-                    <button onClick={handleExportPayrollExcel} disabled={!reports || reports.length === 0} className="modern-btn" style={{background:'#6366f1'}}>📥 Paghe</button>
-                    <button onClick={() => handleExportXml(reports)} disabled={!reports || reports.length === 0} className="modern-btn-outline">📥 XML</button>
+                    <button onClick={handleExportExcel} disabled={!reports || reports.length === 0} className="modern-btn" style={{background:'#10b981'}}><span>📥 Excel</span></button>
+                    <button onClick={handleExportPayrollExcel} disabled={!reports || reports.length === 0} className="modern-btn" style={{background:'#6366f1'}}><span>📥 Paghe</span></button>
+                    <button onClick={() => handleExportXml(reports)} disabled={!reports || reports.length === 0} className="modern-btn-outline"><span>📥 XML</span></button>
                 </div>
             </div>
             <div className="modern-table-wrapper">
                 <table className="modern-table">
-                    <thead><tr><th>Dipendente</th><th>Cantiere</th><th>Data</th><th>Orari</th><th>Ore Nette</th><th>Stato Pausa</th><th style={{textAlign:'right'}}>Azioni</th></tr></thead>
+                    <thead><tr><th><span>Dipendente</span></th><th><span>Cantiere</span></th><th><span>Data</span></th><th><span>Orari</span></th><th><span>Ore Nette</span></th><th><span>Stato Pausa</span></th><th style={{textAlign:'right'}}><span>Azioni</span></th></tr></thead>
                     <tbody>
                         {reports.map((entry) => (
                             <tr key={entry.id} style={{background: entry.isAbsence ? '#fdf2f8' : 'transparent'}}>
-                                <td data-label="Dipendente" style={{fontWeight:'700'}}>{entry.employeeName}</td>
-                                <td data-label="Cantiere">{entry.isAbsence ? <span style={{color:'#cbd5e1'}}>-</span> : <span className="modern-badge blue">{entry.areaName}</span>}</td>
-                                <td data-label="Data" style={{color:'#64748b', fontWeight:'600'}}>{entry.clockInDate}</td>
+                                <td data-label="Dipendente" style={{fontWeight:'700'}}><span>{entry.employeeName}</span></td>
+                                <td data-label="Cantiere">{entry.isAbsence ? <span style={{color:'#cbd5e1'}}>-</span> : <span className="modern-badge blue"><span>{entry.areaName}</span></span>}</td>
+                                <td data-label="Data" style={{color:'#64748b', fontWeight:'600'}}><span>{entry.clockInDate}</span></td>
                                 {entry.isAbsence ? (
                                     <>
-                                        <td data-label="Stato"><span className="modern-badge purple">{entry.statusLabel}</span></td>
-                                        <td data-label="Ore Nette">-</td>
-                                        <td data-label="Pausa">-</td>
+                                        <td data-label="Stato"><span className="modern-badge purple"><span>{entry.statusLabel}</span></span></td>
+                                        <td data-label="Ore Nette"><span>-</span></td>
+                                        <td data-label="Pausa"><span>-</span></td>
                                         <td data-label="Azioni" className="actions-cell">
-                                            <div style={{fontSize:'12px', color:'#64748b'}}>{entry.note}</div>
-                                            <button onClick={() => onEditEntry(entry)} className="modern-btn-outline" style={{padding:'4px 8px', fontSize:'11px'}}>📝 Modifica</button>
+                                            <div style={{fontSize:'12px', color:'#64748b'}}><span>{entry.note}</span></div>
+                                            {(currentUserRole === 'admin' || currentUserRole === 'segreteria') && <button onClick={() => onEditEntry(entry)} className="modern-btn-outline" style={{padding:'4px 8px', fontSize:'11px'}}><span>📝 Giustifica</span></button>}
                                         </td>
                                     </>
                                 ) : (
                                     <>
-                                        <td data-label="Orari" style={{fontFamily:'monospace', color:'#475569'}}>{entry.clockInTimeFormatted} - {entry.clockOutTimeFormatted}</td>
-                                        <td data-label="Ore Nette"><span className="modern-badge green" style={{fontSize:'14px'}}>{entry.duration !== null ? entry.duration.toFixed(2) : '...'} h</span></td>
-                                        <td data-label="Pausa">{entry.skippedBreak ? (entry.skipBreakStatus === 'pending' ? <span className="modern-badge orange">⚠️ Verifica</span> : entry.skipBreakStatus === 'approved' ? <span className="modern-badge green">✅ Approvata</span> : <span className="modern-badge red">❌ Scalata</span>) : (<span style={{color:'#94a3b8', fontSize:'12px'}}>Standard ({entry.pauseHours !== null ? entry.pauseHours.toFixed(2) : '0.00'}h)</span>)}</td>
+                                        <td data-label="Orari" style={{fontFamily:'monospace', color:'#475569'}}><span>{entry.clockInTimeFormatted} - {entry.clockOutTimeFormatted}</span></td>
+                                        <td data-label="Ore Nette"><span className="modern-badge green" style={{fontSize:'14px'}}><span>{entry.duration !== null ? entry.duration.toFixed(2) : '...'} h</span></span></td>
+                                        <td data-label="Pausa">{entry.skippedBreak ? (entry.skipBreakStatus === 'pending' ? <span className="modern-badge orange"><span>⚠️ Verifica</span></span> : entry.skipBreakStatus === 'approved' ? <span className="modern-badge green"><span>✅ Approvata</span></span> : <span className="modern-badge red"><span>❌ Scalata</span></span>) : (<span style={{color:'#94a3b8', fontSize:'12px'}}><span>Standard ({entry.pauseHours !== null ? entry.pauseHours.toFixed(2) : '0.00'}h)</span></span>)}</td>
                                         <td data-label="Azioni" className="actions-cell">
-                                            {entry.skippedBreak && entry.skipBreakStatus === 'pending' && (
+                                            {entry.skippedBreak && entry.skipBreakStatus === 'pending' && (currentUserRole === 'admin' || currentUserRole === 'segreteria') && (
                                                 <div style={{display:'flex', gap:'5px'}}>
-                                                    <button onClick={() => handleReviewSkipBreak(entry.id, 'approved')} className="modern-btn" style={{padding:'4px 8px', fontSize:'11px', background:'#16a34a'}}>Approva</button>
-                                                    <button onClick={() => handleReviewSkipBreak(entry.id, 'rejected')} className="modern-btn-danger" style={{padding:'4px 8px', fontSize:'11px'}}>Rifiuta</button>
+                                                    <button onClick={() => handleReviewSkipBreak(entry.id, 'approved')} className="modern-btn" style={{padding:'4px 8px', fontSize:'11px', background:'#16a34a'}}><span>Approva</span></button>
+                                                    <button onClick={() => handleReviewSkipBreak(entry.id, 'rejected')} className="modern-btn-danger" style={{padding:'4px 8px', fontSize:'11px'}}><span>Rifiuta</span></button>
                                                 </div>
                                             )}
-                                            <button onClick={() => onEditEntry(entry)} className="modern-btn-outline" style={{padding:'4px 8px', fontSize:'11px'}}>✏️ Modifica</button>
-                                            {entry.note && <span style={{fontSize:'11px', color:'#94a3b8', maxWidth:'150px', display:'inline-block', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}} title={entry.note}>{entry.note}</span>}
+                                            {currentUserRole === 'admin' && <button onClick={() => onEditEntry(entry)} className="modern-btn-outline" style={{padding:'4px 8px', fontSize:'11px'}}><span>✏️ Modifica</span></button>}
+                                            {entry.note && <span style={{fontSize:'11px', color:'#94a3b8', maxWidth:'150px', display:'inline-block', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}} title={entry.note}><span>{entry.note}</span></span>}
                                         </td>
                                     </>
                                 )}
                             </tr>
                         ))}
-                        {(!reports || reports.length === 0) && <tr><td colSpan={7} style={{textAlign:'center', padding:'40px', color:'#94a3b8'}}>Nessun dato per il periodo selezionato.</td></tr>}
+                        {(!reports || reports.length === 0) && <tr><td colSpan={7} style={{textAlign:'center', padding:'40px', color:'#94a3b8'}}><span>Nessun dato per il periodo selezionato.</span></td></tr>}
                     </tbody>
                 </table>
             </div>
@@ -625,7 +733,7 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
     return (
         <div className="modern-card" style={{borderTop: '4px solid #3b82f6'}}>
             <div className="modern-title" style={{border: 'none', display: 'flex', flexWrap: 'wrap', gap: '15px'}}>
-                <div>{isMapMode ? '🌍 Mappa Cantieri' : '⚡ Monitoraggio Operativo'}</div>
+                <div><span>{isMapMode ? '🌍 Mappa Cantieri' : '⚡ Monitoraggio Operativo'}</span></div>
                 <div style={{display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap'}}>
                     {!isMapMode && (
                         <select 
@@ -638,7 +746,7 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
                             {[...workAreas].sort((a,b) => a.name.localeCompare(b.name)).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                         </select>
                     )}
-                    <button onClick={() => setIsMapMode(!isMapMode)} className="modern-btn-outline" style={{width: window.innerWidth <= 768 ? '100%' : 'auto'}}>{isMapMode ? '🔙 Torna ai Dati' : '🌍 Apri Mappa'}</button>
+                    <button onClick={() => setIsMapMode(!isMapMode)} className="modern-btn-outline" style={{width: window.innerWidth <= 768 ? '100%' : 'auto'}}><span>{isMapMode ? '🔙 Torna ai Dati' : '🌍 Apri Mappa'}</span></button>
                 </div>
             </div>
             
@@ -649,13 +757,13 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
                         <div className="quick-actions" style={{background:'#f8fafc', padding:'20px', borderRadius:'12px', display:'flex', flexWrap: 'wrap', justifyContent:'center', alignItems: 'center', gap:'15px', marginBottom:'30px', border:'1px solid #e2e8f0'}}>
                             {!adminActiveEntry ? (
                                 <>
-                                    <div style={{fontSize: '16px', fontWeight: 'bold', color: '#64748b'}}>⚪ Fuori Turno</div>
-                                    <button onClick={() => openModal('manualClockIn', adminEmployeeProfile)} disabled={isActionLoading} className="modern-btn" style={{background: '#16a34a', fontSize:'16px', padding: '12px 24px'}}>▶️ Entra in Turno</button>
+                                    <div style={{fontSize: '16px', fontWeight: 'bold', color: '#64748b'}}><span>⚪ Fuori Turno</span></div>
+                                    <button onClick={() => openModal('manualClockIn', adminEmployeeProfile)} disabled={isActionLoading} className="modern-btn" style={{background: '#16a34a', fontSize:'16px', padding: '12px 24px'}}><span>▶️ Entra in Turno</span></button>
                                 </>
                             ) : (
                                 <>
                                     <div style={{fontSize: '16px', fontWeight: 'bold', color: '#16a34a', display: 'flex', alignItems: 'center', gap: '8px'}}>
-                                        🟢 In Turno {isOnBreak && <span style={{color: '#d97706', fontSize: '14px'}}>(In Pausa)</span>}
+                                        <span>🟢 In Turno</span> {isOnBreak && <span style={{color: '#d97706', fontSize: '14px'}}>(In Pausa)</span>}
                                     </div>
 
                                     <button 
@@ -671,7 +779,7 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
                                             cursor: (!isOnBreak && hasCompletedPause) ? 'not-allowed' : 'pointer'
                                         }}
                                     >
-                                        {isOnBreak ? '▶️ Termina Pausa' : (hasCompletedPause ? '✔️ Pausa Eseguita' : '☕ Pausa')}
+                                        <span>{isOnBreak ? '▶️ Termina Pausa' : (hasCompletedPause ? '✔️ Pausa Eseguita' : '☕ Pausa')}</span>
                                     </button>
 
                                     <button 
@@ -680,7 +788,7 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
                                         className="modern-btn-danger" 
                                         style={{fontSize:'15px', padding: '10px 20px', opacity: isOnBreak ? 0.5 : 1, cursor: isOnBreak ? 'not-allowed' : 'pointer'}}
                                     >
-                                        ⏹️ Esci Turno
+                                        <span>⏹️ Esci Turno</span>
                                     </button>
                                 </>
                             )}
@@ -689,8 +797,8 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
 
                     <div className="dashboard-stats" style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(250px, 1fr))', gap:'20px', marginBottom:'30px'}}>
                         <div className="stat-card" style={{background:'#fff', padding:'24px', borderRadius:'12px', borderLeft:'5px solid #3b82f6', boxShadow:'0 2px 12px rgba(0,0,0,0.04)'}}>
-                            <p className="stat-label" style={{margin:0, color:'#64748b', fontSize:'13px', fontWeight:'700', textTransform:'uppercase'}}>Forza Lavoro Attiva</p>
-                            <p className="stat-value" style={{margin:'10px 0 0 0', fontSize:'32px', fontWeight:'900', color: '#0f172a'}}>{activeEmployeesDetails.length} <span style={{fontSize:'16px', color:'#94a3b8', fontWeight:'500'}}>/ {totalEmployees}</span></p>
+                            <p className="stat-label" style={{margin:0, color:'#64748b', fontSize:'13px', fontWeight:'700', textTransform:'uppercase'}}><span>Forza Lavoro Attiva</span></p>
+                            <p className="stat-value" style={{margin:'10px 0 0 0', fontSize:'32px', fontWeight:'900', color: '#0f172a'}}><span>{activeEmployeesDetails.length}</span> <span style={{fontSize:'16px', color:'#94a3b8', fontWeight:'500'}}>/ {totalEmployees}</span></p>
                         </div>
                         {/* RIQUADRO ORE CLICCABILE */}
                         <div 
@@ -701,10 +809,10 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
                             onMouseOut={(e) => e.currentTarget.style.transform = 'translateY(0)'}
                         >
                             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start'}}>
-                                <p className="stat-label" style={{margin:0, color:'#64748b', fontSize:'13px', fontWeight:'700', textTransform:'uppercase'}}>Ore Erogate Oggi {dashboardAreaFilter !== 'all' ? '(Area Sel.)' : ''}</p>
+                                <p className="stat-label" style={{margin:0, color:'#64748b', fontSize:'13px', fontWeight:'700', textTransform:'uppercase'}}><span>Ore Erogate Oggi {dashboardAreaFilter !== 'all' ? '(Area Sel.)' : ''}</span></p>
                                 <Tooltip title="Clicca per vedere i dettagli"><InfoCircleOutlined style={{color: '#10b981', fontSize: '18px'}}/></Tooltip>
                             </div>
-                            <p className="stat-value" style={{margin:'10px 0 0 0', fontSize:'32px', fontWeight:'900', color: '#0f172a'}}>{totalDayHours}</p>
+                            <p className="stat-value" style={{margin:'10px 0 0 0', fontSize:'32px', fontWeight:'900', color: '#0f172a'}}><span>{totalDayHours}</span></p>
                         </div>
                     </div>
 
@@ -712,7 +820,7 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
                         <div style={{background:'#fff', borderRadius:'12px', border:'1px solid #e2e8f0', overflow:'hidden', marginBottom:'30px'}}>
                             <button onClick={() => setShowAssets(!showAssets)} style={{width:'100%', padding:'20px', display:'flex', justifyContent:'space-between', alignItems:'center', background:'#f8fafc', border:'none', cursor:'pointer'}}>
                                 <span style={{fontWeight:'800', fontSize:'16px', color:'#1e293b'}}>📦 Le Mie Dotazioni Aziendali</span>
-                                <span className="modern-badge blue">{showAssets ? 'NASCONDI ▲' : 'VEDI DETTAGLI ▼'}</span>
+                                <span className="modern-badge blue"><span>{showAssets ? 'NASCONDI ▲' : 'VEDI DETTAGLI ▼'}</span></span>
                             </button>
                             {showAssets && (
                                 <div style={{padding:'24px', borderTop:'1px solid #f1f5f9', display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(280px, 1fr))', gap:'20px'}}>
@@ -729,24 +837,24 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
                         </div>
                     )}
 
-                    <h2 style={{fontSize:'20px', fontWeight:'800', color: '#1e293b', marginBottom:'16px'}}>Elenco Presenze Live</h2>
+                    <h2 style={{fontSize:'20px', fontWeight:'800', color: '#1e293b', marginBottom:'16px'}}><span>Elenco Presenze Live</span></h2>
                     <div className="modern-table-wrapper">
                         <table className="modern-table">
-                            <thead><tr><th>Dipendente</th><th>Cantiere</th><th>Ingresso</th><th>Stato</th><th>Pausa Default</th></tr></thead>
+                            <thead><tr><th><span>Dipendente</span></th><th><span>Cantiere</span></th><th><span>Ingresso</span></th><th><span>Stato</span></th><th><span>Pausa Default</span></th></tr></thead>
                             <tbody>
                                 {activeEmployeesDetails.map(entry => {
                                     const pauseDone = entry.pauses && entry.pauses.length > 0;
                                     return (
                                         <tr key={entry.id}>
-                                            <td data-label="Dipendente" style={{fontWeight:'700', fontSize:'15px'}}>{entry.employeeName}</td>
-                                            <td data-label="Cantiere"><span className="modern-badge blue">{entry.areaName}</span></td>
-                                            <td data-label="Ingresso" style={{fontFamily:'monospace', fontSize:'14px', color:'#475569'}}>{entry.clockInTimeFormatted}</td>
-                                            <td data-label="Stato"><span className="modern-badge green">Al Lavoro</span></td>
-                                            <td data-label="Pausa" style={{fontWeight:'600', color: pauseDone ? '#16a34a' : '#94a3b8'}}>{pauseDone ? '✓ Eseguita' : '-'}</td>
+                                            <td data-label="Dipendente" style={{fontWeight:'700', fontSize:'15px'}}><span>{entry.employeeName}</span></td>
+                                            <td data-label="Cantiere"><span className="modern-badge blue"><span>{entry.areaName}</span></span></td>
+                                            <td data-label="Ingresso" style={{fontFamily:'monospace', fontSize:'14px', color:'#475569'}}><span>{entry.clockInTimeFormatted}</span></td>
+                                            <td data-label="Stato"><span className="modern-badge green"><span>Al Lavoro</span></span></td>
+                                            <td data-label="Pausa" style={{fontWeight:'600', color: pauseDone ? '#16a34a' : '#94a3b8'}}><span>{pauseDone ? '✓ Eseguita' : '-'}</span></td>
                                         </tr>
                                     );
                                 })}
-                                {activeEmployeesDetails.length === 0 && <tr><td colSpan={5} style={{textAlign:'center', padding:'40px', color:'#94a3b8', fontWeight:'600'}}>Nessun dipendente in cantiere.</td></tr>}
+                                {activeEmployeesDetails.length === 0 && <tr><td colSpan={5} style={{textAlign:'center', padding:'40px', color:'#94a3b8', fontWeight:'600'}}><span>Nessun dipendente in cantiere.</span></td></tr>}
                             </tbody>
                         </table>
                     </div>
@@ -812,7 +920,19 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const [isActionLoading, setIsActionLoading] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'ascending' });
-    const [dateRange, setDateRange] = useState({ start: new Date().toISOString().split('T')[0], end: new Date().toISOString().split('T')[0] });
+    
+    // Fallback sicuro per la data odierna su qualsiasi browser
+    const getTodayDateString = () => {
+        const d = new Date();
+        let month = '' + (d.getMonth() + 1);
+        let day = '' + d.getDate();
+        const year = d.getFullYear();
+        if (month.length < 2) month = '0' + month;
+        if (day.length < 2) day = '0' + day;
+        return [year, month, day].join('-');
+    };
+
+    const [dateRange, setDateRange] = useState({ start: getTodayDateString(), end: getTodayDateString() });
     const [reportAreaFilter, setReportAreaFilter] = useState('all');
     const [reportEmployeeFilter, setReportEmployeeFilter] = useState('all');
     const [reportTitle, setReportTitle] = useState('');
@@ -832,11 +952,13 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const [showAddFormModal, setShowAddFormModal] = useState(false);
     const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
     
-    // --- STATI PER IL SALDO DELLE SPESE ---
     const [expenseToProcess, setExpenseToProcess] = useState(null); 
     const [expenseToEdit, setExpenseToEdit] = useState(null); 
     const [isSettlingAll, setIsSettlingAll] = useState(false);
     const [bulkExpensesToProcess, setBulkExpensesToProcess] = useState([]);
+
+    const [showRoleModal, setShowRoleModal] = useState(false);
+    const [userToChangeRole, setUserToChangeRole] = useState(null);
 
     const currentUserRole = userData?.role;
     const superAdminEmail = SUPER_ADMIN_EMAIL; 
@@ -847,7 +969,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const activeWorkAreas = useMemo(() => allWorkAreas.filter(a => !a.isArchived), [allWorkAreas]);
 
     const managedEmployees = useMemo(() => {
-        if (currentUserRole === 'admin') return allEmployees;
+        if (currentUserRole === 'admin' || currentUserRole === 'segreteria') return allEmployees;
         if (currentUserRole === 'preposto') {
             const managedAreaIds = userData?.managedAreaIds || []; 
             if (managedAreaIds.length === 0) return [];
@@ -859,7 +981,8 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const fetchData = useCallback(async () => {
         if (!user || !userData) { setIsLoading(false); return; }
         const role = userData?.role;
-        if (role !== 'admin' && role !== 'preposto') { setIsLoading(false); return; }
+        if (role !== 'admin' && role !== 'preposto' && role !== 'segreteria') { setIsLoading(false); return; }
+        
         let isMounted = true; 
         setIsLoading(true);
         try {
@@ -868,13 +991,29 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             const allAreasList = areasSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             const allEmployeesList = empsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             let allFormsList = formsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            
             if (role === 'preposto') { const managedIds = userData?.managedAreaIds || []; allFormsList = allFormsList.filter(f => managedIds.includes(f.workAreaId)); }
+            
             setAllWorkAreas(allAreasList);
             setWorkAreasWithHours(allAreasList.map(a => ({...a, totalHours: 'N/D'})));
             setAllEmployees(allEmployeesList); 
             setForms(allFormsList);
-            if (role === 'preposto' || (role === 'admin' && user.email !== superAdminEmail)) { const q = query(collection(db, "employees"), where("userId", "==", user.uid)); const adminEmployeeSnapshot = await getDocs(q); if (!isMounted) return; const profile = adminEmployeeSnapshot.empty ? null : { id: adminEmployeeSnapshot.docs[0].id, userId: user.uid, ...adminEmployeeSnapshot.docs[0].data() }; setAdminEmployeeProfile(profile); } else { setAdminEmployeeProfile(null); }
-            if (role === 'admin') { const qAdmins = query(collection(db, "users"), where("role", "in", ["admin", "preposto"])); const adminsSnapshot = await getDocs(qAdmins); if (!isMounted) return; const adminUsers = adminsSnapshot.docs.map(doc => { const data = doc.data(); const managedAreaNames = data.managedAreaIds?.map(id => allAreasList.find(a => a.id === id)?.name).filter(Boolean) || []; return { id: doc.id, ...data, managedAreaNames }; }); setAdmins(adminUsers); } else { setAdmins([]); }
+            
+            if (role === 'preposto' || ((role === 'admin' || role === 'segreteria') && user.email !== superAdminEmail)) { 
+                const q = query(collection(db, "employees"), where("userId", "==", user.uid)); 
+                const adminEmployeeSnapshot = await getDocs(q); 
+                if (!isMounted) return; 
+                const profile = adminEmployeeSnapshot.empty ? null : { id: adminEmployeeSnapshot.docs[0].id, userId: user.uid, ...adminEmployeeSnapshot.docs[0].data() }; 
+                setAdminEmployeeProfile(profile); 
+            } else { setAdminEmployeeProfile(null); }
+            
+            if (role === 'admin') { 
+                const qAdmins = query(collection(db, "users"), where("role", "in", ["admin", "preposto", "segreteria"])); 
+                const adminsSnapshot = await getDocs(qAdmins); 
+                if (!isMounted) return; 
+                const adminUsers = adminsSnapshot.docs.map(doc => { const data = doc.data(); const managedAreaNames = data.managedAreaIds?.map(id => allAreasList.find(a => a.id === id)?.name).filter(Boolean) || []; return { id: doc.id, ...data, managedAreaNames }; }); setAdmins(adminUsers); 
+            } else { setAdmins([]); }
+            
         } catch (error) { console.error("Errore caricamento dati statici:", error); if (isMounted) showNotification("Errore caricamento dati iniziali.", 'error'); } finally { if (isMounted) setIsLoading(false); }
         return () => { isMounted = false; };
     }, [user, userData, superAdminEmail, showNotification]);
@@ -882,7 +1021,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     useEffect(() => { if (user && userData) fetchData(); }, [user, userData, fetchData]); 
 
     useEffect(() => {
-        if (currentUserRole !== 'admin' && currentUserRole !== 'preposto') return;
+        if (currentUserRole !== 'admin' && currentUserRole !== 'preposto' && currentUserRole !== 'segreteria') return;
         const q = query(collection(db, "expenses"), orderBy("date", "desc"), limit(50));
         const unsubscribe = onSnapshot(q, (snapshot) => { const expensesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })); setExpenses(expensesData); }, (error) => { console.error("Errore listener spese:", error); });
         return () => unsubscribe();
@@ -898,7 +1037,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         const filteredDetails = combined.filter(detail => { 
             if (dashboardAreaFilter !== 'all' && detail.workAreaId !== dashboardAreaFilter) return false;
 
-            if (currentUserRole === 'admin') return true; 
+            if (currentUserRole === 'admin' || currentUserRole === 'segreteria') return true; 
             if (currentUserRole === 'preposto') { 
                 const managedAreaIds = userData?.managedAreaIds || []; 
                 if (managedAreaIds.length === 0) return false; 
@@ -920,7 +1059,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     }, [managedEmployees, activeEmployeesDetails, searchTerm, allWorkAreas, sortConfig, showArchived]); 
 
     const visibleWorkAreas = useMemo(() => {
-        if (currentUserRole === 'admin') return workAreasWithHours;
+        if (currentUserRole === 'admin' || currentUserRole === 'segreteria') return workAreasWithHours;
         if (currentUserRole === 'preposto') { const managedAreaIds = userData?.managedAreaIds || []; return workAreasWithHours.filter(area => managedAreaIds.includes(area.id)); }
         return [];
     }, [workAreasWithHours, currentUserRole, userData]);
@@ -963,7 +1102,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 setAdminActiveEntry(adminEntry ? { ...adminEntry, id: adminEntry.id, hasCompletedPause: hasCompletedPause } : null); 
             }
             
-            const todayStr = dayjs().format('DD/MM/YYYY');
+            const todayStr = new Date().toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
             
             const details = activeEntriesList.filter(entry => entry.clockInTime).map(entry => { 
                 const employee = allEmployees.find(emp => emp.id === entry.employeeId); 
@@ -974,8 +1113,8 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 if (entry.clockInTime && typeof entry.clockInTime.toDate === 'function') { 
                     try { 
                         const clockInDateObj = entry.clockInTime.toDate();
-                        const timeStr = dayjs(clockInDateObj).format('HH:mm'); 
-                        const actualDateStr = dayjs(clockInDateObj).format('DD/MM/YYYY');
+                        const timeStr = clockInDateObj.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }); 
+                        const actualDateStr = clockInDateObj.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
                         
                         if (actualDateStr !== todayStr) {
                             clockInFormatted = `${actualDateStr} ${timeStr}`; 
@@ -1018,7 +1157,18 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         });
 
         const qPending = query(collection(db, "time_entries"), where("skipBreakStatus", "==", "pending"));
-        const unsubscribePending = onSnapshot(qPending, (snapshot) => { if (!isMounted) return; const pendingDocs = snapshot.docs.map(doc => doc.data()); let count = 0; if (currentUserRole === 'admin') count = pendingDocs.length; else if (currentUserRole === 'preposto') { const managedAreaIds = userData?.managedAreaIds || []; const myPending = pendingDocs.filter(d => managedAreaIds.includes(d.workAreaId)); count = myPending.length; } setPendingRequestsCount(count); });
+        const unsubscribePending = onSnapshot(qPending, (snapshot) => { 
+            if (!isMounted) return; 
+            const pendingDocs = snapshot.docs.map(doc => doc.data()); 
+            let count = 0; 
+            if (currentUserRole === 'admin' || currentUserRole === 'segreteria') count = pendingDocs.length; 
+            else if (currentUserRole === 'preposto') { 
+                const managedAreaIds = userData?.managedAreaIds || []; 
+                const myPending = pendingDocs.filter(d => managedAreaIds.includes(d.workAreaId)); 
+                count = myPending.length; 
+            } 
+            setPendingRequestsCount(count); 
+        });
         
         return () => { isMounted = false; unsubscribeActive(); unsubscribeAbsence(); unsubscribePending(); };
     }, [allEmployees, allWorkAreas, adminEmployeeProfile, currentUserRole, userData, showNotification]);
@@ -1028,7 +1178,9 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
         let isMounted = true; 
         
-        const safeStartOfDay = dayjs().subtract(1, 'day').endOf('day').subtract(2, 'hours').toDate();
+        const safeStartOfDay = new Date();
+        safeStartOfDay.setDate(safeStartOfDay.getDate() - 1);
+        safeStartOfDay.setHours(22, 0, 0, 0); 
         
         const q = query(collection(db, "time_entries"), where("clockInTime", ">=", Timestamp.fromDate(safeStartOfDay)));
         
@@ -1036,7 +1188,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             if (!isMounted) return; 
             let totalMinutes = 0; 
             const now = new Date(); 
-            const todayStr = dayjs().format('DD/MM/YYYY');
+            const todayStr = new Date().toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
             
             const rawEntries = [];
             const tempDetails = [];
@@ -1047,7 +1199,8 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 if (!entry.clockInTime || entry.isAbsence) return; 
                 
                 const clockInDateObj = entry.clockInTime.toDate ? entry.clockInTime.toDate() : new Date(entry.clockInTime);
-                if (!dayjs(clockInDateObj).isSame(dayjs(), 'day')) return; 
+                const entryDateStr = clockInDateObj.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                if (entryDateStr !== todayStr) return; 
                 
                 if (currentUserRole === 'preposto') { 
                     const managedAreaIds = userData?.managedAreaIds || []; 
@@ -1130,8 +1283,8 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                         id: entry.id,
                         employeeName: empObj ? `${empObj.name} ${empObj.surname}` : 'Sconosciuto',
                         status: entry.status,
-                        clockIn: dayjs(clockIn).format('HH:mm'),
-                        clockOut: entry.clockOutTime ? dayjs(clockOut).format('HH:mm') : 'In corso',
+                        clockIn: clockIn.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
+                        clockOut: entry.clockOutTime ? clockOut.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : 'In corso',
                         hours: hrs.toFixed(2)
                     });
                 }
@@ -1197,6 +1350,22 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             setIsActionLoading(false); 
         } 
     };
+
+    const handleSaveRole = async (userId, newRole) => {
+        setIsActionLoading(true);
+        try {
+            await updateDoc(doc(db, "users", userId), { role: newRole });
+            showNotification("Ruolo utente aggiornato con successo!", "success");
+            setShowRoleModal(false);
+            setUserToChangeRole(null);
+            fetchData();
+        } catch (error) {
+            console.error(error);
+            showNotification("Errore durante l'aggiornamento del ruolo.", "error");
+        } finally {
+            setIsActionLoading(false);
+        }
+    };
     
     const handleResetEmployeeDevice = useCallback(async (employee) => { if (!employee || !employee.id) return; if (!window.confirm(`Reset dispositivo per ${employee.name}?`)) return; setIsActionLoading(true); try { await updateDoc(doc(db, "employees", employee.id), { deviceIds: [] }); showNotification(`Reset completato.`, 'success'); fetchData(); } catch (error) { showNotification(`Errore reset: ${error.message}`, 'error'); } finally { setIsActionLoading(false); } }, [fetchData, showNotification]);
 
@@ -1251,9 +1420,10 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
             const areaHoursMap = new Map(allWorkAreas.map(area => [area.id, 0])); 
             
             const formatTime = (date, time) => { 
-                const finalTime = time === 'In corso' ? '99:99' : time; 
+                let finalTime = time === 'In corso' ? '23:59:59' : time;
+                if (finalTime.length === 5) finalTime += ':00'; 
                 const formattedDate = date.replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3-$2-$1'); 
-                return new Date(`${formattedDate} ${finalTime}`); 
+                return new Date(`${formattedDate}T${finalTime}`); 
             }; 
             
             const reportData = fetchedEntries.map(entry => { 
@@ -1327,7 +1497,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
 
     const handleReviewSkipBreak = useCallback(async (entryId, decision) => { if (!entryId || !decision) return; if (!window.confirm("Confermare revisione pausa?")) return; setIsActionLoading(true); try { const functions = getFunctions(undefined, 'europe-west1'); const reviewFunction = httpsCallable(functions, 'reviewSkipBreakRequest'); await reviewFunction({ timeEntryId: entryId, decision, adminId: user.uid }); showNotification(`Richiesta aggiornata!`, 'success'); generateReport(); } catch (error) { showNotification("Errore revisione.", 'error'); } finally { setIsActionLoading(false); } }, [user, showNotification, generateReport]);
     
-    // --- FUNZIONE CORRETTA: ORA SALVA VERAMENTE LA RIMOZIONE PAUSA ---
     const handleSaveEntryEdit = async (entryId, updatedData) => { 
         setIsActionLoading(true); 
         try { 
@@ -1337,10 +1506,9 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 workAreaId: updatedData.workAreaId, 
                 note: updatedData.note, 
                 clockInTime: Timestamp.fromDate(new Date(`${updatedData.date}T${updatedData.clockInTime}:00`)),
-                skippedBreak: updatedData.skippedBreak // <-- SALVA LA SPUNTA!
+                skippedBreak: updatedData.skippedBreak 
             }; 
             
-            // Approva automaticamente se è l'admin a spuntare
             if (updatedData.skippedBreak) {
                 updatePayload.skipBreakStatus = 'approved';
             } else {
@@ -1366,186 +1534,213 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const handleExportXml = useCallback((data) => { let xml = '<?xml version="1.0"?><Report>'; data.forEach(e => xml += `<Timbratura><Dip>${e.employeeName}</Dip><Area>${e.areaName}</Area><Data>${e.clockInDate}</Data><Ore>${e.duration?.toFixed(2)}</Ore></Timbratura>`); xml += '</Report>'; const blob = new Blob([xml], { type: "application/xml" }); saveAs(blob, `Report.xml`); }, []);
     const requestSort = useCallback((key) => { setSortConfig(p => ({ key, direction: p.key === key && p.direction === 'ascending' ? 'descending' : 'ascending' })); }, []);
     
-    if (isLoading || !user || !userData) return <div className="modern-bg" style={{display: 'flex', alignItems:'center', justifyContent: 'center'}}><span style={{ fontSize: '16px', fontWeight: 'bold', color: '#64748b' }}>Caricamento Dati in corso...</span></div>;
-    if (currentUserRole !== 'admin' && currentUserRole !== 'preposto') return <div className="modern-bg" style={{display: 'flex', alignItems:'center', justifyContent: 'center'}}><span style={{ fontSize: '18px', fontWeight: 'bold', color: '#EF4444' }}>Accesso non autorizzato.</span></div>; 
-
-    const activeExpensesCount = expenses.filter(e => e.status !== 'closed' && e.status !== 'paid').length;
-
     return (
-        <div className="modern-bg">
+        <div key="main-app-container" className="modern-bg notranslate" translate="no" data-no-translation="true">
             <ModernStyles />
             {notification && <NotificationPopup message={notification.message} type={notification.type} onClose={() => setNotification(null)} />}
             
-            <header className="modern-header">
-                 <div className="header-left"></div>
+            {isLoading || !user || !userData ? (
+                <div key="loading-screen" style={{display: 'flex', height: '100vh', alignItems:'center', justifyContent: 'center'}}>
+                    <span style={{ fontSize: '16px', fontWeight: 'bold', color: '#64748b' }}>Caricamento Dati in corso...</span>
+                </div>
+            ) : currentUserRole !== 'admin' && currentUserRole !== 'preposto' && currentUserRole !== 'segreteria' ? (
+                <div key="unauthorized-screen" style={{display: 'flex', height: '100vh', alignItems:'center', justifyContent: 'center'}}>
+                    <span style={{ fontSize: '18px', fontWeight: 'bold', color: '#EF4444' }}>Accesso non autorizzato.</span>
+                </div>
+            ) : (
+                <div key="dashboard-content" style={{ width: '100%' }}>
+                    <header className="modern-header">
+                        <div className="header-left"></div>
 
-                 <div className="header-center">
-                     <CompanyLogo />
-                 </div>
+                        <div className="header-center">
+                            <CompanyLogo />
+                        </div>
 
-                 <div className="header-right">
-                     <div style={{textAlign: 'right'}}>
-                         <div style={{fontSize: '14px', fontWeight: '800', color: '#0f172a'}}>{userData?.name && userData?.surname ? `${userData.name} ${userData.surname}` : user?.email}</div>
-                         <div style={{fontSize: '11px', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px'}}>{currentUserRole === 'admin' ? 'Amministratore' : 'Preposto'}</div>
-                     </div>
-                     <button onClick={handleLogout} className="modern-btn-outline" style={{color: '#ef4444', borderColor: '#fca5a5', background: '#fef2f2', padding: '8px 16px', width: window.innerWidth <= 768 ? '100%' : 'auto'}}>
-                         🚪 Esci
-                     </button>
-                 </div>
-            </header>
+                        <div className="header-right">
+                            <div style={{textAlign: 'right'}}>
+                                <div style={{fontSize: '14px', fontWeight: '800', color: '#0f172a'}}>{userData?.name && userData?.surname ? `${userData.name} ${userData.surname}` : user?.email}</div>
+                                <div style={{fontSize: '11px', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px'}}>{currentUserRole === 'admin' ? 'Amministratore' : currentUserRole === 'segreteria' ? 'Segreteria' : 'Preposto'}</div>
+                            </div>
+                            <button onClick={handleLogout} className="modern-btn-outline" style={{color: '#ef4444', borderColor: '#fca5a5', background: '#fef2f2', padding: '8px 16px', width: window.innerWidth <= 768 ? '100%' : 'auto'}}>
+                                🚪 Esci
+                            </button>
+                        </div>
+                    </header>
 
-            <nav className="modern-nav">
-                 <button onClick={() => handleSwitchView('dashboard')} className={`modern-tab ${view === 'dashboard' ? 'active' : ''}`}>🏠 Dashboard</button>
-                 <button onClick={() => handleSwitchView('employees')} className={`modern-tab ${view === 'employees' ? 'active' : ''}`}>👥 Personale</button>
-                 <button onClick={() => handleSwitchView('areas')} className={`modern-tab ${view === 'areas' ? 'active' : ''}`}>📍 Cantieri</button>
-                 {currentUserRole === 'admin' && <button onClick={() => handleSwitchView('admins')} className={`modern-tab ${view === 'admins' ? 'active' : ''}`}>👮 Utenti</button>}
-                 {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (<button onClick={() => handleSwitchView('expenses')} className={`modern-tab ${view === 'expenses' ? 'active' : ''}`}>💰 Rimborsi {activeExpensesCount > 0 && (<span className="modern-badge red" style={{padding: '2px 6px', fontSize: '10px'}}>{activeExpensesCount}</span>)}</button>)}
-                 {(currentUserRole === 'admin' || currentUserRole === 'preposto') && (<button onClick={() => handleSwitchView('reports')} className={`modern-tab ${view === 'reports' ? 'active' : ''}`}>📋 Report Ore {pendingRequestsCount > 0 && (<span className="modern-badge orange" style={{padding: '2px 6px', fontSize: '10px'}}>{pendingRequestsCount}</span>)}</button>)}
-            </nav>
+                    <nav className="modern-nav">
+                        <button onClick={() => handleSwitchView('dashboard')} className={`modern-tab ${view === 'dashboard' ? 'active' : ''}`}>🏠 Dashboard</button>
+                        <button onClick={() => handleSwitchView('employees')} className={`modern-tab ${view === 'employees' ? 'active' : ''}`}>👥 Personale</button>
+                        <button onClick={() => handleSwitchView('areas')} className={`modern-tab ${view === 'areas' ? 'active' : ''}`}>📍 Cantieri</button>
+                        {currentUserRole === 'admin' && <button onClick={() => handleSwitchView('admins')} className={`modern-tab ${view === 'admins' ? 'active' : ''}`}>👮 Utenti</button>}
+                        {(currentUserRole === 'admin' || currentUserRole === 'preposto' || currentUserRole === 'segreteria') && (<button onClick={() => handleSwitchView('expenses')} className={`modern-tab ${view === 'expenses' ? 'active' : ''}`}>💰 Rimborsi {expenses && expenses.filter(e => e.status !== 'closed' && e.status !== 'paid').length > 0 && (<span className="modern-badge red" style={{padding: '2px 6px', fontSize: '10px'}}>{expenses.filter(e => e.status !== 'closed' && e.status !== 'paid').length}</span>)}</button>)}
+                        {(currentUserRole === 'admin' || currentUserRole === 'preposto' || currentUserRole === 'segreteria') && (<button onClick={() => handleSwitchView('reports')} className={`modern-tab ${view === 'reports' ? 'active' : ''}`}>📋 Report Ore {pendingRequestsCount > 0 && (<span className="modern-badge orange" style={{padding: '2px 6px', fontSize: '10px'}}>{pendingRequestsCount}</span>)}</button>)}
+                    </nav>
 
-            <div style={{maxWidth: '1200px', margin: '0 auto', padding: '0 10px'}}>
-                <main>
-                    {view === 'dashboard' && (
-                        <DashboardView 
-                            totalEmployees={dashboardTotalEmployees} 
-                            activeEmployeesDetails={activeEmployeesDetails} 
-                            totalDayHours={totalDayHours} 
+                    <div style={{maxWidth: '1200px', margin: '0 auto', padding: '0 10px'}}>
+                        <main>
+                            {view === 'dashboard' && (
+                                <DashboardView 
+                                    totalEmployees={dashboardTotalEmployees} 
+                                    activeEmployeesDetails={activeEmployeesDetails} 
+                                    totalDayHours={totalDayHours} 
+                                    workAreas={activeVisibleWorkAreas} 
+                                    adminEmployeeProfile={adminEmployeeProfile} 
+                                    adminActiveEntry={adminActiveEntry} 
+                                    handleAdminPause={handleAdminPause} 
+                                    openModal={openModal} 
+                                    isActionLoading={isActionLoading} 
+                                    dashboardAreaFilter={dashboardAreaFilter}
+                                    setDashboardAreaFilter={setDashboardAreaFilter}
+                                    todayHoursDetail={todayHoursDetail}
+                                />
+                            )}
+                            {view === 'expenses' && (
+                                <div className="modern-card">
+                                    <div className="modern-title">
+                                        <div>💰 Gestione Rimborsi Spese</div>
+                                        <div className="title-actions">
+                                            <button onClick={() => openModal('addExpense')} className="modern-btn">➕ Registra Spesa</button>
+                                            <button onClick={() => setShowArchived(!showArchived)} className="modern-btn-outline">{showArchived ? '📂 Torna alle Attive' : '📂 Archivio Storico'}</button>
+                                        </div>
+                                    </div>
+                                    <input type="text" placeholder="🔍 Cerca Dipendente..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="modern-input" style={{marginBottom: '20px'}}/>
+                                    <ExpensesView 
+                                        expenses={expenses} 
+                                        onProcessExpense={(exp) => { setExpenseToProcess(exp); openModal('processExpense'); }} 
+                                        onBulkProcessExpense={(list) => { setBulkExpensesToProcess(list); setIsSettlingAll(true); openModal('processExpense'); }}
+                                        onEditExpense={(exp) => { setExpenseToEdit(exp); openModal('editExpense'); }} 
+                                        currentUserRole={currentUserRole} 
+                                        user={user} 
+                                        searchTerm={searchTerm} 
+                                        showArchived={showArchived}
+                                    />
+                                </div>
+                            )}
+                            {view === 'employees' && (
+                                <div className="modern-card">
+                                    <div className="modern-title">
+                                        <div>👥 Gestione Personale Operativo</div>
+                                        <div className="title-actions">
+                                            {(currentUserRole === 'admin' || currentUserRole === 'segreteria') ? <button onClick={() => openModal('newEmployee')} className="modern-btn">➕ Crea Dipendente</button> : <button onClick={() => openModal('prepostoAddEmployeeToAreas')} className="modern-btn">➕ Aggiungi a Mie Aree</button>}
+                                            <button onClick={() => setShowArchived(!showArchived)} className="modern-btn-outline">{showArchived ? '📂 Nascondi Archiviati' : '📂 Mostra Archiviati'}</button>
+                                        </div>
+                                    </div>
+                                    <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="🔍 Cerca nome dipendente..." className="modern-input" style={{marginBottom: '20px'}} />
+                                    <EmployeeManagementView employees={sortedAndFilteredEmployees} openModal={openModal} currentUserRole={currentUserRole} requestSort={requestSort} sortConfig={sortConfig} handleResetEmployeeDevice={handleResetEmployeeDevice} adminEmployeeId={adminEmployeeProfile?.id} handleEmployeePauseClick={handleEmployeePauseClick} showArchived={showArchived} />
+                                </div>
+                            )}
+                            {view === 'areas' && (
+                                <div className="modern-card">
+                                    <div className="modern-title">
+                                        <div>📍 Gestione Cantieri (Aree di Lavoro)</div>
+                                        <div className="title-actions">
+                                            {(currentUserRole === 'admin' || currentUserRole === 'segreteria') && <button onClick={() => openModal('newArea')} className="modern-btn">➕ Crea Cantiere</button>}
+                                        </div>
+                                    </div>
+                                    <AreaManagementView workAreas={visibleWorkAreas} openModal={openModal} currentUserRole={currentUserRole} handleArchiveArea={handleArchiveArea} handleRestoreArea={handleRestoreArea} searchTerm={searchTerm} />
+                                </div>
+                            )}
+                            {view === 'admins' && currentUserRole === 'admin' && (
+                                <div className="modern-card">
+                                    <div className="modern-title">
+                                        <div>👮 Utenti di Sistema (Admin/Preposti)</div>
+                                        <div className="title-actions">
+                                            <button onClick={() => openModal('newAdmin')} className="modern-btn">➕ Crea Nuovo Utente</button>
+                                        </div>
+                                    </div>
+                                    <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="🔍 Cerca Utente..." className="modern-input" style={{marginBottom: '20px'}} />
+                                    <AdminManagementView 
+                                        admins={admins} 
+                                        openModal={openModal} 
+                                        user={user} 
+                                        superAdminEmail={superAdminEmail} 
+                                        currentUserRole={currentUserRole} 
+                                        onDataUpdate={fetchData} 
+                                        searchTerm={searchTerm} 
+                                        onOpenRoleModal={(adminUser) => {
+                                            setUserToChangeRole(adminUser);
+                                            setShowRoleModal(true);
+                                        }}
+                                    />
+                                </div>
+                            )}
+                            {view === 'reports' && (
+                                <>
+                                    <div className="modern-card">
+                                        <div className="modern-title">Generazione Estrazioni Ore</div>
+                                        <div className="filters-grid">
+                                            <div><label style={{display:'block', fontSize:'11px', fontWeight:'700', color:'#64748b', marginBottom:'6px'}}>Da Data</label><input type="date" value={dateRange.start} onChange={e => setDateRange({ ...dateRange, start: e.target.value })} className="modern-input" /></div>
+                                            <div><label style={{display:'block', fontSize:'11px', fontWeight:'700', color:'#64748b', marginBottom:'6px'}}>A Data</label><input type="date" value={dateRange.end} onChange={e => setDateRange({ ...dateRange, end: e.target.value })} className="modern-input" /></div>
+                                            <div><label style={{display:'block', fontSize:'11px', fontWeight:'700', color:'#64748b', marginBottom:'6px'}}>Cantiere</label><select value={reportAreaFilter} onChange={e => setReportAreaFilter(e.target.value)} className="modern-input"><option value="all">Tutti i Cantieri</option>{(currentUserRole === 'admin' || currentUserRole === 'segreteria' ? activeWorkAreas : activeWorkAreas.filter(a => userData?.managedAreaIds?.includes(a.id))).sort((a,b) => a.name.localeCompare(b.name)).map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}</select></div>
+                                            <div><label style={{display:'block', fontSize:'11px', fontWeight:'700', color:'#64748b', marginBottom:'6px'}}>Dipendente</label><select value={reportEmployeeFilter} onChange={e => setReportEmployeeFilter(e.target.value)} className="modern-input"><option value="all">Tutti i Dipendenti</option>{(currentUserRole === 'admin' || currentUserRole === 'segreteria' ? allEmployees : managedEmployees).sort((a,b) => `${a.name} ${a.surname}`.localeCompare(`${b.name} ${b.surname}`)).map(emp => (<option key={emp.id} value={emp.id}>{emp.name} {emp.surname}</option>))}</select></div>
+                                            <button onClick={generateReport} disabled={isLoading || isActionLoading} className="modern-btn" style={{height: '42px'}}>📄 Genera Report</button>
+                                        </div>
+                                    </div>
+                                    <ReportView reports={reports} title={reportTitle} handleExportXml={handleExportXml} dateRange={dateRange} allWorkAreas={activeWorkAreas} allEmployees={allEmployees} currentUserRole={currentUserRole} userData={userData} setDateRange={setDateRange} setReportAreaFilter={setReportAreaFilter} reportAreaFilter={reportAreaFilter} reportEmployeeFilter={reportEmployeeFilter} setReportEmployeeFilter={setReportEmployeeFilter} generateReport={generateReport} isLoading={isLoading} isActionLoading={isActionLoading} managedEmployees={managedEmployees} showNotification={showNotification} handleReviewSkipBreak={handleReviewSkipBreak} onEditEntry={(entry) => { setEntryToEdit(entry); openModal('editTimeEntry'); }} handleSaveEntryEdit={handleSaveEntryEdit} />
+                                </>
+                            )}
+                        </main>
+                    </div>
+                    
+                    <footer style={{textAlign: 'center', padding: '40px', color: '#94a3b8', fontSize: '12px', fontWeight: '600'}}>
+                        <div style={{marginBottom: '5px'}}>Created by D. Leoncino</div>
+                        &copy; {new Date().getFullYear()} TCS ITALIA S.R.L. - Sistema Gestionale Integrato
+                    </footer>
+
+                    {/* --- I MODALI --- */}
+                    {showAddEmployeeModal && (
+                        <AddEmployeeToAreaModal 
+                            show={showAddEmployeeModal} 
+                            onClose={() => setShowAddEmployeeModal(false)} 
+                            allEmployees={allEmployees} 
                             workAreas={activeVisibleWorkAreas} 
-                            adminEmployeeProfile={adminEmployeeProfile} 
-                            adminActiveEntry={adminActiveEntry} 
-                            handleAdminPause={handleAdminPause} 
-                            openModal={openModal} 
-                            isActionLoading={isActionLoading} 
-                            dashboardAreaFilter={dashboardAreaFilter}
-                            setDashboardAreaFilter={setDashboardAreaFilter}
-                            todayHoursDetail={todayHoursDetail}
+                            userData={userData} 
+                            showNotification={showNotification} 
+                            onDataUpdate={fetchData} 
                         />
                     )}
-                    {view === 'expenses' && (
-                        <div className="modern-card">
-                            <div className="modern-title">
-                                <div>💰 Gestione Rimborsi Spese</div>
-                                <div className="title-actions">
-                                    <button onClick={() => openModal('addExpense')} className="modern-btn">➕ Registra Spesa</button>
-                                    <button onClick={() => setShowArchived(!showArchived)} className="modern-btn-outline">{showArchived ? '📂 Torna alle Attive' : '📂 Archivio Storico'}</button>
-                                </div>
-                            </div>
-                            <input type="text" placeholder="🔍 Cerca Dipendente..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="modern-input" style={{marginBottom: '20px'}}/>
-                            <ExpensesView 
-                                expenses={expenses} 
-                                onProcessExpense={(exp) => { setExpenseToProcess(exp); openModal('processExpense'); }} 
-                                onBulkProcessExpense={(list) => { setBulkExpensesToProcess(list); setIsSettlingAll(true); openModal('processExpense'); }}
-                                onEditExpense={(exp) => { setExpenseToEdit(exp); openModal('editExpense'); }} 
-                                currentUserRole={currentUserRole} 
-                                user={user} 
-                                searchTerm={searchTerm} 
-                                showArchived={showArchived}
-                            />
-                        </div>
+                    
+                    {showAddFormModal && (
+                        <AddFormModal 
+                            show={showAddFormModal} 
+                            onClose={() => setShowAddFormModal(false)} 
+                            workAreas={activeVisibleWorkAreas} 
+                            user={user} 
+                            onDataUpdate={fetchData} 
+                            currentUserRole={currentUserRole} 
+                            userData={userData} 
+                            showNotification={showNotification} 
+                        />
                     )}
-                    {view === 'employees' && (
-                        <div className="modern-card">
-                            <div className="modern-title">
-                                <div>👥 Gestione Personale Operativo</div>
-                                <div className="title-actions">
-                                    {currentUserRole === 'admin' ? <button onClick={() => openModal('newEmployee')} className="modern-btn">➕ Crea Dipendente</button> : <button onClick={() => openModal('prepostoAddEmployeeToAreas')} className="modern-btn">➕ Aggiungi a Mie Aree</button>}
-                                    <button onClick={() => setShowArchived(!showArchived)} className="modern-btn-outline">{showArchived ? '📂 Nascondi Archiviati' : '📂 Mostra Archiviati'}</button>
-                                </div>
-                            </div>
-                            <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="🔍 Cerca nome dipendente..." className="modern-input" style={{marginBottom: '20px'}} />
-                            <EmployeeManagementView employees={sortedAndFilteredEmployees} openModal={openModal} currentUserRole={currentUserRole} requestSort={requestSort} sortConfig={sortConfig} handleResetEmployeeDevice={handleResetEmployeeDevice} adminEmployeeId={adminEmployeeProfile?.id} handleEmployeePauseClick={handleEmployeePauseClick} showArchived={showArchived} />
-                        </div>
-                    )}
-                    {view === 'areas' && (
-                        <div className="modern-card">
-                            <div className="modern-title">
-                                <div>📍 Gestione Cantieri (Aree di Lavoro)</div>
-                                <div className="title-actions">
-                                    {currentUserRole === 'admin' && <button onClick={() => openModal('newArea')} className="modern-btn">➕ Crea Cantiere</button>}
-                                </div>
-                            </div>
-                            <AreaManagementView workAreas={visibleWorkAreas} openModal={openModal} currentUserRole={currentUserRole} handleArchiveArea={handleArchiveArea} handleRestoreArea={handleRestoreArea} searchTerm={searchTerm} />
-                        </div>
-                    )}
-                    {view === 'admins' && currentUserRole === 'admin' && (
-                        <div className="modern-card">
-                            <div className="modern-title">
-                                <div>👮 Utenti di Sistema (Admin/Preposti)</div>
-                                <div className="title-actions">
-                                    <button onClick={() => openModal('newAdmin')} className="modern-btn">➕ Crea Nuovo Utente</button>
-                                </div>
-                            </div>
-                            <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="🔍 Cerca Utente..." className="modern-input" style={{marginBottom: '20px'}} />
-                            <AdminManagementView admins={admins} openModal={openModal} user={user} superAdminEmail={superAdminEmail} currentUserRole={currentUserRole} onDataUpdate={fetchData} searchTerm={searchTerm} />
-                        </div>
-                    )}
-                    {view === 'reports' && (
-                        <>
-                            <div className="modern-card">
-                                <div className="modern-title">Generazione Estrazioni Ore</div>
-                                <div className="filters-grid">
-                                    <div><label style={{display:'block', fontSize:'11px', fontWeight:'700', color:'#64748b', marginBottom:'6px'}}>Da Data</label><input type="date" value={dateRange.start} onChange={e => setDateRange({ ...dateRange, start: e.target.value })} className="modern-input" /></div>
-                                    <div><label style={{display:'block', fontSize:'11px', fontWeight:'700', color:'#64748b', marginBottom:'6px'}}>A Data</label><input type="date" value={dateRange.end} onChange={e => setDateRange({ ...dateRange, end: e.target.value })} className="modern-input" /></div>
-                                    <div><label style={{display:'block', fontSize:'11px', fontWeight:'700', color:'#64748b', marginBottom:'6px'}}>Cantiere</label><select value={reportAreaFilter} onChange={e => setReportAreaFilter(e.target.value)} className="modern-input"><option value="all">Tutti i Cantieri</option>{(currentUserRole === 'admin' ? activeWorkAreas : activeWorkAreas.filter(a => userData?.managedAreaIds?.includes(a.id))).sort((a,b) => a.name.localeCompare(b.name)).map(area => (<option key={area.id} value={area.id}>{area.name}</option>))}</select></div>
-                                    <div><label style={{display:'block', fontSize:'11px', fontWeight:'700', color:'#64748b', marginBottom:'6px'}}>Dipendente</label><select value={reportEmployeeFilter} onChange={e => setReportEmployeeFilter(e.target.value)} className="modern-input"><option value="all">Tutti i Dipendenti</option>{(currentUserRole === 'admin' ? allEmployees : managedEmployees).sort((a,b) => `${a.name} ${a.surname}`.localeCompare(`${b.name} ${b.surname}`)).map(emp => (<option key={emp.id} value={emp.id}>{emp.name} {emp.surname}</option>))}</select></div>
-                                    <button onClick={generateReport} disabled={isLoading || isActionLoading} className="modern-btn" style={{height: '42px'}}>📄 Genera Report</button>
-                                </div>
-                            </div>
-                            <ReportView reports={reports} title={reportTitle} handleExportXml={handleExportXml} dateRange={dateRange} allWorkAreas={activeWorkAreas} allEmployees={allEmployees} currentUserRole={currentUserRole} userData={userData} setDateRange={setDateRange} setReportAreaFilter={setReportAreaFilter} reportAreaFilter={reportAreaFilter} reportEmployeeFilter={reportEmployeeFilter} setReportEmployeeFilter={setReportEmployeeFilter} generateReport={generateReport} isLoading={isLoading} isActionLoading={isActionLoading} managedEmployees={managedEmployees} showNotification={showNotification} handleReviewSkipBreak={handleReviewSkipBreak} onEditEntry={(entry) => { setEntryToEdit(entry); openModal('editTimeEntry'); }} handleSaveEntryEdit={handleSaveEntryEdit} />
-                        </>
-                    )}
-                </main>
-            </div>
-            
-            <footer style={{textAlign: 'center', padding: '40px', color: '#94a3b8', fontSize: '12px', fontWeight: '600'}}>
-                 <div style={{marginBottom: '5px'}}>Created by D. Leoncino</div>
-                 &copy; {new Date().getFullYear()} TCS ITALIA S.R.L. - Sistema Gestionale Integrato
-            </footer>
 
-            {/* --- I MODALI --- */}
-            {/* ORA SONO TUTTI REGOLARMENTE MONTATI */}
-            {showAddEmployeeModal && (
-                <AddEmployeeToAreaModal 
-                    show={showAddEmployeeModal} 
-                    onClose={() => setShowAddEmployeeModal(false)} 
-                    allEmployees={allEmployees} 
-                    workAreas={activeVisibleWorkAreas} 
-                    userData={userData} 
-                    showNotification={showNotification} 
-                    onDataUpdate={fetchData} 
-                />
-            )}
-            
-            {showAddFormModal && (
-                <AddFormModal 
-                    show={showAddFormModal} 
-                    onClose={() => setShowAddFormModal(false)} 
-                    workAreas={activeVisibleWorkAreas} 
-                    user={user} 
-                    onDataUpdate={fetchData} 
-                    currentUserRole={currentUserRole} 
-                    userData={userData} 
-                    showNotification={showNotification} 
-                />
-            )}
+                    {/* Modale Cambio Ruolo (Solo Super Admin) */}
+                    <ChangeRoleModal 
+                        show={showRoleModal}
+                        onClose={() => { setShowRoleModal(false); setUserToChangeRole(null); }}
+                        userToChange={userToChangeRole}
+                        onSave={handleSaveRole}
+                        isSaving={isActionLoading}
+                    />
 
-            {showModal && modalType === 'editTimeEntry' && entryToEdit && ( <EditTimeEntryModal entry={entryToEdit} workAreas={activeVisibleWorkAreas} onClose={() => { setShowModal(false); setEntryToEdit(null); }} onSave={handleSaveEntryEdit} isLoading={isActionLoading} /> )}
-            {showModal && modalType === 'addExpense' && ( <AddExpenseModal show={true} onClose={() => setShowModal(false)} user={user} userData={userData} showNotification={showNotification} /> )}
-            {showModal && modalType === 'editExpense' && expenseToEdit && ( <AddExpenseModal show={true} onClose={() => { setShowModal(false); setExpenseToEdit(null); }} user={user} userData={userData} showNotification={showNotification} expenseToEdit={expenseToEdit} /> )}
-            
-            {showModal && modalType === 'processExpense' && (expenseToProcess || isSettlingAll) && ( 
-                <ProcessExpenseModal 
-                    show={true} 
-                    onClose={() => { setShowModal(false); setExpenseToProcess(null); setIsSettlingAll(false); setBulkExpensesToProcess([]); }} 
-                    expense={expenseToProcess} 
-                    isBulk={isSettlingAll}
-                    bulkExpenses={bulkExpensesToProcess}
-                    onConfirm={handleConfirmProcessExpense} 
-                    isProcessing={isActionLoading} 
-                /> 
+                    {showModal && modalType === 'editTimeEntry' && entryToEdit && ( <EditTimeEntryModal entry={entryToEdit} workAreas={activeVisibleWorkAreas} onClose={() => { setShowModal(false); setEntryToEdit(null); }} onSave={handleSaveEntryEdit} isLoading={isActionLoading} /> )}
+                    {showAddExpenseModal && ( <AddExpenseModal show={true} onClose={() => setShowAddExpenseModal(false)} user={user} userData={userData} showNotification={showNotification} /> )}
+                    {showModal && modalType === 'editExpense' && expenseToEdit && ( <AddExpenseModal show={true} onClose={() => { setShowModal(false); setExpenseToEdit(null); }} user={user} userData={userData} showNotification={showNotification} expenseToEdit={expenseToEdit} /> )}
+                    
+                    {showModal && modalType === 'processExpense' && (expenseToProcess || isSettlingAll) && ( 
+                        <ProcessExpenseModal 
+                            show={true} 
+                            onClose={() => { setShowModal(false); setExpenseToProcess(null); setIsSettlingAll(false); setBulkExpensesToProcess([]); }} 
+                            expense={expenseToProcess} 
+                            isBulk={isSettlingAll}
+                            bulkExpenses={bulkExpensesToProcess}
+                            onConfirm={handleConfirmProcessExpense} 
+                            isProcessing={isActionLoading} 
+                        /> 
+                    )}
+                    
+                    {showModal && !['editTimeEntry', 'addExpense', 'editExpense', 'processExpense'].includes(modalType) && ( <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} setModalType={setModalType} workAreas={activeVisibleWorkAreas} onDataUpdate={fetchData} user={user} superAdminEmail={superAdminEmail} allEmployees={allEmployees} currentUserRole={currentUserRole} userData={userData} activeEmployeesDetails={activeEmployeesDetails} onAdminApplyPause={handleEmployeePauseClick} showNotification={showNotification} /> )}
+                </div>
             )}
-            
-            {showModal && !['editTimeEntry', 'addExpense', 'editExpense', 'processExpense'].includes(modalType) && ( <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} setModalType={setModalType} workAreas={activeVisibleWorkAreas} onDataUpdate={fetchData} user={user} superAdminEmail={superAdminEmail} allEmployees={allEmployees} currentUserRole={currentUserRole} userData={userData} activeEmployeesDetails={activeEmployeesDetails} onAdminApplyPause={handleEmployeePauseClick} showNotification={showNotification} /> )}
         </div>
     );
 };
