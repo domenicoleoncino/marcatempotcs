@@ -101,7 +101,12 @@ const ModernStyles = () => (
     </style>
 );
 
-const SUPER_ADMIN_EMAIL = "domenico.leoncino@tcsitalia.com"; 
+// 👑 LISTA DEI SUPER AMMINISTRATORI 👑
+const SUPER_ADMIN_EMAILS = [
+    "domenico.leoncino@tcsitalia.com",
+    "altra.email@tcsitalia.com" 
+];
+
 const MAX_DEVICE_LIMIT = 2; 
 const AREA_COLORS = ["FFCCCC", "CCFFCC", "CCCCFF", "FFFFCC", "FFCCFF", "CCFFFF", "FFD9CC", "E5CCFF", "D9FFCC", "FFE5CC"];
 
@@ -213,7 +218,6 @@ const EditTimeEntryModal = ({ entry, workAreas, onClose, onSave, isLoading }) =>
     return ReactDOM.createPortal( <><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',backgroundColor:'rgba(0,0,0,0.6)',zIndex:99998}} onClick={onClose}/><div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',zIndex:99999,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}><div style={{backgroundColor:'#fff',width:'100%',maxWidth:'500px',borderRadius:'12px',overflow:'hidden',pointerEvents:'auto', margin: '0 15px'}} onClick={e=>e.stopPropagation()}><div style={{padding:'20px'}}><h3 style={{margin:0, marginBottom:'20px', fontSize:'18px', fontWeight:'bold', color:'#0f172a'}}>{entry.isAbsence ? '📝 Giustifica Assenza' : '✏️ Modifica Timbratura'}</h3><form onSubmit={handleSubmit}><div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Data</label><input type="date" name="date" value={formData.date} onChange={handleChange} style={inputStyle}/></div>{!entry.isAbsence && <div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Area/Cantiere</label><select name="workAreaId" value={formData.workAreaId} onChange={handleChange} style={inputStyle}>{workAreas.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></div>}{!entry.isAbsence && <div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Ora Ingresso</label><input type="time" name="clockInTime" value={formData.clockInTime} onChange={handleChange} style={inputStyle}/></div>}{!entry.isAbsence && <div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Ora Uscita (Lascia vuoto se ancora a lavoro)</label><input type="time" name="clockOutTime" value={formData.clockOutTime} onChange={handleChange} style={inputStyle}/></div>}{!entry.isAbsence && <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'15px'}}><input type="checkbox" checked={skipPause} onChange={e=>setSkipPause(e.target.checked)} style={{width:'18px', height:'18px'}}/><label style={{fontWeight:'bold', color:'#0f172a'}}>Rimuovi Pausa (Nessuna pausa effettuata)</label></div>}<div><label style={{display:'block', fontSize:'12px', fontWeight:'bold', color:'#64748b', marginBottom:'5px'}}>Note</label><textarea name="note" value={formData.note} onChange={handleChange} style={inputStyle}/></div><div style={{display:'flex', justifyContent:'flex-end', gap:'10px'}}><button type="button" onClick={onClose} className="modern-btn-outline">Annulla</button><button type="submit" disabled={isLoading} className="modern-btn">Salva Modifiche</button></div></form></div></div></div></>, document.body );
 };
 
-// --- MODALE CAMBIO RUOLO UTENTE ---
 const ChangeRoleModal = ({ show, onClose, userToChange, onSave, isSaving }) => {
     const [newRole, setNewRole] = useState('preposto');
 
@@ -235,7 +239,6 @@ const ChangeRoleModal = ({ show, onClose, userToChange, onSave, isSaving }) => {
     );
 };
 
-// --- NUOVO MODALE PER GESTIRE SOLO I PERMESSI E I BLOCCHI ---
 const ManageAccessModal = ({ show, onClose, userToChange, onSave, isSaving }) => {
     const [bloccaGestionale, setBloccaGestionale] = useState(false);
     const [bloccaMarcatempo, setBloccaMarcatempo] = useState(false);
@@ -391,13 +394,12 @@ const AreaManagementView = ({ workAreas, openModal, currentUserRole, handleArchi
     );
 };
 
-// --- LISTA UTENTI CON BOTTONI SEPARATI PER RUOLO E PERMESSI ---
-const AdminManagementView = ({ admins, openModal, user, superAdminEmail, currentUserRole, onDataUpdate, searchTerm, onOpenRoleModal, onOpenAccessModal, allEmployees, showNotification }) => {
+const AdminManagementView = ({ admins, openModal, user, superAdminEmails, currentUserRole, onDataUpdate, searchTerm, onOpenRoleModal, onOpenAccessModal, allEmployees, showNotification }) => {
     if (currentUserRole !== 'admin') { return <div className="modern-card"><span><div style={{color:'#ef4444'}}>Accesso negato.</div></span></div>; }
-    const filteredAdmins = admins.filter(admin => admin.email !== superAdminEmail);
-    const displayedAdmins = filteredAdmins.filter(admin => { if (!searchTerm) return true; const term = searchTerm.toLowerCase(); return (`${admin.name} ${admin.surname}`.toLowerCase().includes(term) || admin.email.toLowerCase().includes(term)); });
     
-    const isSuperAdmin = user?.email === superAdminEmail;
+    const filteredAdmins = admins.filter(admin => !superAdminEmails.includes(admin.email));
+    const displayedAdmins = filteredAdmins.filter(admin => { if (!searchTerm) return true; const term = searchTerm.toLowerCase(); return (`${admin.name} ${admin.surname}`.toLowerCase().includes(term) || admin.email.toLowerCase().includes(term)); });
+    const isSuperAdmin = user && superAdminEmails.includes(user.email);
 
     const handleCreateCartellino = async (adminUser) => {
         try {
@@ -686,7 +688,8 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
                                         <td data-label="Pausa"><span>-</span></td>
                                         <td data-label="Azioni" className="actions-cell">
                                             <div style={{fontSize:'12px', color:'#64748b'}}><span>{entry.note}</span></div>
-                                            {(currentUserRole === 'admin' || currentUserRole === 'segreteria') && <button onClick={() => onEditEntry(entry)} className="modern-btn-outline" style={{padding:'4px 8px', fontSize:'11px'}}><span>📝 Giustifica</span></button>}
+                                            {/* SOLO ADMIN E PREPOSTO POSSONO GIUSTIFICARE */}
+                                            {(currentUserRole === 'admin' || currentUserRole === 'preposto') && <button onClick={() => onEditEntry(entry)} className="modern-btn-outline" style={{padding:'4px 8px', fontSize:'11px'}}><span>📝 Giustifica</span></button>}
                                         </td>
                                     </>
                                 ) : (
@@ -695,13 +698,15 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
                                         <td data-label="Ore Nette"><span className="modern-badge green" style={{fontSize:'14px'}}><span>{entry.duration !== null ? entry.duration.toFixed(2) : '...'} h</span></span></td>
                                         <td data-label="Pausa">{entry.skippedBreak ? (entry.skipBreakStatus === 'pending' ? <span className="modern-badge orange"><span>⚠️ Verifica</span></span> : entry.skipBreakStatus === 'approved' ? <span className="modern-badge green"><span>✅ Approvata</span></span> : <span className="modern-badge red"><span>❌ Scalata</span></span>) : (<span style={{color:'#94a3b8', fontSize:'12px'}}><span>Standard ({entry.pauseHours !== null ? entry.pauseHours.toFixed(2) : '0.00'}h)</span></span>)}</td>
                                         <td data-label="Azioni" className="actions-cell">
-                                            {entry.skippedBreak && entry.skipBreakStatus === 'pending' && (currentUserRole === 'admin' || currentUserRole === 'segreteria') && (
+                                            {/* SOLO ADMIN E PREPOSTO POSSONO APPROVARE O RIFIUTARE */}
+                                            {entry.skippedBreak && entry.skipBreakStatus === 'pending' && (currentUserRole === 'admin' || currentUserRole === 'preposto') && (
                                                 <div style={{display:'flex', gap:'5px'}}>
                                                     <button onClick={() => handleReviewSkipBreak(entry.id, 'approved')} className="modern-btn" style={{padding:'4px 8px', fontSize:'11px', background:'#16a34a'}}><span>Approva</span></button>
                                                     <button onClick={() => handleReviewSkipBreak(entry.id, 'rejected')} className="modern-btn-danger" style={{padding:'4px 8px', fontSize:'11px'}}><span>Rifiuta</span></button>
                                                 </div>
                                             )}
-                                            {currentUserRole === 'admin' && <button onClick={() => onEditEntry(entry)} className="modern-btn-outline" style={{padding:'4px 8px', fontSize:'11px'}}><span>✏️ Modifica</span></button>}
+                                            {/* SOLO ADMIN E PREPOSTO VEDONO IL TASTO MODIFICA */}
+                                            {(currentUserRole === 'admin' || currentUserRole === 'preposto') && <button onClick={() => onEditEntry(entry)} className="modern-btn-outline" style={{padding:'4px 8px', fontSize:'11px'}}><span>✏️ Modifica</span></button>}
                                             {entry.note && <span style={{fontSize:'11px', color:'#94a3b8', maxWidth:'150px', display:'inline-block', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}} title={entry.note}><span>{entry.note}</span></span>}
                                         </td>
                                     </>
@@ -1076,12 +1081,12 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const [bulkExpensesToProcess, setBulkExpensesToProcess] = useState([]);
 
     const [showRoleModal, setShowRoleModal] = useState(false);
-    const [showAccessModal, setShowAccessModal] = useState(false); // NUOVO STATO
+    const [showAccessModal, setShowAccessModal] = useState(false); 
     const [userToChangeRole, setUserToChangeRole] = useState(null);
-    const [userToChangeAccess, setUserToChangeAccess] = useState(null); // NUOVO STATO
+    const [userToChangeAccess, setUserToChangeAccess] = useState(null); 
 
     const currentUserRole = userData?.role;
-    const superAdminEmail = SUPER_ADMIN_EMAIL; 
+    const superAdminEmails = SUPER_ADMIN_EMAILS; 
 
     const handleSwitchView = (newView) => { setView(newView); };
     const showNotification = useCallback((message, type = 'success') => { setNotification({ message, type }); setTimeout(() => setNotification(null), 4000); }, []);
@@ -1494,7 +1499,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         } 
     };
 
-    // --- SALVATAGGIO RUOLO ---
     const handleSaveRole = async (userId, newRole) => {
         setIsActionLoading(true);
         try {
@@ -1511,7 +1515,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
         }
     };
 
-    // --- SALVATAGGIO PERMESSI/BLOCCHI ---
     const handleSaveAccess = async (userId, bloccaGestionale, bloccaMarcatempo) => {
         setIsActionLoading(true);
         try {
@@ -1699,7 +1702,6 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
     const requestSort = useCallback((key) => { setSortConfig(p => ({ key, direction: p.key === key && p.direction === 'ascending' ? 'descending' : 'ascending' })); }, []);
     
     if (isLoading || !user || !userData) return <div className="modern-bg" style={{display: 'flex', alignItems:'center', justifyContent: 'center'}}><span style={{ fontSize: '16px', fontWeight: 'bold', color: '#64748b' }}>Caricamento Dati in corso...</span></div>;
-    // Sicurezza di blocco globale
     if (currentUserRole !== 'admin' && currentUserRole !== 'preposto' && currentUserRole !== 'segreteria') return <div className="modern-bg" style={{display: 'flex', alignItems:'center', justifyContent: 'center'}}><span style={{ fontSize: '18px', fontWeight: 'bold', color: '#EF4444' }}>Accesso non autorizzato.</span></div>; 
 
     const activeExpensesCount = expenses.filter(e => e.status !== 'closed' && e.status !== 'paid').length;
@@ -1815,7 +1817,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                                 admins={admins} 
                                 openModal={openModal} 
                                 user={user} 
-                                superAdminEmail={superAdminEmail} 
+                                superAdminEmails={SUPER_ADMIN_EMAILS} 
                                 currentUserRole={currentUserRole} 
                                 onDataUpdate={fetchData} 
                                 searchTerm={searchTerm} 
@@ -1915,7 +1917,28 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                 /> 
             )}
             
-            {showModal && !['editTimeEntry', 'addExpense', 'editExpense', 'processExpense'].includes(modalType) && ( <AdminModal type={modalType} item={selectedItem} setShowModal={setShowModal} setModalType={setModalType} workAreas={activeVisibleWorkAreas} onDataUpdate={fetchData} user={user} superAdminEmail={superAdminEmail} allEmployees={allEmployees} currentUserRole={currentUserRole} userData={userData} activeEmployeesDetails={activeEmployeesDetails} onAdminApplyPause={handleEmployeePauseClick} showNotification={showNotification} /> )}
+            {showModal && !['editTimeEntry', 'addExpense', 'editExpense', 'processExpense'].includes(modalType) && ( 
+                <AdminModal 
+                    type={modalType} 
+                    item={selectedItem} 
+                    setShowModal={setShowModal} 
+                    setModalType={setModalType} 
+                    workAreas={activeVisibleWorkAreas} 
+                    onDataUpdate={fetchData} 
+                    user={user} 
+                    superAdminEmail={SUPER_ADMIN_EMAILS[0]} 
+                    superAdminEmails={SUPER_ADMIN_EMAILS} 
+                    allEmployees={allEmployees} 
+                    currentUserRole={currentUserRole} 
+                    userData={userData} 
+                    activeEmployeesDetails={activeEmployeesDetails} 
+                    onAdminApplyPause={handleEmployeePauseClick} 
+                    showNotification={showNotification} 
+                    onEditEntry={(entry) => { setEntryToEdit(entry); openModal('editTimeEntry'); }}
+                    onReviewSkipBreak={handleReviewSkipBreak}
+                    handleReviewSkipBreak={handleReviewSkipBreak}
+                /> 
+            )}
         </div>
     );
 };
