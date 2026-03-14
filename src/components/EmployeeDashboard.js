@@ -18,7 +18,6 @@ const PAUSE_REASONS = [
     { code: '04', reason: 'Altro... (specificare).' }
 ];
 
-// --- STILI RESPONSIVE AVANZATI CON BOTTONI COLORATI ---
 const styles = {
     container: { minHeight: '100vh', backgroundColor: '#f4f7fe', display: 'flex', flexDirection: 'column', fontFamily: 'Inter, -apple-system, sans-serif', boxSizing: 'border-box' },
     headerOuter: { backgroundColor: '#ffffff', borderBottom: '1px solid #e2e8f0', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', width: '100%', display: 'flex', justifyContent: 'center', position: 'sticky', top: 0, zIndex: 100, borderBottomLeftRadius: '20px', borderBottomRightRadius: '20px' },
@@ -57,7 +56,6 @@ function getDistanceInMeters(lat1, lon1, lat2, lon2) {
 
 const playSound = (soundName) => { try { const audio = new Audio(`/sounds/${soundName}.mp3`); audio.play().catch(()=>{}); } catch (e) {} };
 
-// --- MODALE SPESA NATIVA ---
 const ExpenseModalInternal = ({ show, onClose, user, employeeData, expenseToEdit }) => {
     const [amount, setAmount] = useState('');
     const [description, setDescription] = useState('');
@@ -119,24 +117,20 @@ const ExpenseModalInternal = ({ show, onClose, user, employeeData, expenseToEdit
     );
 };
 
-// --- MODALE RAPPORTINO NATIVO ---
 const MobileDailyReportModal = ({ show, onClose, employeeData, lockedAreaId, lockedAreaName, lockedAreaObj }) => {
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [presentEmployees, setPresentEmployees] = useState([]);
     const [vehicles, setVehicles] = useState([]);
     
-    // Cataloghi
     const [materialsCatalog, setMaterialsCatalog] = useState([]); 
     const [allBoqCatalog, setAllBoqCatalog] = useState([]); 
 
-    // Array finali del rapportino
     const [reportWorkers, setReportWorkers] = useState([]);
     const [reportBoq, setReportBoq] = useState([]);
     const [reportMaterials, setReportMaterials] = useState([]);
     const [reportVehicles, setReportVehicles] = useState([]);
     const [notes, setNotes] = useState('');
 
-    // Campi temporanei
     const [tWorker, setTWorker] = useState('');
     const [tVeh, setTVeh] = useState('');
     
@@ -146,7 +140,7 @@ const MobileDailyReportModal = ({ show, onClose, employeeData, lockedAreaId, loc
 
     const [tMatDesc, setTMatDesc] = useState('');
     const [tMatQty, setTMatQty] = useState('');
-    const [tMatFile, setTMatFile] = useState(null); // File Bolla
+    const [tMatFile, setTMatFile] = useState(null); 
     const [matSuggestions, setMatSuggestions] = useState([]);
 
     const [isSaving, setIsSaving] = useState(false);
@@ -156,7 +150,6 @@ const MobileDailyReportModal = ({ show, onClose, employeeData, lockedAreaId, loc
         if (!show || !lockedAreaId) return;
         const loadData = async () => {
             try {
-                // 1. CARICHIAMO IL CATALOGO MATERIALI (Super Scanner)
                 let combinedMaterials = [];
                 const seenMatNames = new Set();
                 const addMat = (name) => {
@@ -172,7 +165,6 @@ const MobileDailyReportModal = ({ show, onClose, employeeData, lockedAreaId, loc
                 combinedMaterials.sort();
                 setMaterialsCatalog(combinedMaterials);
 
-                // 2. CARICHIAMO LE VOCI DEL COMPUTO (INTELLIGENTE: Solo quello del cantiere, se c'è!)
                 let allBoq = [];
                 const seenBoqNames = new Set();
                 
@@ -193,7 +185,6 @@ const MobileDailyReportModal = ({ show, onClose, employeeData, lockedAreaId, loc
                         }
                     }
                 } else {
-                    // Se non ha un preventivo specifico ma il pulsante è sbloccato per altri motivi
                     const qSnapAll = await getDocs(collection(db, "quotes"));
                     qSnapAll.docs.forEach(doc => {
                         const data = doc.data();
@@ -211,7 +202,6 @@ const MobileDailyReportModal = ({ show, onClose, employeeData, lockedAreaId, loc
                 allBoq.sort();
                 setAllBoqCatalog(allBoq);
 
-                // 3. MEZZI E OPERAI
                 const vSnap = await getDocs(collection(db, 'vehicles')); setVehicles(vSnap.docs.map(d => ({ id: d.id, ...d.data() })));
                 const startOfDay = new Date(date); startOfDay.setHours(0,0,0,0); const endOfDay = new Date(date); endOfDay.setHours(23,59,59,999);
                 const presQuery = query(collection(db, "time_entries"), where("workAreaId", "==", lockedAreaId), where("clockInTime", ">=", Timestamp.fromDate(startOfDay)), where("clockInTime", "<=", Timestamp.fromDate(endOfDay)));
@@ -230,7 +220,6 @@ const MobileDailyReportModal = ({ show, onClose, employeeData, lockedAreaId, loc
     const addWorker = () => { if (tWorker) { const e = presentEmployees.find(x => x.id === tWorker); setReportWorkers(p => [...p, { employeeId: e.id, employeeName: `${e.surname} ${e.name}` }]); setTWorker(''); }};
     const addVeh = () => { if (tVeh) { const v = vehicles.find(x => x.id === tVeh); setReportVehicles(p => [...p, { vehicleId: v.id, vehicleName: `${v.brand} ${v.plate}` }]); setTVeh(''); }};
 
-    // LOGICA LAVORAZIONI (Cerca nei preventivi)
     const handleBoqChange = (val) => {
         setTBoqDesc(val);
         if (val.length > 1) {
@@ -243,7 +232,6 @@ const MobileDailyReportModal = ({ show, onClose, employeeData, lockedAreaId, loc
         setTBoqDesc(''); setTBoqQty(''); setBoqSuggestions([]);
     };
 
-    // LOGICA MATERIALI (Cerca ovunque + Bolla)
     const handleMatChange = (val) => {
         setTMatDesc(val);
         if (val.length > 1) {
@@ -326,7 +314,6 @@ const MobileDailyReportModal = ({ show, onClose, employeeData, lockedAreaId, loc
             setSaveStatusText("Salvataggio Database...");
             await addDoc(collection(db, "daily_reports"), reportData);
             
-            // --- LOGICA INVIO DIRETTO AL PREPOSTO ---
             const prepostoEmail = lockedAreaObj?.emailPreposto || lockedAreaObj?.email || lockedAreaObj?.clientEmail || '';
             let prepostoPhone = lockedAreaObj?.telefonoPreposto || lockedAreaObj?.telefono || '';
 
@@ -375,7 +362,6 @@ const MobileDailyReportModal = ({ show, onClose, employeeData, lockedAreaId, loc
                         <label style={{fontSize:'12px', fontWeight:'800', color:'#64748b', textTransform:'uppercase'}}>Data</label>
                         <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={{...styles.input, marginBottom:'20px'}} />
                         
-                        {/* OPERAI */}
                         <div style={{background:'#eff6ff', padding:'15px', borderRadius:'16px', marginBottom:'20px', border:'1px solid #bfdbfe'}}>
                             <h4 style={{margin:'0 0 10px 0', color:'#1e40af', fontSize:'1rem', fontWeight:'900'}}>👷 Operai Presenti</h4>
                             {reportWorkers.map((w,i)=><div key={i} style={rowStyle}><span>{w.employeeName}</span><span onClick={()=>setReportWorkers(p=>p.filter((_,idx)=>idx!==i))} style={{color:'#ef4444', cursor:'pointer'}}>❌</span></div>)}
@@ -385,7 +371,6 @@ const MobileDailyReportModal = ({ show, onClose, employeeData, lockedAreaId, loc
                             </div>
                         </div>
 
-                        {/* LAVORAZIONI */}
                         <div style={{background:'#f0fdf4', padding:'15px', borderRadius:'16px', marginBottom:'20px', border:'1px solid #bbf7d0'}}>
                             <h4 style={{margin:'0 0 10px 0', color:'#166534', fontSize:'1rem', fontWeight:'900'}}>✅ Lavori Svolti / Eseguiti</h4>
                             {reportBoq.map((b,i)=>(
@@ -412,7 +397,6 @@ const MobileDailyReportModal = ({ show, onClose, employeeData, lockedAreaId, loc
                             </div>
                         </div>
 
-                        {/* MATERIALI CON OPZIONE BOLLA */}
                         <div style={{background:'#fff7ed', padding:'15px', borderRadius:'16px', marginBottom:'20px', border:'1px solid #fed7aa'}}>
                             <h4 style={{margin:'0 0 10px 0', color:'#9a3412', fontSize:'1rem', fontWeight:'900'}}>🧱 Materiali Consumati / Acquistati</h4>
                             {reportMaterials.map((m,i)=>(
@@ -437,7 +421,6 @@ const MobileDailyReportModal = ({ show, onClose, employeeData, lockedAreaId, loc
                                 </div>
                                 <input type="number" placeholder="Quantità" value={tMatQty} onChange={e=>setTMatQty(e.target.value)} style={{...styles.input, marginBottom:'10px'}}/>
                                 
-                                {/* ALLEGATO BOLLA */}
                                 <div style={{background:'#fff', padding:'10px', borderRadius:'12px', border:'1px dashed #fdba74', marginBottom:'10px'}}>
                                     <label style={{fontSize:'12px', fontWeight:'800', color:'#ea580c', display:'block', marginBottom:'5px'}}>Hai comprato ora questo materiale? Allega la bolla (Opzionale):</label>
                                     <input id="bollaFileInput" type="file" accept="image/*,.pdf" onChange={e=>setTMatFile(e.target.files[0])} style={{fontSize:'13px', width:'100%'}} />
@@ -447,7 +430,6 @@ const MobileDailyReportModal = ({ show, onClose, employeeData, lockedAreaId, loc
                             </div>
                         </div>
 
-                        {/* MEZZI */}
                         <div style={{background:'#faf5ff', padding:'15px', borderRadius:'16px', marginBottom:'20px', border:'1px solid #e9d5ff'}}>
                             <h4 style={{margin:'0 0 10px 0', color:'#6b21a8', fontSize:'1rem', fontWeight:'900'}}>🚐 Mezzi Impiegati</h4>
                             {reportVehicles.map((v,i)=><div key={i} style={rowStyle}><span>{v.vehicleName}</span><span onClick={()=>setReportVehicles(p=>p.filter((_,idx)=>idx!==i))} style={{color:'#ef4444', cursor:'pointer'}}>❌</span></div>)}
@@ -493,6 +475,11 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     const [isLoadingExpenses, setIsLoadingExpenses] = useState(false);
     const [expenseToEdit, setExpenseToEdit] = useState(null); 
     const [showDailyReportModal, setShowDailyReportModal] = useState(false);
+
+    // NUOVI STATI PER I DOCUMENTI E BUSTE PAGA
+    const [showDocsModal, setShowDocsModal] = useState(false);
+    const [myDocuments, setMyDocuments] = useState([]);
+    const [isLoadingDocs, setIsLoadingDocs] = useState(false);
 
     const [assignedEquipment, setAssignedEquipment] = useState([]);
     const [assignedVehicles, setAssignedVehicles] = useState([]);
@@ -563,8 +550,6 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     const lockedAreaObj = allWorkAreas.find(a => a.id === lockedAreaId);
     const lockedAreaName = lockedAreaObj ? lockedAreaObj.name : '';
 
-    // --- CONTROLLO COMPUTO ---
-    // Verifica se il cantiere ha un preventivo/computo associato
     const cantiereHaComputo = lockedAreaObj && (lockedAreaObj.preventivoId || lockedAreaObj.quoteId || lockedAreaObj.hasComputo || lockedAreaObj.haComputo);
 
     useEffect(() => {
@@ -701,9 +686,26 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
         } 
     };
 
+    // --- FUNZIONE PER RECUPERARE BUSTE PAGA E CONTRATTI ---
+    const handleViewDocuments = async () => {
+        setIsLoadingDocs(true); 
+        setShowDocsModal(true);
+        try {
+            const q = query(collection(db, "employee_documents"), where("userId", "==", user.uid));
+            const snapshot = await getDocs(q);
+            const docsList = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+            // Ordina per data decrescente
+            docsList.sort((a,b) => (b.uploadDate?.toDate() || 0) - (a.uploadDate?.toDate() || 0));
+            setMyDocuments(docsList);
+        } catch (error) {
+            console.error("Errore recupero documenti:", error);
+        } finally {
+            setIsLoadingDocs(false);
+        }
+    };
+
     return (
         <div style={styles.container}>
-            {/* HEADER STICKY */}
             <div style={styles.headerOuter}>
                 <div style={styles.headerInner}>
                     <img src="/icon-192x192.png" style={styles.logo} alt="LOGO" onError={(e) => e.target.style.display='none'} />
@@ -717,7 +719,6 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
 
             <div style={styles.body}>
                 
-                {/* OROLOGIO E GPS */}
                 <div style={styles.clockCard}>
                     <div style={styles.clockDate}>{currentTime.toLocaleDateString('it-IT', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
                     <div style={styles.clockTime}>{currentTime.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</div>
@@ -727,7 +728,6 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                     </div>
                 </div>
 
-                {/* STATO TURNI */}
                 {activeEntry && (
                     <div style={styles.compactInfoLine}>
                         <span style={{display: 'flex', gap: '8px', alignItems: 'center'}}>🟢 IN TURNO <span style={{fontWeight:'900'}}>{activeEntry.clockInTime.toDate().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span></span>
@@ -744,7 +744,6 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                     </div>
                 )}
 
-                {/* --- BOTTONI TIMBRATURA --- */}
                 <div style={{width: '100%', marginBottom: '25px'}}>
                     {isOut && (
                         <>
@@ -795,10 +794,8 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                     )}
                 </div>
 
-                {/* --- BOTTONI AZIONI GIGANTI E COLORATI --- */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', width: '100%', marginBottom: '25px' }}>
                     
-                    {/* BOTTONE RAPPORTINO INTELLIGENTE */}
                     {cantiereHaComputo ? (
                         <button 
                             onClick={() => setShowDailyReportModal(true)}
@@ -830,7 +827,15 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                         onClick={handleViewExpenses}
                         style={{ ...styles.actionBtn, background: 'linear-gradient(135deg, #14b8a6 0%, #0d9488 100%)', boxShadow: '0 8px 20px rgba(13,148,136,0.3)' }}
                     >
-                        <span style={{fontSize: '1.5rem'}}>📜</span> I Miei Rimborsi
+                        <span style={{fontSize: '1.5rem'}}>📜</span> I Miei Rimborsi / Acconti
+                    </button>
+
+                    {/* NUOVO BOTTONE: DOCUMENTI PERSONALI */}
+                    <button 
+                        onClick={handleViewDocuments}
+                        style={{ ...styles.actionBtn, background: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)', boxShadow: '0 8px 20px rgba(239,68,68,0.3)' }}
+                    >
+                        <span style={{fontSize: '1.5rem'}}>📄</span> I Miei Documenti
                     </button>
 
                     <button 
@@ -841,7 +846,6 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                     </button>
                 </div>
 
-                {/* PANNELLO DOTAZIONI ESPANSO */}
                 {showAssets && (
                     <div style={{width:'100%', background:'#fff', padding:'25px 20px', borderRadius:'24px', border:'1px solid #f1f5f9', boxShadow:'0 8px 25px rgba(0,0,0,0.03)', marginBottom: '25px'}}>
                         <h3 style={{marginTop:0, color:'#1e293b', fontWeight:'900', fontSize:'1.2rem', marginBottom:'15px'}}>📦 In mio possesso:</h3>
@@ -854,7 +858,6 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                     </div>
                 )}
 
-                {/* PANNELLO SCARICO ORE MESE */}
                 <div style={{ width: '100%', background: '#fff', borderRadius: '24px', padding: '30px 20px', boxShadow: '0 8px 25px rgba(0,0,0,0.03)', border: '1px solid #f1f5f9' }}>
                     <div style={{ fontWeight: '900', color: '#1e293b', textAlign: 'center', fontSize: '1.3rem', marginBottom: '20px' }}>📄 Report Mensile Ore</div>
                     <div style={{ display: 'flex', gap: '15px', marginBottom: '20px' }}>
@@ -874,13 +877,12 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                     </button>
                 </div>
 
-                {/* MODALE STORICO SPESE (NATIVO HTML) */}
                 {showExpenseHistory && ReactDOM.createPortal(
                     <div style={overlayStyle} onClick={() => setShowExpenseHistory(false)}>
                         <div style={containerStyle}>
                             <div style={{...modalStyle, padding:'0'}} onClick={(e) => e.stopPropagation()}>
                                 <div style={{padding:'20px 25px', background:'#f8fafc', borderBottom:'1px solid #e2e8f0', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                                    <h3 style={{margin:0, color:'#0f172a', fontSize:'1.3rem', fontWeight:'900'}}>📜 I Miei Rimborsi</h3>
+                                    <h3 style={{margin:0, color:'#0f172a', fontSize:'1.3rem', fontWeight:'900'}}>📜 I Miei Rimborsi / Acconti</h3>
                                     <button onClick={()=>setShowExpenseHistory(false)} style={{border:'none', background:'none', fontSize:'28px', cursor:'pointer', color:'#64748b', lineHeight:1}}>&times;</button>
                                 </div>
                                 <div style={{flex:1, overflowY:'auto', padding:'20px'}}>
@@ -899,7 +901,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                                                     {e.status === 'pending' ? 'IN ATTESA' : e.status === 'paid' || e.status === 'closed' ? 'SALDATO' : e.status.toUpperCase()}
                                                 </div>
                                             </div>
-                                            {e.receiptUrl && <a href={e.receiptUrl} target="_blank" rel="noopener noreferrer" style={{fontSize:'0.9rem', color:'#3b82f6', textDecoration:'none', fontWeight:'800', display:'block', marginTop:'5px'}}>📎 Apri Scontrino</a>}
+                                            {e.receiptUrl && <a href={e.receiptUrl} target="_blank" rel="noopener noreferrer" style={{fontSize:'0.9rem', color:'#3b82f6', textDecoration:'none', fontWeight:'800', display:'block', marginTop:'5px'}}>📎 Apri Allegato</a>}
                                             
                                             {e.status==='pending' && (
                                                 <div style={{marginTop:'15px', display:'flex', gap:'10px', justifyContent:'flex-end', borderTop:'1px dashed #e2e8f0', paddingTop:'15px'}}>
@@ -915,11 +917,55 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                     </div>, document.body
                 )}
 
+                {/* MODALE DOCUMENTI (BUSTE PAGA, CUD) */}
+                {showDocsModal && ReactDOM.createPortal(
+                    <div style={overlayStyle} onClick={() => setShowDocsModal(false)}>
+                        <div style={containerStyle}>
+                            <div style={{...modalStyle, padding:'0'}} onClick={(e) => e.stopPropagation()}>
+                                <div style={{padding:'20px 25px', background:'#fef2f2', borderBottom:'1px solid #fecaca', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                                    <h3 style={{margin:0, color:'#991b1b', fontSize:'1.3rem', fontWeight:'900'}}>📄 Cassetto Digitale</h3>
+                                    <button onClick={()=>setShowDocsModal(false)} style={{border:'none', background:'none', fontSize:'28px', cursor:'pointer', color:'#991b1b', lineHeight:1}}>&times;</button>
+                                </div>
+                                <div style={{flex:1, overflowY:'auto', padding:'20px'}}>
+                                    
+                                    <div style={{padding: '15px', background: '#f8fafc', borderRadius: '12px', borderLeft: '4px solid #3b82f6', marginBottom: '20px'}}>
+                                        <div style={{fontSize: '0.9rem', color: '#334155', fontWeight: '600'}}>
+                                            In questa sezione trovi le tue Buste Paga, CUD, Contratti e altri documenti ufficiali caricati dall'ufficio.
+                                        </div>
+                                    </div>
+
+                                    {isLoadingDocs ? (
+                                        <p style={{textAlign:'center', fontWeight:'800', color:'#64748b', padding: '20px'}}>Ricerca documenti in corso...</p>
+                                    ) : myDocuments.length === 0 ? (
+                                        <p style={{textAlign:'center', fontWeight:'700', color:'#94a3b8', padding: '30px'}}>Nessun documento presente in archivio.</p>
+                                    ) : (
+                                        myDocuments.map(doc => (
+                                            <div key={doc.id} style={{border:'1px solid #e2e8f0', borderRadius:'16px', padding:'15px', marginBottom:'15px', backgroundColor:'#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.02)'}}>
+                                                <div style={{flex: 1, paddingRight: '15px'}}>
+                                                    <div style={{fontWeight:'900', fontSize:'1.1rem', color:'#1e293b'}}>{doc.title}</div>
+                                                    <div style={{display:'flex', alignItems: 'center', gap: '10px', marginTop: '8px'}}>
+                                                        <span style={{background: '#e0e7ff', color: '#1d4ed8', padding: '4px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '800', textTransform: 'uppercase'}}>{doc.documentType}</span>
+                                                        <span style={{fontSize:'0.8rem', color:'#64748b', fontWeight: '600'}}>{doc.uploadDate?.toDate().toLocaleDateString('it-IT')}</span>
+                                                    </div>
+                                                    {doc.note && <div style={{fontSize: '0.85rem', color: '#64748b', marginTop: '8px', fontStyle: 'italic'}}>{doc.note}</div>}
+                                                </div>
+                                                <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer" style={{background: '#ef4444', color: '#fff', padding: '12px 18px', borderRadius: '12px', textDecoration: 'none', fontWeight: '900', fontSize: '0.9rem', textAlign: 'center', boxShadow: '0 4px 10px rgba(239, 68, 68, 0.2)'}}>
+                                                    ⬇️ APRI
+                                                </a>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>, document.body
+                )}
+
                 <ExpenseModalInternal show={showExpenseModal} onClose={() => {setShowExpenseModal(false); setExpenseToEdit(null);}} user={user} employeeData={employeeData} expenseToEdit={expenseToEdit} />
                 <MobileDailyReportModal show={showDailyReportModal} onClose={() => setShowDailyReportModal(false)} employeeData={employeeData} lockedAreaId={lockedAreaId} lockedAreaName={lockedAreaName} lockedAreaObj={lockedAreaObj} />
 
             </div>
-            <div style={styles.footer}>TCS Italia App v2.7<br/>Design by D. Leoncino</div>
+            <div style={styles.footer}>TCS Italia App v2.6<br/>Design by D. Leoncino</div>
         </div>
     );
 };
