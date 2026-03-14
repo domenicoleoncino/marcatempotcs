@@ -721,12 +721,17 @@ const ReportView = ({ reports, title, handleExportXml, dateRange, allWorkAreas, 
     );
 };
 
-const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, workAreas, adminEmployeeProfile, adminActiveEntry, handleAdminPause, openModal, isActionLoading, dashboardAreaFilter, setDashboardAreaFilter, todayHoursDetail, currentUserRole, userData }) => {
+const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, workAreas, adminEmployeeProfile, adminActiveEntry, handleAdminPause, openModal, isActionLoading, dashboardAreaFilter, setDashboardAreaFilter, todayHoursDetail, currentUserRole, userData, user }) => {
     const [isMapMode, setIsMapMode] = useState(false);
     const [myEquipment, setMyEquipment] = useState([]);
     const [myVehicles, setMyVehicles] = useState([]);
     const [showAssets, setShowAssets] = useState(false);
     const [isHoursModalVisible, setIsHoursModalVisible] = useState(false); 
+    
+    // --- NUOVI STATI PER DOCUMENTI ADMIN/PREPOSTO ---
+    const [showDocsModal, setShowDocsModal] = useState(false);
+    const [myDocuments, setMyDocuments] = useState([]);
+    const [isLoadingDocs, setIsLoadingDocs] = useState(false);
 
     const isGpsRequired = adminEmployeeProfile?.controlloGpsRichiesto === true;
     const [inRangeArea, setInRangeArea] = useState(null);
@@ -836,6 +841,23 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
         fetchAssets();
         return () => { isMounted = false; };
     }, [adminEmployeeProfile]);
+    
+    // --- FUNZIONE RECUPERO DOCUMENTI PERSONALI ---
+    const handleViewDocuments = async () => {
+        setIsLoadingDocs(true);
+        setShowDocsModal(true);
+        try {
+            const q = query(collection(db, "employee_documents"), where("userId", "==", user.uid));
+            const snapshot = await getDocs(q);
+            const docsList = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+            docsList.sort((a,b) => (b.uploadDate?.toDate() || 0) - (a.uploadDate?.toDate() || 0));
+            setMyDocuments(docsList);
+        } catch (error) {
+            console.error("Errore documenti:", error);
+        } finally {
+            setIsLoadingDocs(false);
+        }
+    };
 
     const isOnBreak = adminActiveEntry?.status === 'In Pausa' || adminActiveEntry?.isOnBreak;
     const hasCompletedPause = adminActiveEntry?.hasCompletedPause || false;
@@ -946,6 +968,25 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
                         </div>
                     </div>
 
+                    {/* NUOVO BOTTONE I MIEI DOCUMENTI PER ADMIN E PREPOSTI */}
+                    <div style={{marginBottom: '30px'}}>
+                        <button 
+                            onClick={handleViewDocuments}
+                            style={{width:'100%', padding:'20px', display:'flex', justifyContent:'space-between', alignItems:'center', background:'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)', borderRadius: '12px', border:'none', cursor:'pointer', boxShadow: '0 8px 20px rgba(239,68,68,0.25)', color: '#fff', transition: 'transform 0.2s'}}
+                            onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.01)'}
+                            onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                        >
+                            <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
+                                <span style={{fontSize: '24px'}}>📄</span>
+                                <div style={{textAlign: 'left'}}>
+                                    <div style={{fontWeight:'900', fontSize:'18px'}}>I Miei Documenti</div>
+                                    <div style={{fontSize: '13px', opacity: 0.9}}>Buste Paga, CUD e Contratti</div>
+                                </div>
+                            </div>
+                            <span style={{background: 'rgba(255,255,255,0.2)', padding: '8px 16px', borderRadius: '8px', fontWeight: 'bold', fontSize: '14px'}}>APRI ▶</span>
+                        </button>
+                    </div>
+
                     {adminEmployeeProfile && currentUserRole !== 'admin' && (myEquipment.length > 0 || myVehicles.length > 0) && (
                         <div style={{background:'#fff', borderRadius:'12px', border:'1px solid #e2e8f0', overflow:'hidden', marginBottom:'30px'}}>
                             <button onClick={() => setShowAssets(!showAssets)} style={{width:'100%', padding:'20px', display:'flex', justifyContent:'space-between', alignItems:'center', background:'#f8fafc', border:'none', cursor:'pointer'}}>
@@ -1018,6 +1059,50 @@ const DashboardView = ({ totalEmployees, activeEmployeesDetails, totalDayHours, 
                     ]}
                 />
             </Modal>
+
+            {/* MODALE DOCUMENTI (BUSTE PAGA, CUD) */}
+            {showDocsModal && ReactDOM.createPortal(
+                <div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',backgroundColor:'rgba(15, 23, 42, 0.7)',zIndex:99998,backdropFilter:'blur(5px)'}} onClick={() => setShowDocsModal(false)}>
+                    <div style={{position:'fixed',top:0,left:0,width:'100%',height:'100%',zIndex:99999,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none',padding:'10px'}}>
+                        <div style={{backgroundColor:'#ffffff',width:'100%',maxWidth:'600px',maxHeight:'88vh',borderRadius:'24px',overflow:'hidden',pointerEvents:'auto',display:'flex',flexDirection:'column',boxShadow:'0 25px 50px -12px rgba(0,0,0,0.25)'}} onClick={(e) => e.stopPropagation()}>
+                            <div style={{padding:'20px 25px',background:'#fef2f2',borderBottom:'1px solid #fecaca',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                                <h3 style={{margin:0,color:'#991b1b',fontSize:'1.3rem',fontWeight:'900'}}>📄 Cassetto Digitale</h3>
+                                <button onClick={()=>setShowDocsModal(false)} style={{border:'none',background:'none',fontSize:'28px',cursor:'pointer',color:'#991b1b',lineHeight:1}}>&times;</button>
+                            </div>
+                            <div style={{flex:1,overflowY:'auto',padding:'20px'}}>
+                                
+                                <div style={{padding: '15px', background: '#f8fafc', borderRadius: '12px', borderLeft: '4px solid #3b82f6', marginBottom: '20px'}}>
+                                    <div style={{fontSize: '0.9rem', color: '#334155', fontWeight: '600'}}>
+                                        In questa sezione trovi le tue Buste Paga, CUD, Contratti e altri documenti ufficiali caricati dall'ufficio.
+                                    </div>
+                                </div>
+
+                                {isLoadingDocs ? (
+                                    <p style={{textAlign:'center', fontWeight:'800', color:'#64748b', padding: '20px'}}>Ricerca documenti in corso...</p>
+                                ) : myDocuments.length === 0 ? (
+                                    <p style={{textAlign:'center', fontWeight:'700', color:'#94a3b8', padding: '30px'}}>Nessun documento presente in archivio.</p>
+                                ) : (
+                                    myDocuments.map(doc => (
+                                        <div key={doc.id} style={{border:'1px solid #e2e8f0', borderRadius:'16px', padding:'15px', marginBottom:'15px', backgroundColor:'#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.02)'}}>
+                                            <div style={{flex: 1, paddingRight: '15px'}}>
+                                                <div style={{fontWeight:'900', fontSize:'1.1rem', color:'#1e293b'}}>{doc.title}</div>
+                                                <div style={{display:'flex', alignItems: 'center', gap: '10px', marginTop: '8px'}}>
+                                                    <span style={{background: '#e0e7ff', color: '#1d4ed8', padding: '4px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '800', textTransform: 'uppercase'}}>{doc.documentType}</span>
+                                                    <span style={{fontSize:'0.8rem', color:'#64748b', fontWeight: '600'}}>{doc.uploadDate?.toDate().toLocaleDateString('it-IT')}</span>
+                                                </div>
+                                                {doc.note && <div style={{fontSize: '0.85rem', color: '#64748b', marginTop: '8px', fontStyle: 'italic'}}>{doc.note}</div>}
+                                            </div>
+                                            <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer" style={{background: '#ef4444', color: '#fff', padding: '12px 18px', borderRadius: '12px', textDecoration: 'none', fontWeight: '900', fontSize: '0.9rem', textAlign: 'center', boxShadow: '0 4px 10px rgba(239, 68, 68, 0.2)'}}>
+                                                ⬇️ APRI
+                                            </a>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>, document.body
+            )}
         </div>
     );
 };
@@ -1756,6 +1841,7 @@ const AdminDashboard = ({ user, handleLogout, userData }) => {
                             todayHoursDetail={todayHoursDetail}
                             currentUserRole={currentUserRole}
                             userData={userData}
+                            user={user}
                         />
                     )}
                     {view === 'expenses' && (
