@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import ReactDOM from 'react-dom';
 import { db, storage } from '../firebase';
-import { collection, query, where, onSnapshot, orderBy, limit, getDocs, Timestamp, deleteDoc, updateDoc, doc, addDoc } from 'firebase/firestore'; 
+import { collection, query, where, onSnapshot, orderBy, limit, getDocs, Timestamp, deleteDoc, updateDoc, doc, addDoc, getDoc } from 'firebase/firestore'; 
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import jsPDF from 'jspdf';
@@ -156,7 +156,7 @@ const MobileDailyReportModal = ({ show, onClose, employeeData, lockedAreaId, loc
         if (!show || !lockedAreaId) return;
         const loadData = async () => {
             try {
-                // 1. CARICHIAMO TUTTO IL CATALOGO MATERIALI (Super Scanner)
+                // 1. CARICHIAMO IL CATALOGO MATERIALI (Super Scanner)
                 let combinedMaterials = [];
                 const seenMatNames = new Set();
                 const addMat = (name) => {
@@ -172,22 +172,42 @@ const MobileDailyReportModal = ({ show, onClose, employeeData, lockedAreaId, loc
                 combinedMaterials.sort();
                 setMaterialsCatalog(combinedMaterials);
 
-                // 2. CARICHIAMO TUTTE LE VOCI DEI PREVENTIVI
+                // 2. CARICHIAMO LE VOCI DEL COMPUTO (INTELLIGENTE: Solo quello del cantiere, se c'è!)
                 let allBoq = [];
                 const seenBoqNames = new Set();
-                const qSnapAll = await getDocs(collection(db, "quotes"));
-                qSnapAll.docs.forEach(doc => {
-                    const data = doc.data();
-                    if (data.items) {
-                        data.items.forEach(i => {
-                            const desc = i.description;
-                            if (desc && !seenBoqNames.has(desc.toLowerCase())) {
-                                seenBoqNames.add(desc.toLowerCase());
-                                allBoq.push(desc);
-                            }
-                        });
+                
+                const preventivoId = lockedAreaObj?.preventivoId || lockedAreaObj?.quoteId;
+                
+                if (preventivoId) {
+                    const quoteDoc = await getDoc(doc(db, "quotes", preventivoId));
+                    if (quoteDoc.exists()) {
+                        const data = quoteDoc.data();
+                        if (data.items) {
+                            data.items.forEach(i => {
+                                const desc = i.description;
+                                if (desc && !seenBoqNames.has(desc.toLowerCase())) {
+                                    seenBoqNames.add(desc.toLowerCase());
+                                    allBoq.push(desc);
+                                }
+                            });
+                        }
                     }
-                });
+                } else {
+                    // Se non ha un preventivo specifico ma il pulsante è sbloccato per altri motivi
+                    const qSnapAll = await getDocs(collection(db, "quotes"));
+                    qSnapAll.docs.forEach(doc => {
+                        const data = doc.data();
+                        if (data.items) {
+                            data.items.forEach(i => {
+                                const desc = i.description;
+                                if (desc && !seenBoqNames.has(desc.toLowerCase())) {
+                                    seenBoqNames.add(desc.toLowerCase());
+                                    allBoq.push(desc);
+                                }
+                            });
+                        }
+                    });
+                }
                 allBoq.sort();
                 setAllBoqCatalog(allBoq);
 
@@ -205,7 +225,7 @@ const MobileDailyReportModal = ({ show, onClose, employeeData, lockedAreaId, loc
             } catch (e) { console.error(e); }
         };
         loadData();
-    }, [show, lockedAreaId, date, employeeData]);
+    }, [show, lockedAreaId, date, employeeData, lockedAreaObj]);
 
     const addWorker = () => { if (tWorker) { const e = presentEmployees.find(x => x.id === tWorker); setReportWorkers(p => [...p, { employeeId: e.id, employeeName: `${e.surname} ${e.name}` }]); setTWorker(''); }};
     const addVeh = () => { if (tVeh) { const v = vehicles.find(x => x.id === tVeh); setReportVehicles(p => [...p, { vehicleId: v.id, vehicleName: `${v.brand} ${v.plate}` }]); setTVeh(''); }};
@@ -376,7 +396,7 @@ const MobileDailyReportModal = ({ show, onClose, employeeData, lockedAreaId, loc
                             ))}
                             
                             <div style={{borderTop:'1px dashed #bbf7d0', paddingTop:'15px', marginTop:'15px'}}>
-                                <label style={{fontSize:'11px', fontWeight:'900', color:'#166534', textTransform:'uppercase'}}>Scrivi lavoro svolto (Cerca nei preventivi o scrivi a mano):</label>
+                                <label style={{fontSize:'11px', fontWeight:'900', color:'#166534', textTransform:'uppercase'}}>Scrivi lavoro svolto (Cerca nel computo o scrivi a mano):</label>
                                 <div style={{ position: 'relative' }}>
                                     <input type="text" placeholder="Descrizione del lavoro..." value={tBoqDesc} onChange={e => handleBoqChange(e.target.value)} style={{...styles.input, marginBottom:'5px', width: '100%'}} />
                                     {boqSuggestions.length > 0 && (
@@ -542,6 +562,10 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
     }
     const lockedAreaObj = allWorkAreas.find(a => a.id === lockedAreaId);
     const lockedAreaName = lockedAreaObj ? lockedAreaObj.name : '';
+
+    // --- CONTROLLO COMPUTO ---
+    // Verifica se il cantiere ha un preventivo/computo associato
+    const cantiereHaComputo = lockedAreaObj && (lockedAreaObj.preventivoId || lockedAreaObj.quoteId || lockedAreaObj.hasComputo || lockedAreaObj.haComputo);
 
     useEffect(() => {
         if (!isGpsRequired || employeeWorkAreas.length === 0) { setGpsLoading(false); return; }
@@ -774,14 +798,26 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 {/* --- BOTTONI AZIONI GIGANTI E COLORATI --- */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', width: '100%', marginBottom: '25px' }}>
                     
-                    {/* BOTTONE RAPPORTINO BLOCCATO (GRIGIO) */}
-                    <button 
-                        disabled={true}
-                        onClick={() => alert("L'invio dei rapportini è momentaneamente sospeso per aggiornamenti.")}
-                        style={{ ...styles.actionBtn, background: '#e2e8f0', color: '#94a3b8', boxShadow: 'none', cursor: 'not-allowed' }}
-                    >
-                        <span style={{fontSize: '1.5rem'}}>📝</span> Rapportino (Sospeso)
-                    </button>
+                    {/* BOTTONE RAPPORTINO INTELLIGENTE */}
+                    {cantiereHaComputo ? (
+                        <button 
+                            onClick={() => setShowDailyReportModal(true)}
+                            style={{ ...styles.actionBtn, background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', boxShadow: '0 8px 20px rgba(79,70,229,0.3)' }}
+                        >
+                            <span style={{fontSize: '1.5rem'}}>📝</span> Rapportino Cantiere
+                        </button>
+                    ) : (
+                        <button 
+                            disabled={true}
+                            onClick={() => {
+                                if (!lockedAreaId) alert("Devi prima entrare in turno in un cantiere.");
+                                else alert("Rapportini bloccati: questo cantiere non ha un Computo Metrico associato.");
+                            }}
+                            style={{ ...styles.actionBtn, background: '#e2e8f0', color: '#94a3b8', boxShadow: 'none', cursor: 'not-allowed' }}
+                        >
+                            <span style={{fontSize: '1.5rem'}}>📝</span> Rapportino (Sospeso)
+                        </button>
+                    )}
                     
                     <button 
                         onClick={() => { setExpenseToEdit(null); setShowExpenseModal(true); }}
@@ -883,7 +919,7 @@ const EmployeeDashboard = ({ user, employeeData, handleLogout, allWorkAreas }) =
                 <MobileDailyReportModal show={showDailyReportModal} onClose={() => setShowDailyReportModal(false)} employeeData={employeeData} lockedAreaId={lockedAreaId} lockedAreaName={lockedAreaName} lockedAreaObj={lockedAreaObj} />
 
             </div>
-            <div style={styles.footer}>TCS Italia App v2.6<br/>Design by D. Leoncino</div>
+            <div style={styles.footer}>TCS Italia App v2.7<br/>Design by D. Leoncino</div>
         </div>
     );
 };
